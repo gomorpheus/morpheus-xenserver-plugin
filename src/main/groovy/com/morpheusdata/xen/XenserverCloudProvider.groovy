@@ -310,13 +310,13 @@ class XenserverCloudProvider implements CloudProvider {
 				nodeType:'kube-master', reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true,
 				controlPower:true, controlSuspend:true, creatable:true, supportsConsoleKeymap: true, computeService:'xenserverComputeService',
 				displayOrder:10, hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false,
-				agentType: ComputeServerType.AgentType.host, containerEngine:'docker', provisionTypeCode: 'xen', computeTypeCode:'kube-master',
+				agentType: ComputeServerType.AgentType.guest, containerEngine:'docker', provisionTypeCode: 'xen', computeTypeCode:'kube-master',
 				optionTypes:[]
 		)
 		serverTypes << new ComputeServerType(code:'xenKubeWorker', name:'Xen Kubernetes Worker', description:'', platform:PlatformType.linux,
 				nodeType:'kube-worker', reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true,
 				controlSuspend:true, creatable:true, supportsConsoleKeymap: true, computeService:'xenserverComputeService', displayOrder:10,
-				hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.host,
+				hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.guest,
 				containerEngine:'docker', provisionTypeCode: 'xen', computeTypeCode:'kube-worker', optionTypes:[]
 		)
 
@@ -336,7 +336,33 @@ class XenserverCloudProvider implements CloudProvider {
 				nodeType:'unmanaged', reconfigureSupported:true, enabled:true, selectable:false, externalDelete:true, managed:false,
 				controlPower:true, controlSuspend:false, creatable:false, computeService:'xenserverComputeService', displayOrder:99,
 				hasAutomation:false, containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.none,
-				managedServerType:'xenserverVm', guestVm:true, provisionTypeCode: 'xen', optionTypes:[]
+				managedServerType:'xenserverVm', guestVm:true, provisionTypeCode: 'xen',
+				optionTypes: [
+						new OptionType(
+								code:'computeServerType.xen.sshHost', inputType: OptionType.InputType.TEXT, name:'sshHost', category:'computeServerType.xen', fieldName:'sshHost',
+								fieldCode: 'gomorpheus.optiontype.Host', fieldLabel:'Host', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+								required:false, enabled:true, editable:false, global:false, placeHolderText:null, defaultValue:null, custom:false,
+								displayOrder:0, fieldClass:null, fieldSize:15
+						),
+						new OptionType(
+								code:'computeServerType.xen.sshPort', inputType: OptionType.InputType.NUMBER, name:'sshPort', category:'computeServerType.xen', fieldName:'sshPort',
+								fieldCode: 'gomorpheus.optiontype.Port', fieldLabel:'Port', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+								required:false, enabled:true, editable:false, global:false, placeHolderText:'22', defaultValue:'22', custom:false,
+								displayOrder:1, fieldClass:null, fieldSize:5
+						),
+						new OptionType(
+								code:'computeServerType.xen.sshUsername', inputType: OptionType.InputType.TEXT, name:'sshUsername', category:'computeServerType.xen', fieldName:'sshUsername',
+								fieldCode: 'gomorpheus.optiontype.User', fieldLabel:'User', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+								required:false, enabled:true, editable:false, global:false, placeHolderText:null, defaultValue:null, custom:false, displayOrder:2,
+								fieldClass:null
+						),
+						new OptionType(
+								code:'computeServerType.xen.sshPassword', inputType: OptionType.InputType.PASSWORD, name:'sshPassword', category:'computeServerType.xen',
+								fieldName:'sshPassword', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'server',
+								fieldSet:'sshConnection', fieldGroup:'Connection Config', required:false, enabled:true, editable:false, global:false, placeHolderText:null,
+								defaultValue:null, custom:false, displayOrder:3, fieldClass:null
+						)
+				]
 		)
 		return serverTypes
 	}
