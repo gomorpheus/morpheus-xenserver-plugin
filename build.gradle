@@ -59,6 +59,23 @@ dependencies {
 	testImplementation "org.spockframework:spock-core"
 	testImplementation "org.spockframework:spock-junit4"  // you can remove this if your code does not rely on old JUnit 4 rules
 	testImplementation 'cglib:cglib-nodep:3.2.12'
+
+	//http client
+	implementation 'org.apache.httpcomponents:httpclient:4.5.13'
+	implementation 'org.apache.httpcomponents:httpmime:4.5.13'
+	implementation 'org.apache.httpcomponents:httpasyncclient:4.1.4'
+	implementation 'org.apache.httpcomponents:httpcore-nio:4.4.12'
+	implementation('org.codehaus.groovy.modules.http-builder:http-builder:0.7.1') {
+		exclude module:'xercesImpl'
+	}
+
+	implementation("com.bertramlabs.plugins:karman-core:${karmanVersion}") {
+		exclude module: 'groovy-all'
+	}
+
+	implementation 'org.apache.commons:commons-compress:1.21'
+	implementation files('lib/xcpng-8.2.jar')
+
 }
 
 
