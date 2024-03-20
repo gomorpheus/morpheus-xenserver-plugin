@@ -3,6 +3,9 @@ package com.morpheusdata.xen
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupProvider
+import com.morpheusdata.core.data.DataFilter
+import com.morpheusdata.core.data.DataOrFilter
+import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.CloudProvider
 import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.model.*
@@ -185,63 +188,13 @@ class XenserverCloudProvider implements CloudProvider {
 	Collection<NetworkType> getNetworkTypes() {
 		Collection<NetworkType> networks = []
 
-		networks << new NetworkType(
-				code              : 'dockerBridge',
-				name              : 'Docker Bridge',
-				overlay           : false,
-				creatable         : true,
-				nameEditable      : false,
-				cidrEditable      : false,
-				dhcpServerEditable: false,
-				dnsEditable       : false,
-				gatewayEditable   : false,
-				ipv6Editable      : false,
-				vlanIdEditable    : false,
-				cidrRequired      : true,
-				canAssignPool     : false,
-				deletable         : true,
-				hasNetworkServer  : false,
-				hasCidr           : true,
-				optionTypes       : []
-		)
-		networks << new NetworkType(
-				code              : 'host',
-				name              : 'Host',
-				overlay           : false,
-				creatable         : true,
-				nameEditable      : false,
-				cidrEditable      : false,
-				dhcpServerEditable: false,
-				dnsEditable       : false,
-				gatewayEditable   : false,
-				ipv6Editable      : false,
-				vlanIdEditable    : false,
-				cidrRequired      : true,
-				canAssignPool     : false,
-				deletable         : true,
-				hasNetworkServer  : false,
-				hasCidr           : true,
-				optionTypes       : []
-		)
-		networks << new NetworkType(
-				code              : 'overlay',
-				name              : 'Overlay',
-				overlay           : false,
-				creatable         : true,
-				nameEditable      : false,
-				cidrEditable      : false,
-				dhcpServerEditable: false,
-				dnsEditable       : false,
-				gatewayEditable   : false,
-				ipv6Editable      : false,
-				vlanIdEditable    : false,
-				cidrRequired      : true,
-				canAssignPool     : false,
-				deletable         : true,
-				hasNetworkServer  : false,
-				hasCidr           : true,
-				optionTypes       : []
-		)
+		networks ?: (networks = context.services.network.list(new DataQuery().withFilter(
+				new DataOrFilter(
+						new DataFilter('code', 'dockerBridge'),
+						new DataFilter('code', 'host'),
+						new DataFilter('code', 'overlay')
+				)
+		)))
 
 		return networks
 	}
