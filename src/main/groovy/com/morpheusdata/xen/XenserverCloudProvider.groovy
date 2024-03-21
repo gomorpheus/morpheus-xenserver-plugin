@@ -168,10 +168,9 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Collection<NetworkType> getNetworkTypes() {
-		Collection<NetworkType> networks = []
 
-		networks ?: (networks = context.services.network.list(new DataQuery().withFilter(
-				'code', 'in', ['dockerBridge', 'host', 'overlay'])))
+		Collection<NetworkType> networks = context.services.network.list(new DataQuery().withFilter(
+				'code','in', ['dockerBridge', 'host', 'overlay']))
 
 		return networks
 	}
