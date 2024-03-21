@@ -50,8 +50,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Icon getCircularIcon() {
-		// TODO: Need to change this, as of now no circular icon available
-		return new Icon(path:'xen-light-140x40.svg', darkPath:'xen-dark-140x40.svg')
+		return new Icon(path:'xenserver.svg', darkPath:'xenserver.svg')
 	}
 
 	/**
