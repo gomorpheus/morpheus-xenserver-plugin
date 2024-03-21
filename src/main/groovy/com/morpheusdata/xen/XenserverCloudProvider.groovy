@@ -2,22 +2,13 @@ package com.morpheusdata.xen
 
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
+import com.morpheusdata.core.backup.BackupProvider
+import com.morpheusdata.core.data.DataFilter
+import com.morpheusdata.core.data.DataOrFilter
+import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.CloudProvider
 import com.morpheusdata.core.providers.ProvisionProvider
-import com.morpheusdata.model.BackupProvider
-import com.morpheusdata.model.Cloud
-import com.morpheusdata.model.CloudFolder
-import com.morpheusdata.model.CloudPool
-import com.morpheusdata.model.ComputeServer
-import com.morpheusdata.model.ComputeServerType
-import com.morpheusdata.model.Datastore
-import com.morpheusdata.model.Icon
-import com.morpheusdata.model.Network
-import com.morpheusdata.model.NetworkSubnetType
-import com.morpheusdata.model.NetworkType
-import com.morpheusdata.model.OptionType
-import com.morpheusdata.model.StorageControllerType
-import com.morpheusdata.model.StorageVolumeType
+import com.morpheusdata.model.*
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
 
@@ -25,9 +16,9 @@ class XenserverCloudProvider implements CloudProvider {
 	public static final String CLOUD_PROVIDER_CODE = 'xenserver.cloud'
 
 	protected MorpheusContext context
-	protected Plugin plugin
+	protected XenserverPlugin plugin
 
-	public XenserverCloudProvider(Plugin plugin, MorpheusContext ctx) {
+	public XenserverCloudProvider(XenserverPlugin plugin, MorpheusContext ctx) {
 		super()
 		this.@plugin = plugin
 		this.@context = ctx
@@ -39,7 +30,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getDescription() {
-		return 'Describe me!'
+		return 'Morpheus XenServer Plugin'
 	}
 
 	/**
@@ -49,8 +40,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Icon getIcon() {
-		// TODO: change icon paths to correct filenames once added to your project
-		return new Icon(path:'cloud.svg', darkPath:'cloud-dark.svg')
+		return new Icon(path:'xen-light-90x30.svg', darkPath:'xen-dark-90x30.svg')
 	}
 
 	/**
@@ -60,8 +50,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Icon getCircularIcon() {
-		// TODO: change icon paths to correct filenames once added to your project
-		return new Icon(path:'cloud-circular.svg', darkPath:'cloud-circular-dark.svg')
+		return new Icon(path:'xenserver.svg', darkPath:'xenserver.svg')
 	}
 
 	/**
@@ -70,7 +59,87 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Collection<OptionType> getOptionTypes() {
+		def displayOrder = 0
 		Collection<OptionType> options = []
+		options << new OptionType(
+				name: 'API URL',
+				code: 'zoneType.xen.apiUrl',
+				fieldName: 'apiUrl',
+				displayOrder: displayOrder,
+				fieldCode: 'gomorpheus.optiontype.ApiUrl',
+				fieldLabel:'API URL',
+				required: true,
+				inputType: OptionType.InputType.TEXT,
+		)
+		options << new OptionType(
+				name: 'Custom Port',
+				code: 'zoneType.xen.customPort',
+				fieldName: 'customPort',
+				displayOrder: displayOrder += 10,
+				fieldCode: 'gomorpheus.optiontype.CustomPort',
+				fieldLabel:'Custom Port',
+				required: true,
+				inputType: OptionType.InputType.TEXT,
+				fieldContext: 'config',
+		)
+		options << new OptionType(
+				name: 'Credentials',
+				code: 'zoneType.xen.credential',
+				fieldName: 'type',
+				displayOrder: displayOrder += 10,
+				fieldCode: 'gomorpheus.label.credentials',
+				fieldLabel:'Credentials',
+				required: true,
+				inputType: OptionType.InputType.CREDENTIAL,
+				fieldContext: 'credential',
+				optionSource:'credentials',
+				config: '{"credentialTypes":["username-password"]}'
+		)
+		options << new OptionType(
+				name: 'Username',
+				code: 'zoneType.xen.username',
+				fieldName: 'username',
+				displayOrder: displayOrder += 10,
+				fieldCode: 'gomorpheus.optiontype.Username',
+				fieldLabel:'Username',
+				required: true,
+				inputType: OptionType.InputType.TEXT,
+				fieldContext: 'config',
+				localCredential: true
+		)
+		options << new OptionType(
+				name: 'Password',
+				code: 'zoneType.xen.password',
+				fieldName: 'password',
+				displayOrder: displayOrder += 10,
+				fieldCode: 'gomorpheus.optiontype.Password',
+				fieldLabel:'Password',
+				required: true,
+				inputType: OptionType.InputType.PASSWORD,
+				fieldContext: 'config',
+				localCredential: true
+		)
+		options << new OptionType(
+				name: 'Inventory Existing Instances',
+				code: 'xenServer-import-existing',
+				fieldName: 'importExisting',
+				displayOrder: displayOrder += 10,
+				fieldLabel: 'Inventory Existing Instances',
+				required: false,
+				inputType: OptionType.InputType.CHECKBOX,
+				fieldContext: 'config'
+		)
+		options << new OptionType(
+				name: 'Enable Hypervisor Console',
+				code: 'xenServer-enable-hypervisor',
+				fieldName: 'enableHypervisor',
+				displayOrder: displayOrder += 10,
+				fieldLabel: 'Enable Hypervisor Console',
+				required: false,
+				inputType: OptionType.InputType.CHECKBOX,
+				fieldContext: 'config'
+		)
+
 		return options
 	}
 
@@ -90,8 +159,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Collection<BackupProvider> getAvailableBackupProviders() {
-		Collection<BackupProvider> providers = []
-		return providers
+		return this.@plugin.getProvidersByType(BackupProvider) as Collection<BackupProvider>
 	}
 
 	/**
@@ -100,7 +168,10 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Collection<NetworkType> getNetworkTypes() {
-		Collection<NetworkType> networks = []
+
+		Collection<NetworkType> networks = context.services.network.list(new DataQuery().withFilter(
+				'code','in', ['dockerBridge', 'host', 'overlay']))
+
 		return networks
 	}
 
@@ -141,6 +212,87 @@ class XenserverCloudProvider implements CloudProvider {
 	@Override
 	Collection<ComputeServerType> getComputeServerTypes() {
 		Collection<ComputeServerType> serverTypes = []
+
+		//xen hypervisors
+		serverTypes << new ComputeServerType(code:'xenserverHypervisor', name:'Xen Hypervisor', description:'', platform:PlatformType.linux,
+				nodeType:'xen-node', enabled:true, selectable:false, externalDelete:false, managed:false, controlPower:false, controlSuspend:false,
+				creatable:false, computeService:'xenserverComputeService', displayOrder:0, hasAutomation:false, containerHypervisor:false,
+				bareMetalHost:false, vmHypervisor:true, agentType: ComputeServerType.AgentType.none, provisionTypeCode: 'xen'
+		)
+		serverTypes << new ComputeServerType(code:'xenserverMetalHypervisor', name:'Xen Hypervisor - Metal', description:'',
+				platform:PlatformType.linux, nodeType:'xen-node', enabled:true, selectable:false, externalDelete:false, managed:false,
+				controlPower:false, controlSuspend:false, creatable:false, computeService:'xenserverComputeService', displayOrder:0,
+				hasAutomation:false, containerHypervisor:false, bareMetalHost:true, vmHypervisor:true, agentType: ComputeServerType.AgentType.none,
+				provisionTypeCode: 'xen'
+		)
+
+		//xen docker
+		serverTypes << new ComputeServerType(code:'xenserverLinux', name:'Xen Docker Host', description:'', platform:PlatformType.linux,
+				nodeType:'morpheus-node', reconfigureSupported:true, enabled:true, selectable:false, externalDelete:true, managed:true,
+				controlPower:true, controlSuspend:false, creatable:false, computeService:'xenserverComputeService', displayOrder:20,
+				hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.node,
+				containerEngine:'docker', computeTypeCode:'docker-host', provisionTypeCode: 'xen', optionTypes:[]
+		)
+
+		//kubernetes
+		serverTypes << new ComputeServerType(code:'xenKubeMaster', name:'Xen Kubernetes Master', description:'', platform:PlatformType.linux,
+				nodeType:'kube-master', reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true,
+				controlPower:true, controlSuspend:true, creatable:true, supportsConsoleKeymap: true, computeService:'xenserverComputeService',
+				displayOrder:10, hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false,
+				agentType: ComputeServerType.AgentType.guest, containerEngine:'docker', provisionTypeCode: 'xen', computeTypeCode:'kube-master',
+				optionTypes:[]
+		)
+		serverTypes << new ComputeServerType(code:'xenKubeWorker', name:'Xen Kubernetes Worker', description:'', platform:PlatformType.linux,
+				nodeType:'kube-worker', reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true,
+				controlSuspend:true, creatable:true, supportsConsoleKeymap: true, computeService:'xenserverComputeService', displayOrder:10,
+				hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.guest,
+				containerEngine:'docker', provisionTypeCode: 'xen', computeTypeCode:'kube-worker', optionTypes:[]
+		)
+
+		serverTypes << new ComputeServerType(code:'xenserverVm', name:'Xen Instance', description:'', platform:PlatformType.linux,
+				nodeType:'morpheus-vm-node', reconfigureSupported:true, enabled:true, selectable:false, externalDelete:true, managed:true,
+				controlPower:true, controlSuspend:false, creatable:false, computeService:'xenserverComputeService', displayOrder:0, hasAutomation:true,
+				containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.guest, guestVm:true,
+				provisionTypeCode: 'xen'
+		)
+		serverTypes << new ComputeServerType(code:'xenserverWindowsVm', name:'Xen Instance - Windows', description:'', platform:PlatformType.windows,
+				nodeType:'morpheus-windows-vm-node', reconfigureSupported:true, enabled:true, selectable:false, externalDelete:true, managed:true,
+				controlPower:true, controlSuspend:false, creatable: false, computeService:'xenserverComputeService', displayOrder:0,
+				hasAutomation:true, containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.guest,
+				guestVm:true, provisionTypeCode: 'xen'
+		)
+		serverTypes << new ComputeServerType(code:'xenserverUnmanaged', name:'Xen Instance', description:'xen vm', platform:PlatformType.linux,
+				nodeType:'unmanaged', reconfigureSupported:true, enabled:true, selectable:false, externalDelete:true, managed:false,
+				controlPower:true, controlSuspend:false, creatable:false, computeService:'xenserverComputeService', displayOrder:99,
+				hasAutomation:false, containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.none,
+				managedServerType:'xenserverVm', guestVm:true, provisionTypeCode: 'xen',
+				optionTypes: [
+						new OptionType(
+								code:'computeServerType.xen.sshHost', inputType: OptionType.InputType.TEXT, name:'sshHost', category:'computeServerType.xen', fieldName:'sshHost',
+								fieldCode: 'gomorpheus.optiontype.Host', fieldLabel:'Host', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+								required:false, enabled:true, editable:false, global:false, placeHolderText:null, defaultValue:null, custom:false,
+								displayOrder:0, fieldClass:null, fieldSize:15
+						),
+						new OptionType(
+								code:'computeServerType.xen.sshPort', inputType: OptionType.InputType.NUMBER, name:'sshPort', category:'computeServerType.xen', fieldName:'sshPort',
+								fieldCode: 'gomorpheus.optiontype.Port', fieldLabel:'Port', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+								required:false, enabled:true, editable:false, global:false, placeHolderText:'22', defaultValue:'22', custom:false,
+								displayOrder:1, fieldClass:null, fieldSize:5
+						),
+						new OptionType(
+								code:'computeServerType.xen.sshUsername', inputType: OptionType.InputType.TEXT, name:'sshUsername', category:'computeServerType.xen', fieldName:'sshUsername',
+								fieldCode: 'gomorpheus.optiontype.User', fieldLabel:'User', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+								required:false, enabled:true, editable:false, global:false, placeHolderText:null, defaultValue:null, custom:false, displayOrder:2,
+								fieldClass:null
+						),
+						new OptionType(
+								code:'computeServerType.xen.sshPassword', inputType: OptionType.InputType.PASSWORD, name:'sshPassword', category:'computeServerType.xen',
+								fieldName:'sshPassword', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'server',
+								fieldSet:'sshConnection', fieldGroup:'Connection Config', required:false, enabled:true, editable:false, global:false, placeHolderText:null,
+								defaultValue:null, custom:false, displayOrder:3, fieldClass:null
+						)
+				]
+		)
 		return serverTypes
 	}
 
@@ -207,7 +359,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean hasComputeZonePools() {
-		return false
+		return true
 	}
 
 	/**
@@ -234,7 +386,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean hasDatastores() {
-		return true
+		return false
 	}
 
 	/**
