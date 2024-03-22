@@ -8,10 +8,15 @@ import com.morpheusdata.core.data.DataOrFilter
 import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.CloudProvider
 import com.morpheusdata.core.providers.ProvisionProvider
+import com.morpheusdata.core.util.ConnectionUtils
 import com.morpheusdata.model.*
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.xen.sync.NetworkSync
+import com.morpheusdata.xen.util.XenComputeUtility
+import groovy.util.logging.Slf4j
 
+@Slf4j
 class XenserverCloudProvider implements CloudProvider {
 	public static final String CLOUD_PROVIDER_CODE = 'xenserver.cloud'
 
@@ -317,7 +322,32 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse initializeCloud(Cloud cloudInfo) {
-		return ServiceResponse.success()
+		ServiceResponse rtn = new ServiceResponse(success: false)
+		try {
+			log.debug("Refreshing Cloud: ${cloudInfo.code}")
+			log.debug("config: ${cloudInfo.configMap}")
+
+			def syncDate = new Date()
+			def apiUrl = XenComputeUtility.getXenApiUrl(cloudInfo)
+			def apiUrlObj = new URL(apiUrl)
+			def apiHost = apiUrlObj.getHost()
+			def apiPort = apiUrlObj.getPort() > 0 ? apiUrlObj.getPort() : (apiUrlObj?.getProtocol()?.toLowerCase() == 'https' ? 443 : 80)
+			//def proxySettings = zoneService.getZoneProxySettings(zone)
+			//def hostOnline = morpheusComputeService.testHostConnection(apiHost, apiPort, false, true, proxySettings)
+			//log.debug("xenserver online: ${apiUrl} ${hostOnline}")
+			NetworkProxy proxySettings = cloudInfo.apiProxy
+			def hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, proxySettings)
+			if(hostOnline) {
+				refresh(cloudInfo)
+				refreshDaily(cloudInfo)
+				rtn.success = true
+			} else {
+				log.info('offline: xen host not reachable', syncDate)
+			}
+		} catch(e) {
+			log.error("refresh cloud error: ${e}", e)
+		}
+		rtn
 	}
 
 	/**
@@ -330,7 +360,22 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse refresh(Cloud cloudInfo) {
-		return ServiceResponse.success()
+		ServiceResponse rtn = new ServiceResponse(success: false)
+		try {
+			def testResults = XenComputeUtility.testConnection(cloudInfo, plugin)
+			if(testResults.success) {
+				def now = new Date().time
+				new NetworkSync(cloudInfo, plugin).execute()
+				log.info("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
+
+				rtn = ServiceResponse.success()
+			} else {
+				rtn = ServiceResponse.error(testResults.invalidLogin == true ? 'invalid credentials' : 'error connecting')
+			}
+		} catch(e) {
+			log.error("refresh cloud error: ${e}", e)
+		}
+		rtn
 	}
 
 	/**
@@ -341,6 +386,19 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	void refreshDaily(Cloud cloudInfo) {
+		log.debug("daily refresh cloud ${cloudInfo.code}")
+		def syncDate = new Date()
+		def testResults = XenComputeUtility.testConnection(cloudInfo, plugin)
+		if(testResults.success) {
+			new NetworkSync(cloudInfo, plugin).execute()
+		} else {
+			if(testResults.invalidLogin) {
+				context.cloud.updateZoneStatus(cloudInfo, Cloud.Status.offline, 'Error refreshing cloud: invalid credentials', syncDate)
+			} else {
+				context.cloud.updateZoneStatus(cloudInfo, Cloud.Status.offline, 'Error refreshing cloud: host not reachable', syncDate)
+			}
+		}
+		log.debug("Completed daily refresh for cloud ${cloudInfo.code}")
 	}
 
 	/**

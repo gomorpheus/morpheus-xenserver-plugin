@@ -4,7 +4,9 @@ import com.bertramlabs.plugins.karman.CloudFile
 import com.bertramlabs.plugins.karman.StorageProvider
 import com.morpheusdata.core.util.MorpheusUtils
 import com.morpheusdata.core.util.ProgressInputStream
+import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.Datastore
+import com.morpheusdata.xen.XenserverPlugin
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
 import groovy.util.logging.Slf4j
@@ -43,8 +45,8 @@ class XenComputeUtility {
     static minDiskImageSize = (2l * 1024l * 1024l * 1024l)
     static minDynamicMemory = (512l * 1024l * 1024l)
 
-    static testConnection(def zone) {
-        getXenConnectionSession(zone)
+    static testConnection(Cloud cloud, XenserverPlugin plugin) {
+        getXenConnectionSession(cloud, plugin)
     }
 
     static createServer(opts) {
@@ -751,10 +753,13 @@ class XenComputeUtility {
         return rtn
     }
 
-    static listNetworks(opts) {
+    static listNetworks(Cloud cloud, XenserverPlugin plugin) {
+        log.info("Rahul:: XenComputeUtility:listNetworks: Entered")
         def rtn = [success: false, networkList: []]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(cloud, plugin)
+        log.info("Rahul:: XenComputeUtility:listNetworks: config: ${config}")
         def networkList = com.xensource.xenapi.Network.getAllRecords(config.connection)
+        log.info("Rahul:: XenComputeUtility:listNetworks: networkList: ${networkList}")
         networkList?.each { networkKey, networkValue ->
             rtn.networkList << networkValue
         }
@@ -1514,13 +1519,13 @@ class XenComputeUtility {
         return rtn
     }
 
-    static getXenConnectionSession(zone) {
+    static getXenConnectionSession(Cloud cloud, XenserverPlugin plugin) {
         def rtn = [success: false, invalidLogin: false]
         try {
-            rtn.targetServer = getXenTargetServer(zone)
+            rtn.targetServer = getXenTargetServer(cloud, plugin)
             def urlPrefix = rtn.targetServer.isSecure == true ? 'https://' : 'http://'
             rtn.connection = new Connection(new URL(urlPrefix + rtn.targetServer.hostname))
-            rtn.session = Session.loginWithPassword(rtn.connection, rtn.targetServer.username, rtn.targetServer.password, getXenApiVersion(zone))
+            rtn.session = Session.loginWithPassword(rtn.connection, rtn.targetServer.username, rtn.targetServer.password, getXenApiVersion(cloud))
             rtn.connectionName = rtn.targetServer.hostname
             rtn.success = true
         } catch (e) {
@@ -1535,17 +1540,17 @@ class XenComputeUtility {
         return rtn
     }
 
-    static getXenTargetServer(zone) {
-        def apiHost = getXenApiHost(zone)
-        def apiUsername = getXenUsername(zone)
-        def apiPassword = getXenPassword(zone)
+    static getXenTargetServer(Cloud cloud, XenserverPlugin plugin) {
+        def apiHost = getXenApiHost(cloud)
+        def apiUsername = plugin.getAuthConfig(cloud).doUsername
+        def apiPassword = plugin.getAuthConfig(cloud).doPassword
         def rtn = [hostname: apiHost.address, username: apiUsername, password: apiPassword, isSecure: apiHost.isSecure]
         return rtn
     }
 
-    static getXenApiUrl(zone, forceSecure = false, creds = null) {
+    static getXenApiUrl(cloud, forceSecure = false, creds = null) {
         def rtn
-        def apiHost = getXenApiHost(zone)
+        def apiHost = getXenApiHost(cloud)
         def urlPrefix = (forceSecure == true || apiHost.isSecure == true) ? 'https://' : 'http://'
         if (creds)
             rtn = urlPrefix + creds + '@' + apiHost.address
@@ -1554,9 +1559,11 @@ class XenComputeUtility {
         return rtn
     }
 
-    static getXenApiHost(zone) {
+    static getXenApiHost(Cloud cloud) {
         def rtn = [address: null, isSecure: false]
-        def config = zone.getConfigMap()
+        //def config = zone.getConfigMap()
+        def config = cloud.configMap // rahul
+
         def initialApiUrl = config.apiUrl
         if (config.masterAddress)
             rtn.address = config.masterAddress
