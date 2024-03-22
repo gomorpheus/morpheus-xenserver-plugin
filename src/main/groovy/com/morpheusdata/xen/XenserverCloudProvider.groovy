@@ -3,6 +3,9 @@ package com.morpheusdata.xen
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupProvider
+import com.morpheusdata.core.data.DataFilter
+import com.morpheusdata.core.data.DataOrFilter
+import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.CloudProvider
 import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.util.ConnectionUtils
@@ -52,8 +55,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Icon getCircularIcon() {
-		// TODO: Need to change this, as of now no circular icon available
-		return new Icon(path:'xen-light-140x40.svg', darkPath:'xen-dark-140x40.svg')
+		return new Icon(path:'xenserver.svg', darkPath:'xenserver.svg')
 	}
 
 	/**
@@ -62,42 +64,39 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Collection<OptionType> getOptionTypes() {
+		def displayOrder = 0
 		Collection<OptionType> options = []
 		options << new OptionType(
 				name: 'API URL',
 				code: 'zoneType.xen.apiUrl',
 				fieldName: 'apiUrl',
-				displayOrder: 0,
+				displayOrder: displayOrder,
 				fieldCode: 'gomorpheus.optiontype.ApiUrl',
-				category: 'zoneType.xen',
 				fieldLabel:'API URL',
 				required: true,
-				enabled: true,
-				editable: false,
-				global: false,
+				inputType: OptionType.InputType.TEXT,
+		)
+		options << new OptionType(
+				name: 'Custom Port',
+				code: 'zoneType.xen.customPort',
+				fieldName: 'customPort',
+				displayOrder: displayOrder += 10,
+				fieldCode: 'gomorpheus.optiontype.CustomPort',
+				fieldLabel:'Custom Port',
+				required: true,
 				inputType: OptionType.InputType.TEXT,
 				fieldContext: 'config',
-				fieldGroup: 'Connection Config',
-				custom: false,
-				fieldSize:15
 		)
 		options << new OptionType(
 				name: 'Credentials',
 				code: 'zoneType.xen.credential',
 				fieldName: 'type',
-				displayOrder: 1,
+				displayOrder: displayOrder += 10,
 				fieldCode: 'gomorpheus.label.credentials',
-				category: 'zoneType.xen',
 				fieldLabel:'Credentials',
 				required: true,
-				enabled: true,
-				editable: true,
-				global: false,
 				inputType: OptionType.InputType.CREDENTIAL,
 				fieldContext: 'credential',
-				fieldGroup: 'Connection Config',
-				defaultValue: 'local',
-				custom: false,
 				optionSource:'credentials',
 				config: '{"credentialTypes":["username-password"]}'
 		)
@@ -105,59 +104,45 @@ class XenserverCloudProvider implements CloudProvider {
 				name: 'Username',
 				code: 'zoneType.xen.username',
 				fieldName: 'username',
-				displayOrder: 2,
+				displayOrder: displayOrder += 10,
 				fieldCode: 'gomorpheus.optiontype.Username',
-				category: 'zoneType.xen',
 				fieldLabel:'Username',
 				required: true,
-				enabled: true,
-				editable: false,
-				global: false,
 				inputType: OptionType.InputType.TEXT,
 				fieldContext: 'config',
-				fieldGroup: 'Connection Config',
-				custom: false,
-				fieldSize: 15,
 				localCredential: true
 		)
 		options << new OptionType(
 				name: 'Password',
 				code: 'zoneType.xen.password',
 				fieldName: 'password',
-				displayOrder: 3,
+				displayOrder: displayOrder += 10,
 				fieldCode: 'gomorpheus.optiontype.Password',
-				category: 'zoneType.xen',
 				fieldLabel:'Password',
 				required: true,
-				enabled: true,
-				editable: false,
-				global: false,
 				inputType: OptionType.InputType.PASSWORD,
 				fieldContext: 'config',
-				fieldGroup: 'Connection Config',
-				custom: false,
-				fieldSize: 15,
 				localCredential: true
 		)
 		options << new OptionType(
-				name: 'Import Existing',
-				code: 'zoneType.xen.importExisting',
+				name: 'Inventory Existing Instances',
+				code: 'xenServer-import-existing',
 				fieldName: 'importExisting',
-				displayOrder: 4,
-				fieldCode: 'gomorpheus.optiontype.ImportExistingInstances',
-				category: 'zoneType.xen',
-				fieldLabel: 'Import Existing Instances',
-				required: true,
-				enabled: true,
-				editable: false,
-				global: false,
+				displayOrder: displayOrder += 10,
+				fieldLabel: 'Inventory Existing Instances',
+				required: false,
 				inputType: OptionType.InputType.CHECKBOX,
-				helpBlock:'Turn this feature on to import existing virtual machines from Xen.',
-				fieldContext: 'config',
-				fieldGroup: 'Options',
-				defaultValue: 'off',
-				custom: false,
-				fieldSize: 15
+				fieldContext: 'config'
+		)
+		options << new OptionType(
+				name: 'Enable Hypervisor Console',
+				code: 'xenServer-enable-hypervisor',
+				fieldName: 'enableHypervisor',
+				displayOrder: displayOrder += 10,
+				fieldLabel: 'Enable Hypervisor Console',
+				required: false,
+				inputType: OptionType.InputType.CHECKBOX,
+				fieldContext: 'config'
 		)
 
 		return options
@@ -188,65 +173,9 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Collection<NetworkType> getNetworkTypes() {
-		Collection<NetworkType> networks = []
 
-		networks << new NetworkType(
-				code              : 'dockerBridge',
-				name              : 'Docker Bridge',
-				overlay           : false,
-				creatable         : true,
-				nameEditable      : false,
-				cidrEditable      : false,
-				dhcpServerEditable: false,
-				dnsEditable       : false,
-				gatewayEditable   : false,
-				ipv6Editable      : false,
-				vlanIdEditable    : false,
-				cidrRequired      : true,
-				canAssignPool     : false,
-				deletable         : true,
-				hasNetworkServer  : false,
-				hasCidr           : true,
-				optionTypes       : []
-		)
-		networks << new NetworkType(
-				code              : 'host',
-				name              : 'Host',
-				overlay           : false,
-				creatable         : true,
-				nameEditable      : false,
-				cidrEditable      : false,
-				dhcpServerEditable: false,
-				dnsEditable       : false,
-				gatewayEditable   : false,
-				ipv6Editable      : false,
-				vlanIdEditable    : false,
-				cidrRequired      : true,
-				canAssignPool     : false,
-				deletable         : true,
-				hasNetworkServer  : false,
-				hasCidr           : true,
-				optionTypes       : []
-		)
-		networks << new NetworkType(
-				code              : 'overlay',
-				name              : 'Overlay',
-				overlay           : false,
-				creatable         : true,
-				nameEditable      : false,
-				cidrEditable      : false,
-				dhcpServerEditable: false,
-				dnsEditable       : false,
-				gatewayEditable   : false,
-				ipv6Editable      : false,
-				vlanIdEditable    : false,
-				cidrRequired      : true,
-				canAssignPool     : false,
-				deletable         : true,
-				hasNetworkServer  : false,
-				hasCidr           : true,
-				optionTypes       : []
-		)
+		Collection<NetworkType> networks = context.services.network.list(new DataQuery().withFilter(
+				'code','in', ['dockerBridge', 'host', 'overlay']))
 
 		return networks
 	}
@@ -475,7 +404,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean hasComputeZonePools() {
-		return false
+		return true
 	}
 
 	/**
@@ -502,7 +431,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean hasDatastores() {
-		return true
+		return false
 	}
 
 	/**
@@ -530,7 +459,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean supportsDistributedWorker() {
-		return true
+		return false
 	}
 
 	/**
