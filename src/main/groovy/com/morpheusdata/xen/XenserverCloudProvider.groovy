@@ -386,6 +386,19 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	void refreshDaily(Cloud cloudInfo) {
+		log.debug("daily refresh cloud ${cloudInfo.code}")
+		def syncDate = new Date()
+		def testResults = XenComputeUtility.testConnection(cloudInfo, plugin)
+		if(testResults.success) {
+			new NetworkSync(cloudInfo, plugin).execute()
+		} else {
+			if(testResults.invalidLogin) {
+				context.cloud.updateZoneStatus(cloudInfo, Cloud.Status.offline, 'Error refreshing cloud: invalid credentials', syncDate)
+			} else {
+				context.cloud.updateZoneStatus(cloudInfo, Cloud.Status.offline, 'Error refreshing cloud: host not reachable', syncDate)
+			}
+		}
+		log.debug("Completed daily refresh for cloud ${cloudInfo.code}")
 	}
 
 	/**

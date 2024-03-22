@@ -1543,8 +1543,11 @@ class XenComputeUtility {
         def apiPassword = getXenPassword(zone)*/
         // rahul
         def apiUsername = plugin.getAuthConfig(cloud).doUsername
-        def apiPassword = plugin.getAuthConfig(cloud).doApiKey
+        def apiPassword = plugin.getAuthConfig(cloud).doPassword
+        log.info("RAZI USERNAME :: ${apiUsername}")
+        log.info("RAZI PASSWORD :: ${apiPassword}")
         def rtn = [hostname: apiHost.address, username: apiUsername, password: apiPassword, isSecure: apiHost.isSecure]
+        log.info("RAZI RTN :: ${rtn}")
         return rtn
     }
 
