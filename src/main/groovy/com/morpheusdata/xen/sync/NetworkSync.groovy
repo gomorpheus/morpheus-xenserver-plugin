@@ -50,27 +50,23 @@ class NetworkSync {
                 log.info("Rahul:: NetworkSync:execute: domainRecordsMap: ${domainRecords.map { "${it.externalId} - ${it.name}" }.toList().blockingGet()}")
 
                 log.info("Rahul:: NetworkSync:execute: listResults.networkList: ${listResults.networkList}")
-                SyncTask<NetworkIdentityProjection, Map, Network> syncTask = new SyncTask<>(domainRecords, listResults.networkList as Collection<Map>)
-                syncTask.addMatchFunction { NetworkIdentityProjection domainObject, Map cloudItem ->
+                SyncTask<NetworkIdentityProjection, com.xensource.xenapi.Network.Record, Network> syncTask = new SyncTask<>(domainRecords, listResults.networkList as Collection<com.xensource.xenapi.Network.Record>)
+                syncTask.addMatchFunction { NetworkIdentityProjection domainObject, com.xensource.xenapi.Network.Record cloudItem ->
                     log.info("Rahul:: NetworkSync:execute: cloudItem: ${cloudItem}")
                     log.info("Rahul:: NetworkSync:execute: domainObject.externalId: ${domainObject.externalId}")
-                    log.info("Rahul:: NetworkSync:execute: cloudItem?.uuid: ${cloudItem?.uuid}")
-                    domainObject.externalId == cloudItem?.uuid
+                    log.info("Rahul:: NetworkSync:execute: cloudItem?.uuid: ${cloudItem.uuid}")
+                    domainObject.externalId == cloudItem.uuid
                 }.onDelete { removeItems ->
                     log.info("Rahul:: NetworkSync:execute: onDelete: ${removeItems}")
                     morpheusContext.async.cloud.network.remove(removeItems).blockingGet()
-                }.onUpdate { List<SyncTask.UpdateItem<Network, Map>> updateItems ->
+                }.onUpdate { List<SyncTask.UpdateItem<Network, com.xensource.xenapi.Network.Record>> updateItems ->
                     log.info("Rahul:: NetworkSync:execute: onUpdate: ${updateItems}")
                     updateMatchedNetworks(updateItems, networkType)
                 }.onAdd { itemsToAdd ->
                     log.info("Rahul:: NetworkSync:execute: onAdd: ${itemsToAdd}")
                     addMissingNetworks(itemsToAdd, networkType)
-                }.withLoadObjectDetails { List<SyncTask.UpdateItemDto<NetworkIdentityProjection, Map>> updateItems ->
-                    Map<Long, SyncTask.UpdateItemDto<NetworkIdentityProjection, Map>> updateItemMap = updateItems.collectEntries { [(it.existingItem.id): it] }
-                    morpheusContext.async.cloud.network.listById(updateItems?.collect { it.existingItem.id }).map { Network network ->
-                        SyncTask.UpdateItemDto<NetworkIdentityProjection, Map> matchItem = updateItemMap[network.id]
-                        return new SyncTask.UpdateItem<NetworkIdentityProjection, Map>(existingItem: network, masterItem: matchItem.masterItem)
-                    }
+                }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<NetworkIdentityProjection, com.xensource.xenapi.Network.Record>> updateItems ->
+                    return morpheusContext.async.cloud.network.listById(updateItems.collect { it.existingItem.id } as List<Long>)
                 }.start()
             }
         } catch (e) {
@@ -78,7 +74,7 @@ class NetworkSync {
         }
     }
 
-    private addMissingNetworks(List addList, NetworkType networkType) {
+    private addMissingNetworks(Collection<com.xensource.xenapi.Network.Record> addList, NetworkType networkType) {
         log.info("Rahul:: NetworkSync:addMissingNetworks: Entered")
         log.info("Rahul:: NetworkSync:addMissingNetworks: cloud.id: ${cloud.id}")
         log.info("Rahul:: NetworkSync:addMissingNetworks: cloud.owner.id: ${cloud.owner.id}")
@@ -110,14 +106,13 @@ class NetworkSync {
         }
     }
 
-    private updateMatchedNetworks(List<SyncTask.UpdateItem<Network, Map>> updateList, NetworkType networkType) {
+    private updateMatchedNetworks(List<SyncTask.UpdateItem<Network, com.xensource.xenapi.Network.Record>> updateList, NetworkType networkType) {
         log.info("Rahul:: NetworkSync:updateMatchedNetworks: Entered")
         List<Network> itemsToUpdate = []
         try {
-            for (updateMap in updateList) {
-                log.info("Rahul:: NetworkSync:updateMatchedNetworks: updateMap: ${updateMap}")
-                def matchedNetwork = updateMap.masterItem
-                Network network = updateMap.existingItem
+            for (update in updateList) {
+                log.info("Rahul:: NetworkSync:updateMatchedNetworks: updateMap: ${update}")
+                Network network = update.existingItem
                 log.debug "processing update: ${network}"
                 log.info("Rahul:: NetworkSync:updateMatchedNetworks: processing update: ${network}")
 
