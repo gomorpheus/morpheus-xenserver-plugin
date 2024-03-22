@@ -95,7 +95,6 @@ class NetworkSync {
                         refType    : 'ComputeZone',
                         refId      : cloud.id,
                         type       : networkType,
-                        zone       : cloud,
                         owner      : new Account(id: cloud.owner.id),
                         description: cloudItem.nameDescription,
                         dhcpServer : true,
