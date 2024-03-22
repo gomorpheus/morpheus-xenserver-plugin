@@ -77,7 +77,6 @@ class XenserverPlugin extends Plugin {
         } else {
             username = cloud.configMap.username
         }
-//        def apiKey
         def password
         if (cloud.accountCredentialData && cloud.accountCredentialData.containsKey('password')) {
             password = cloud.accountCredentialData['password']
@@ -87,7 +86,6 @@ class XenserverPlugin extends Plugin {
 
         rtn.doUsername = username
         rtn.doPassword = password
-        log.info("RAZI RTN IN CLOUD :: ${rtn}")
         return rtn
     }
 
