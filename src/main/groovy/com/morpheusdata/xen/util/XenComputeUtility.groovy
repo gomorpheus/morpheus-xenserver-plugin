@@ -1542,15 +1542,9 @@ class XenComputeUtility {
 
     static getXenTargetServer(Cloud cloud, XenserverPlugin plugin) {
         def apiHost = getXenApiHost(cloud)
-       /* def apiUsername = getXenUsername(zone)
-        def apiPassword = getXenPassword(zone)*/
-        // rahul
         def apiUsername = plugin.getAuthConfig(cloud).doUsername
         def apiPassword = plugin.getAuthConfig(cloud).doPassword
-        log.info("RAZI USERNAME :: ${apiUsername}")
-        log.info("RAZI PASSWORD :: ${apiPassword}")
         def rtn = [hostname: apiHost.address, username: apiUsername, password: apiPassword, isSecure: apiHost.isSecure]
-        log.info("RAZI RTN :: ${rtn}")
         return rtn
     }
 
