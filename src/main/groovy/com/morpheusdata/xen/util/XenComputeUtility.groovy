@@ -754,12 +754,9 @@ class XenComputeUtility {
     }
 
     static listNetworks(Cloud cloud, XenserverPlugin plugin) {
-        log.info("Rahul:: XenComputeUtility:listNetworks: Entered")
         def rtn = [success: false, networkList: []]
         def config = getXenConnectionSession(cloud, plugin)
-        log.info("Rahul:: XenComputeUtility:listNetworks: config: ${config}")
         def networkList = com.xensource.xenapi.Network.getAllRecords(config.connection)
-        log.info("Rahul:: XenComputeUtility:listNetworks: networkList: ${networkList}")
         networkList?.each { networkKey, networkValue ->
             rtn.networkList << networkValue
         }
@@ -1562,7 +1559,7 @@ class XenComputeUtility {
     static getXenApiHost(Cloud cloud) {
         def rtn = [address: null, isSecure: false]
         //def config = zone.getConfigMap()
-        def config = cloud.configMap // rahul
+        def config = cloud.configMap
 
         def initialApiUrl = config.apiUrl
         if (config.masterAddress)

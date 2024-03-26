@@ -332,9 +332,6 @@ class XenserverCloudProvider implements CloudProvider {
 			def apiUrlObj = new URL(apiUrl)
 			def apiHost = apiUrlObj.getHost()
 			def apiPort = apiUrlObj.getPort() > 0 ? apiUrlObj.getPort() : (apiUrlObj?.getProtocol()?.toLowerCase() == 'https' ? 443 : 80)
-			//def proxySettings = zoneService.getZoneProxySettings(zone)
-			//def hostOnline = morpheusComputeService.testHostConnection(apiHost, apiPort, false, true, proxySettings)
-			//log.debug("xenserver online: ${apiUrl} ${hostOnline}")
 			NetworkProxy proxySettings = cloudInfo.apiProxy
 			def hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, proxySettings)
 			if(hostOnline) {
@@ -342,7 +339,7 @@ class XenserverCloudProvider implements CloudProvider {
 				refreshDaily(cloudInfo)
 				rtn.success = true
 			} else {
-				log.info('offline: xen host not reachable', syncDate)
+				log.debug('offline: xen host not reachable', syncDate)
 			}
 		} catch(e) {
 			log.error("refresh cloud error: ${e}", e)
