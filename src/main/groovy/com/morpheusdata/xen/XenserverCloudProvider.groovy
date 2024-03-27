@@ -336,7 +336,6 @@ class XenserverCloudProvider implements CloudProvider {
 			def hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, proxySettings)
 			if(hostOnline) {
 				refresh(cloudInfo)
-				refreshDaily(cloudInfo)
 				rtn.success = true
 			} else {
 				log.debug('offline: xen host not reachable', syncDate)

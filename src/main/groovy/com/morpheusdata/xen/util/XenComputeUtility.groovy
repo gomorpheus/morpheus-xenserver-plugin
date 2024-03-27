@@ -45,8 +45,8 @@ class XenComputeUtility {
     static minDiskImageSize = (2l * 1024l * 1024l * 1024l)
     static minDynamicMemory = (512l * 1024l * 1024l)
 
-    static testConnection(Cloud cloud, XenserverPlugin plugin) {
-        getXenConnectionSession(cloud, plugin)
+    static testConnection(Map config) {
+        getXenConnectionSession(config)
     }
 
     static createServer(opts) {
@@ -755,7 +755,7 @@ class XenComputeUtility {
 
     static listNetworks(Cloud cloud, XenserverPlugin plugin) {
         def rtn = [success: false, networkList: []]
-        def config = getXenConnectionSession(cloud, plugin)
+        def config = getXenConnectionSession(plugin.getAuthConfig(cloud))
         def networkList = com.xensource.xenapi.Network.getAllRecords(config.connection)
         networkList?.each { networkKey, networkValue ->
             rtn.networkList << networkValue
@@ -1516,14 +1516,13 @@ class XenComputeUtility {
         return rtn
     }
 
-    static getXenConnectionSession(Cloud cloud, XenserverPlugin plugin) {
+    static getXenConnectionSession(Map config) {
         def rtn = [success: false, invalidLogin: false]
         try {
-            rtn.targetServer = getXenTargetServer(cloud, plugin)
-            def urlPrefix = rtn.targetServer.isSecure == true ? 'https://' : 'http://'
-            rtn.connection = new Connection(new URL(urlPrefix + rtn.targetServer.hostname))
-            rtn.session = Session.loginWithPassword(rtn.connection, rtn.targetServer.username, rtn.targetServer.password, getXenApiVersion(cloud))
-            rtn.connectionName = rtn.targetServer.hostname
+            def urlPrefix = config.isSecure == true ? 'https://' : 'http://'
+            rtn.connection = new Connection(new URL(urlPrefix + config.hostname))
+            rtn.session = Session.loginWithPassword(rtn.connection, config.username, config.password, config.apiVersion)
+            rtn.connectionName = config.hostname
             rtn.success = true
         } catch (e) {
             log.error("getXenConnectionSession error: ${e}", e)
@@ -1534,14 +1533,6 @@ class XenComputeUtility {
             }
 
         }
-        return rtn
-    }
-
-    static getXenTargetServer(Cloud cloud, XenserverPlugin plugin) {
-        def apiHost = getXenApiHost(cloud)
-        def apiUsername = plugin.getAuthConfig(cloud).doUsername
-        def apiPassword = plugin.getAuthConfig(cloud).doPassword
-        def rtn = [hostname: apiHost.address, username: apiUsername, password: apiPassword, isSecure: apiHost.isSecure]
         return rtn
     }
 
