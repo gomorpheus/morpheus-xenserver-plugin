@@ -31,7 +31,8 @@ class NetworkSync {
     def execute() {
         log.debug "NetworkSync"
         try {
-            def listResults = XenComputeUtility.listNetworks(cloud, plugin)
+            def authConfig = plugin.getAuthConfig(cloud)
+            def listResults = XenComputeUtility.listNetworks(authConfig)
 
             //NetworkType networkType = morpheusContext.services.network.list(new DataQuery().withFilter('code', 'xenNetwork'))
             NetworkType networkType = new NetworkType(code: 'xenNetwork')
