@@ -19,6 +19,7 @@ import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.model.AccountCredential
 import com.morpheusdata.model.Cloud
+import com.morpheusdata.xen.util.XenComputeUtility
 import groovy.util.logging.Slf4j
 
 @Slf4j
@@ -57,8 +58,6 @@ class XenserverPlugin extends Plugin {
             try {
                 if (!cloud.account?.id || !cloud.owner?.id) {
                     log.debug("cloud account or owner id is missing, loading cloud object")
-                    // in some cases marshalling the cloud doesn't include the account and owner, in those cases
-                    // we need to load the cloud to include those elements.
                     cloud = morpheus.services.cloud.get(cloud.id)
                 }
                 accountCredential = morpheus.services.accountCredential.loadCredentials(cloud)
@@ -84,8 +83,10 @@ class XenserverPlugin extends Plugin {
             password = cloud.configMap.password
         }
 
-        rtn.doUsername = username
-        rtn.doPassword = password
+        def apiHost = XenComputeUtility.getXenApiHost(cloud)
+        def apiVersion = XenComputeUtility.getXenApiVersion(cloud)
+
+        rtn = [hostname: apiHost.address, username: username, password: password, isSecure: apiHost.isSecure, apiVersion: apiVersion]
         return rtn
     }
 
