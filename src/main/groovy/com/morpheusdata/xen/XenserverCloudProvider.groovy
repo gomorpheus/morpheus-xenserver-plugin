@@ -336,7 +336,6 @@ class XenserverCloudProvider implements CloudProvider {
 			def hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, proxySettings)
 			if(hostOnline) {
 				refresh(cloudInfo)
-				refreshDaily(cloudInfo)
 				rtn.success = true
 			} else {
 				log.debug('offline: xen host not reachable', syncDate)
@@ -359,7 +358,7 @@ class XenserverCloudProvider implements CloudProvider {
 	ServiceResponse refresh(Cloud cloudInfo) {
 		ServiceResponse rtn = new ServiceResponse(success: false)
 		try {
-			def testResults = XenComputeUtility.testConnection(cloudInfo, plugin)
+			def testResults = XenComputeUtility.testConnection(plugin.getAuthConfig(cloudInfo))
 			if(testResults.success) {
 				def now = new Date().time
 				new NetworkSync(cloudInfo, plugin).execute()
@@ -383,19 +382,6 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	void refreshDaily(Cloud cloudInfo) {
-		log.debug("daily refresh cloud ${cloudInfo.code}")
-		def syncDate = new Date()
-		def testResults = XenComputeUtility.testConnection(cloudInfo, plugin)
-		if(testResults.success) {
-			new NetworkSync(cloudInfo, plugin).execute()
-		} else {
-			if(testResults.invalidLogin) {
-				context.cloud.updateZoneStatus(cloudInfo, Cloud.Status.offline, 'Error refreshing cloud: invalid credentials', syncDate)
-			} else {
-				context.cloud.updateZoneStatus(cloudInfo, Cloud.Status.offline, 'Error refreshing cloud: host not reachable', syncDate)
-			}
-		}
-		log.debug("Completed daily refresh for cloud ${cloudInfo.code}")
 	}
 
 	/**
