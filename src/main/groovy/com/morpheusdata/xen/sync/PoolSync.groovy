@@ -35,14 +35,14 @@ class PoolSync {
             def listResults = XenComputeUtility.listPools(plugin.getAuthConfig(cloud))
             log.info("Rahul::PoolSync:execute: listResults: ${listResults}")
             log.info("Rahul::PoolSync:execute: listResults.success: ${listResults.success}")
-            log.info("Rahul::PoolSyncexecute: listResults.pool: ${listResults.pool}")
+            log.info("Rahul::PoolSyncexecute: listResults.poolList: ${listResults.poolList}")
 
             if (listResults.success == true) {
                 def domainRecords = morpheusContext.async.referenceData.listIdentityProjections(
                         new DataQuery().withFilters([new DataFilter('account.id', cloud.owner.id), new DataFilter('category', "xenserver.pool.${cloud.id}")])
                 )
                 log.info("Rahul::PoolSync:execute: domainRecords: ${domainRecords}")
-                log.info("Rahul::PoolSync:execute: ${domainRecords.map { "${it.externalId} - ${it.name}" }.toList().blockingGet()}")
+                log.info("Rahul::PoolSync:execute:domainRecords.map: ${domainRecords.map { "${it.externalId} - ${it.name}" }.toList().blockingGet()}")
                 SyncTask<ReferenceDataSyncProjection, Map, ReferenceData> syncTask = new SyncTask<>(domainRecords, listResults.poolList as Collection<Map>)
                 syncTask.addMatchFunction { ReferenceDataSyncProjection domainObject, Map cloudItem ->
                     log.info("Rahul::PoolSync:execute:addMatchFunction: cloudItem: ${cloudItem}")
@@ -62,13 +62,37 @@ class PoolSync {
                         return new SyncTask.UpdateItem<ReferenceData, Map>(existingItem: referenceData, masterItem: matchItem.masterItem)
                     }
                 }.onUpdate { updateList ->
-                    // No updates.. just add/remove
+                    //update the master on the cloud
+                    log.info("Rahul::PoolSync:execute:onUpdate: updateList: Entered")
+                    setCloudMaster(updateList)
                 }.start()
             } else {
-                log.error("Error not getting the listNetworks")
+                log.error("Error not getting the PoolSync")
             }
         } catch (e) {
-            log.error("cacheNetworks error: ${e}", e)
+            log.error("PoolSync error: ${e}", e)
+        }
+    }
+
+    def setCloudMaster(List<SyncTask.UpdateItem<ReferenceData, Map>> updateItems) {
+        log.debug("PoolSync setCloudMaster:")
+        log.info("Rahul::PoolSync:execute:setCloudMaster: updateItems.size(): ${updateItems.size()}")
+        try{
+            for (update in updateItems) {
+                def cloudItem = update.masterItem
+                log.info("Rahul::PoolSync:execute:setCloudMaster: cloudItem: ${cloudItem}")
+                log.info("Rahul::PoolSync:execute:setCloudMaster: cloudItem?.pool: ${cloudItem?.pool}")
+                log.info("Rahul::PoolSync:execute:setCloudMaster: cloudItem?.pool?.master: ${cloudItem?.pool?.master}")
+                log.info("Rahul::PoolSync:execute:setCloudMaster: cloudItem.pool?.master?.address: ${cloudItem.pool?.master?.address}")
+                def masterAddress = cloudItem.pool?.master?.address
+                log.info("Rahul::PoolSync:execute:setCloudMaster: masterAddress: ${masterAddress}")
+                if(masterAddress) {
+                    cloud.setConfigProperty('masterAddress', masterAddress)
+                    morpheusContext.services.cloud.save(cloud)
+                }
+            }
+        } catch(e) {
+            log.error("PoolSync error in setCloudMaster: ${e}", e)
         }
     }
 
@@ -89,7 +113,8 @@ class PoolSync {
                         refType    : 'ComputeZone',
                         refId      : "${cloud.id}",
                         value      : cloudItem.pool.nameLabel ?: 'default',
-                        description: cloudItem.pool.nameDescription
+                        description: cloudItem.pool.nameDescription,
+                        type       : 'string'
                 ]
                 log.info("Rahul::PoolSync:execute:addMissingPools: saveConfig: ${saveConfig}")
                 ReferenceData referenceData = new ReferenceData(saveConfig)
@@ -98,7 +123,7 @@ class PoolSync {
             log.info("Rahul::PoolSync:execute:addMissingPools: poolAdds.size(): ${poolAdds.size()}")
             morpheusContext.services.referenceData.bulkCreate(poolAdds)
         } catch (e) {
-            log.error "Error in adding Network sync ${e}", e
+            log.error "Error in adding PoolSync ${e}", e
         }
     }
 }
