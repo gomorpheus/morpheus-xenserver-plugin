@@ -760,9 +760,9 @@ class XenComputeUtility {
         return rtn
     }
 
-    static listNetworks(Cloud cloud, XenserverPlugin plugin) {
+    static listNetworks(Map authConfig) {
         def rtn = [success: false, networkList: []]
-        def config = getXenConnectionSession(plugin.getAuthConfig(cloud))
+        def config = getXenConnectionSession(authConfig)
         def networkList = com.xensource.xenapi.Network.getAllRecords(config.connection)
         networkList?.each { networkKey, networkValue ->
             rtn.networkList << networkValue

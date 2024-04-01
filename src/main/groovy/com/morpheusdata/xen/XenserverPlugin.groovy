@@ -95,7 +95,7 @@ class XenserverPlugin extends Plugin {
         def rtn = [:]
         def accountCredentialData
         def username
-        def apiKey
+        def password
 
         if (args.credential && args.credential.type != 'local') {
             Map accountCredential
@@ -111,17 +111,16 @@ class XenserverPlugin extends Plugin {
                     username = accountCredentialData['username']
                 }
                 if (accountCredentialData.containsKey('password')) {
-                    apiKey = accountCredentialData['password']
+                    password = accountCredentialData['password']
                 }
             }
         } else {
             log.debug("config: $args.config")
             username = args?.config?.username
-            apiKey = args?.config?.apiKey
+            password = args?.config?.password
         }
 
-        rtn.doUsername = username
-        rtn.doApiKey = apiKey
+        rtn = [username: username, password: password]
         return rtn
     }
 }
