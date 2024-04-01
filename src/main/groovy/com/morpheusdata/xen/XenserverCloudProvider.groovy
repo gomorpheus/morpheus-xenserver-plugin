@@ -13,6 +13,7 @@ import com.morpheusdata.model.*
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.xen.sync.NetworkSync
+import com.morpheusdata.xen.sync.VirtualMachineSync
 import com.morpheusdata.xen.util.XenComputeUtility
 import groovy.util.logging.Slf4j
 
@@ -362,7 +363,8 @@ class XenserverCloudProvider implements CloudProvider {
 			if(testResults.success) {
 				def now = new Date().time
 				new NetworkSync(cloudInfo, plugin).execute()
-				log.info("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
+				log.debug("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
+				new VirtualMachineSync(cloudInfo, plugin, this).execute()
 
 				rtn = ServiceResponse.success()
 			} else {
