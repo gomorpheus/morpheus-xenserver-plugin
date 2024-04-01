@@ -9,6 +9,7 @@ import com.morpheusdata.model.Datastore
 import com.morpheusdata.xen.XenserverPlugin
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
+import com.xensource.xenapi.VMGuestMetrics.Record
 import groovy.util.logging.Slf4j
 import org.apache.commons.beanutils.PropertyUtils
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
@@ -560,15 +561,18 @@ class XenComputeUtility {
         return rtn
     }
 
-    static getVmVolumes(opts, vm) {
+//    static getVmVolumes(opts, vm) {
+    static getVmVolumes(Map config, vm) {
         def rtn = []
-        def config = getXenConnectionSession(opts.zone)
-        opts.connection = config.connection
+//            def config = getXenConnectionSession(cloud, plugin)
+//        def config = getXenConnectionSession(opts.c)
+//        opts.connection = config.connection
         try {
-            def vbdList = vm.getVBDs(opts.connection)
+//            def vbdList = vm.getVBDs(opts.connection)
+            def vbdList = vm.getVBDs(config.connection)
             vbdList?.each { vbd ->
-                if (vbd.getType(opts.connection) == com.xensource.xenapi.Types.VbdType.DISK) {
-                    rtn << getVmVolumeInfo(opts, vbd)
+                if (vbd.getType(config.connection) == com.xensource.xenapi.Types.VbdType.DISK) {
+                    rtn << getVmVolumeInfo(config, vbd)
                 }
             }
             rtn = rtn.sort { it.displayOrder }
@@ -579,27 +583,30 @@ class XenComputeUtility {
     }
 
 
-    static getVmVolumeInfo(opts, vbd) {
-        def diskVdi = vbd.getVDI(opts.connection)
-        def diskSR = diskVdi ? diskVdi.getSR(opts.connection) : null
-        def newDisk = [bootable  : vbd.getBootable(opts.connection), deviceIndex: vbd.getUserdevice(opts.connection),
-                       uuid      : vbd.getUuid(opts.connection), size: (diskVdi ? diskVdi.getVirtualSize(opts.connection) : 0),
-                       deviceName: vbd.getDevice(opts.connection), dataStore: [externalId: diskSR?.getUuid(opts.connection)]
+//    static getVmVolumeInfo(opts, vbd) {
+    static getVmVolumeInfo(Map config, vbd) {
+//        def diskVdi = vbd.getVDI(opts.connection)
+//        def config = getXenConnectionSession(cloud, plugin)
+        def diskVdi = vbd.getVDI(config.connection)
+        def diskSR = diskVdi ? diskVdi.getSR(config.connection) : null
+        def newDisk = [bootable  : vbd.getBootable(config.connection), deviceIndex: vbd.getUserdevice(config.connection),
+                       uuid      : vbd.getUuid(config.connection), size: (diskVdi ? diskVdi.getVirtualSize(config.connection) : 0),
+                       deviceName: vbd.getDevice(config.connection), dataStore: [externalId: diskSR?.getUuid(config.connection)]
         ]
         newDisk.displayOrder = newDisk.deviceIndex ? newDisk.deviceIndex.toLong() : 0
         return newDisk
     }
 
-    static getVmNetworks(opts, vm) {
+    static getVmNetworks(Map config, vm) {
         def rtn = []
         try {
-            def vifList = vm.getVIFs(opts.connection)
+            def vifList = vm.getVIFs(config.connection)
             vifList?.each { vif ->
-                def vifNetwork = vif.getNetwork(opts.connection)
-                def networkUuid = vifNetwork.getUuid(opts.connection)
-                def newNic = [ipv4Allowed: vif.getIpv4Allowed(opts.connection), ipv6Allowed: vif.getIpv6Allowed(opts.connection),
-                              deviceIndex: vif.getDevice(opts.connection), uuid: vif.getUuid(opts.connection),
-                              macAddress : vif.getMAC(opts.connection), networkUuid: networkUuid]
+                def vifNetwork = vif.getNetwork(config.connection)
+                def networkUuid = vifNetwork.getUuid(config.connection)
+                def newNic = [ipv4Allowed: vif.getIpv4Allowed(config.connection), ipv6Allowed: vif.getIpv6Allowed(config.connection),
+                              deviceIndex: vif.getDevice(config.connection), uuid: vif.getUuid(config.connection),
+                              macAddress : vif.getMAC(config.connection), networkUuid: networkUuid]
                 // newNic.ipv4Addresses = vif.getIpv4Addresses(opts.connection)
                 //ipv6Addresses:vif.getIpv6Addresses(opts.connection)
                 rtn << newNic
@@ -790,9 +797,9 @@ class XenComputeUtility {
         return rtn
     }
 
-    static listVirtualMachines(opts) {
+    static listVirtualMachines(Cloud cloud, XenserverPlugin plugin) {
         def rtn = [success: false, vmList: []]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(plugin.getAuthConfig(cloud))
         def vmList = VM.getAllRecords(config.connection)
         vmList?.each { vmKey, vmValue ->
             if (vmValue.isATemplate == false && vmValue.isControlDomain == false && vmValue.isASnapshot == false) {
@@ -806,8 +813,10 @@ class XenComputeUtility {
                         }
                     }
 
-                    vmRow.volumes = getVmVolumes(config + opts + [connection: config.connection], vmKey)
-                    vmRow.virtualInterfaces = getVmNetworks(config + opts + [connection: config.connection], vmKey)
+//                    vmRow.volumes = getVmVolumes(config + opts + [connection: config.connection], vmKey)
+                    vmRow.volumes = getVmVolumes(config, vmKey)
+//                    vmRow.virtualInterfaces = getVmNetworks(config + opts + [connection: config.connection], vmKey)
+                    vmRow.virtualInterfaces = getVmNetworks(config, vmKey)
                     vmRow.totalDiskSize = vmRow.volumes?.sum { it.size }
 
                     try {
@@ -1549,7 +1558,6 @@ class XenComputeUtility {
 
     static getXenApiHost(Cloud cloud) {
         def rtn = [address: null, isSecure: false]
-        //def config = zone.getConfigMap()
         def config = cloud.configMap
 
         def initialApiUrl = config.apiUrl
