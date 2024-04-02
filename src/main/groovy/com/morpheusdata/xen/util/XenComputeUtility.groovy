@@ -786,9 +786,9 @@ class XenComputeUtility {
         return rtn
     }
 
-    static listVirtualMachines(Cloud cloud, XenserverPlugin plugin) {
+    static listVirtualMachines(Map authConfig) {
         def rtn = [success: false, vmList: []]
-        def config = getXenConnectionSession(plugin.getAuthConfig(cloud))
+        def config = getXenConnectionSession(authConfig)
         def vmList = VM.getAllRecords(config.connection)
         vmList?.each { vmKey, vmValue ->
             if (vmValue.isATemplate == false && vmValue.isControlDomain == false && vmValue.isASnapshot == false) {
