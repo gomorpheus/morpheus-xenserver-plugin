@@ -9,7 +9,6 @@ import com.morpheusdata.model.Datastore
 import com.morpheusdata.xen.XenserverPlugin
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
-import com.xensource.xenapi.VMGuestMetrics.Record
 import groovy.util.logging.Slf4j
 import org.apache.commons.beanutils.PropertyUtils
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
@@ -35,7 +34,6 @@ import java.lang.reflect.InvocationTargetException
 import java.security.cert.X509Certificate
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-
 /**
  * @author rahul.ray
  */
@@ -561,14 +559,9 @@ class XenComputeUtility {
         return rtn
     }
 
-//    static getVmVolumes(opts, vm) {
     static getVmVolumes(Map config, vm) {
         def rtn = []
-//            def config = getXenConnectionSession(cloud, plugin)
-//        def config = getXenConnectionSession(opts.c)
-//        opts.connection = config.connection
         try {
-//            def vbdList = vm.getVBDs(opts.connection)
             def vbdList = vm.getVBDs(config.connection)
             vbdList?.each { vbd ->
                 if (vbd.getType(config.connection) == com.xensource.xenapi.Types.VbdType.DISK) {
@@ -582,11 +575,7 @@ class XenComputeUtility {
         return rtn
     }
 
-
-//    static getVmVolumeInfo(opts, vbd) {
     static getVmVolumeInfo(Map config, vbd) {
-//        def diskVdi = vbd.getVDI(opts.connection)
-//        def config = getXenConnectionSession(cloud, plugin)
         def diskVdi = vbd.getVDI(config.connection)
         def diskSR = diskVdi ? diskVdi.getSR(config.connection) : null
         def newDisk = [bootable  : vbd.getBootable(config.connection), deviceIndex: vbd.getUserdevice(config.connection),
@@ -813,9 +802,7 @@ class XenComputeUtility {
                         }
                     }
 
-//                    vmRow.volumes = getVmVolumes(config + opts + [connection: config.connection], vmKey)
                     vmRow.volumes = getVmVolumes(config, vmKey)
-//                    vmRow.virtualInterfaces = getVmNetworks(config + opts + [connection: config.connection], vmKey)
                     vmRow.virtualInterfaces = getVmNetworks(config, vmKey)
                     vmRow.totalDiskSize = vmRow.volumes?.sum { it.size }
 
