@@ -725,9 +725,9 @@ class XenComputeUtility {
         return rtn
     }
 
-    static listPools(opts) {
+    static listPools(Map authConfig) {
         def rtn = [success: false, poolList: []]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(authConfig)
         def poolList = com.xensource.xenapi.Pool.getAllRecords(config.connection)
         poolList?.each { poolKey, poolValue ->
             def poolRow = [pool: poolValue, uuid: poolValue.uuid]
