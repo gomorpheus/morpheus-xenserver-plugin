@@ -9,6 +9,7 @@ import com.morpheusdata.model.ReferenceData
 import com.morpheusdata.model.projection.ReferenceDataSyncProjection
 import com.morpheusdata.xen.XenserverPlugin
 import com.morpheusdata.xen.util.XenComputeUtility
+import com.xensource.xenapi.Host
 import groovy.util.logging.Slf4j
 
 /**
@@ -80,11 +81,11 @@ class PoolSync {
         try{
             for (update in updateItems) {
                 def cloudItem = update.masterItem
-                log.info("Rahul::PoolSync:execute:setCloudMaster: cloudItem: ${cloudItem}")
-                log.info("Rahul::PoolSync:execute:setCloudMaster: cloudItem?.pool: ${cloudItem?.pool}")
-                log.info("Rahul::PoolSync:execute:setCloudMaster: cloudItem?.pool?.master: ${cloudItem?.pool?.master}")
-                log.info("Rahul::PoolSync:execute:setCloudMaster: cloudItem.pool?.master?.address: ${cloudItem.pool?.master?.address}")
-                def masterAddress = cloudItem.pool?.master?.address
+                Host.Record hostRecord = cloudItem?.master
+
+                log.info("Rahul::PoolSync:execute:setCloudMaster: hostRecord: ${hostRecord}")
+                log.info("Rahul::PoolSync:execute:setCloudMaster: hostRecord.address: ${hostRecord.address}")
+                def masterAddress = hostRecord?.address
                 log.info("Rahul::PoolSync:execute:setCloudMaster: masterAddress: ${masterAddress}")
                 if(masterAddress) {
                     cloud.setConfigProperty('masterAddress', masterAddress)
@@ -114,7 +115,9 @@ class PoolSync {
                         refId      : "${cloud.id}",
                         value      : cloudItem.pool.nameLabel ?: 'default',
                         description: cloudItem.pool.nameDescription,
-                        type       : 'string'
+                        type       : 'string',
+                        externalId : cloudItem.uuid
+
                 ]
                 log.info("Rahul::PoolSync:execute:addMissingPools: saveConfig: ${saveConfig}")
                 ReferenceData referenceData = new ReferenceData(saveConfig)

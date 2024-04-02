@@ -406,7 +406,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean hasComputeZonePools() {
-		return true
+		return false
 	}
 
 	/**
