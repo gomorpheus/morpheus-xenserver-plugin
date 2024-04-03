@@ -6,7 +6,6 @@ import com.morpheusdata.core.util.MorpheusUtils
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.Datastore
-import com.morpheusdata.xen.XenserverPlugin
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
 import groovy.util.logging.Slf4j
