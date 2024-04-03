@@ -37,6 +37,21 @@ class VirtualMachineSync {
             def usageLists = [restartUsageIds: [], stopUsageIds: [], startUsageIds: [], updatedSnapshotIds: []]
             def authConfig = plugin.getAuthConfig(cloud)
             def listResults = XenComputeUtility.listVirtualMachines(authConfig)
+
+            Collection<ServicePlan> availablePlans =  morpheusContext.services.servicePlan.list(new DataQuery().withFilters(
+                    new DataFilter("active", true),
+                    new DataFilter("deleted", "ne", true),
+                    new DataFilter("provisionType.code", "xen")
+            ))
+
+            Collection<ResourcePermission> availablePlanPermissions = []
+            if(availablePlans) {
+                availablePlanPermissions = morpheusContext.services.resourcePermission.list(new DataQuery().withFilters(
+                        new DataFilter("morpheusResourceType", "ServicePlan"),
+                        new DataFilter("morpheusResourceId", "in", availablePlans.collect{pl -> pl.id})
+                ))
+            }
+
             if (listResults.success == true){
                 def domainRecords = morpheusContext.async.computeServer.listIdentityProjections(cloud.id, null)
                 def blackListedNames = domainRecords.filter { it.status == 'provisioning' }
@@ -52,7 +67,7 @@ class VirtualMachineSync {
                         return new SyncTask.UpdateItem<ComputeServer, Map>(existingItem: server, masterItem: matchItem.masterItem)
                     }
                 }.onAdd {itemsToAdd ->
-                    addMissingVirtualMachines(itemsToAdd, blackListedNames, usageLists)
+                    addMissingVirtualMachines(itemsToAdd, blackListedNames, usageLists, availablePlans, availablePlanPermissions)
                 }.onUpdate { List<SyncTask.UpdateItem<ComputeServer, VM.Record>> updateItems ->
                     updateMatchedVirtualMachines(updateItems)
                 }.onDelete { removeItems ->
@@ -64,23 +79,10 @@ class VirtualMachineSync {
         }
     }
 
-    def addMissingVirtualMachines(List addList, List blackListedNames,Map usageLists) {
+    def addMissingVirtualMachines(List addList, List blackListedNames,Map usageLists, Collection<ServicePlan> availablePlans,
+                                  Collection<ResourcePermission> availablePlanPermissions) {
         log.debug("addMissingVirtualMachines ${cloud} ${addList?.size()} ${blackListedNames} ${usageLists}")
         ServicePlan servicePlan = morpheusContext.services.servicePlan.find(new DataQuery().withFilter("code","internal-custom-xen"))
-
-        Collection<ServicePlan> availablePlans =  morpheusContext.services.servicePlan.list(new DataQuery().withFilters(
-                new DataFilter("active", true),
-                new DataFilter("deleted", "ne", true),
-                new DataFilter("provisionType.code", "xen")
-        ))
-
-        Collection<ResourcePermission> availablePlanPermissions = []
-        if(availablePlans) {
-            availablePlanPermissions = morpheusContext.services.resourcePermission.list(new DataQuery().withFilters(
-                    new DataFilter("morpheusResourceType", "ServicePlan"),
-                    new DataFilter("morpheusResourceId", "in", availablePlans.collect{pl -> pl.id})
-            ))
-        }
 
         for (cloudItem in addList) {
             try {
