@@ -3,8 +3,6 @@ package com.morpheusdata.xen
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupProvider
-import com.morpheusdata.core.data.DataFilter
-import com.morpheusdata.core.data.DataOrFilter
 import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.CloudProvider
 import com.morpheusdata.core.providers.ProvisionProvider
@@ -13,6 +11,8 @@ import com.morpheusdata.model.*
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.xen.sync.NetworkSync
+import com.morpheusdata.xen.sync.PoolSync
+import com.morpheusdata.xen.sync.VirtualMachineSync
 import com.morpheusdata.xen.util.XenComputeUtility
 import groovy.util.logging.Slf4j
 
@@ -363,6 +363,12 @@ class XenserverCloudProvider implements CloudProvider {
 				def now = new Date().time
 				new NetworkSync(cloudInfo, plugin).execute()
 				log.info("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
+				now = new Date().time
+				new PoolSync(cloudInfo, plugin).execute()
+				log.info("${cloudInfo.name}: PoolSync in ${new Date().time - now}ms")
+				now = new Date().time
+				new VirtualMachineSync(cloudInfo, plugin, this).execute()
+				log.debug("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
 
 				rtn = ServiceResponse.success()
 			} else {
@@ -400,7 +406,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean hasComputeZonePools() {
-		return true
+		return false
 	}
 
 	/**
