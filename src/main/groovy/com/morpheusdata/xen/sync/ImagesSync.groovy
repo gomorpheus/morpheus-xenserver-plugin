@@ -1,7 +1,9 @@
 package com.morpheusdata.xen.sync
 
 import com.morpheusdata.core.MorpheusContext
+import com.morpheusdata.core.data.DataAndFilter
 import com.morpheusdata.core.data.DataFilter
+import com.morpheusdata.core.data.DataOrFilter
 import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.util.SyncTask
 import com.morpheusdata.model.Account
@@ -46,14 +48,15 @@ class ImagesSync {
             if (listResults.success == true) {
                 def cloudItems = listResults?.templateList
 
-                Observable<VirtualImageIdentityProjection> existingRecords = morpheusContext.async.virtualImage.listIdentityProjections(
-                        new DataQuery()
-                                .withFilter('accounts.id', cloud.account.id)
-                                .withFilter('category', "xenserver.image.${cloud.id}")
-                )
-                log.info("RAZI :: existingRecords: ${existingRecords.toList().blockingGet()}")
+//                Observable<VirtualImageIdentityProjection> existingVirtualImages = morpheusContext.async.virtualImage.listIdentityProjections(
+//                        new DataQuery()
+//                                .withFilter('accounts.id', cloud.account.id)
+//                                .withFilter('category', "xenserver.image.${cloud.id}")
+//                )
+//                log.info("RAZI :: existingRecords: ${existingVirtualImages.toList().blockingGet()}")
 
-                SyncTask<VirtualImageLocationIdentityProjection, VM.Record, VirtualImage> syncTask = new SyncTask<>(existingRecords, cloudItems as Collection<VM.Record>)
+                Observable<VirtualImageLocationIdentityProjection> domainRecords = morpheusContext.async.virtualImage.location.listIdentityProjections(cloud.id)
+                SyncTask<VirtualImageLocationIdentityProjection, VM.Record, VirtualImageLocation> syncTask = new SyncTask<>(domainRecords, cloudItems as Collection<VM.Record>)
                 syncTask.addMatchFunction {existingItem, cloudItem ->
                     log.info("RAZI :: existingItem.externalId: ${existingItem.externalId}")
                     log.info("RAZI :: cloudItem.uuid: ${cloudItem.uuid}")
@@ -63,7 +66,7 @@ class ImagesSync {
                 }.onUpdate {updateItems ->
                     updateMatchedVirtualImageLocations(updateItems)
                 }.onAdd { itemsToAdd ->
-                    addMissingVirtualImageLocations(itemsToAdd)
+                    addMissingVirtualImageLocations(itemsToAdd, existingVirtualImages)
                 }.withLoadObjectDetailsFromFinder { updateItems ->
                     return morpheusContext.async.virtualImage.listById(updateItems.collect { it.existingItem.id } as List<Long>)
                 }.start()
@@ -75,15 +78,40 @@ class ImagesSync {
         }
     }
 
-    def addMissingVirtualImageLocations(Collection<VM.Record> objList) {
+    def addMissingVirtualImageLocations(Collection<VM.Record> objList, Observable<VirtualImageIdentityProjection> existingVirtualImages) {
         log.debug "addMissingVirtualImageLocations: ${objList?.size()}"
         try {
             def names = objList.collect { it.nameLabel }?.unique()
-            List<VirtualImageIdentityProjection> existingItems = []
-            def allowedImageTypes = ['qcow2']
+//            List<VirtualImageIdentityProjection> existingItems = []
+            def allowedImageTypes = ['vhd', 'vmdk']
+
+//            Observable<VirtualImageIdentityProjection> existingVirtualImages = morpheusContext.async.virtualImage.listIdentityProjections(
+//                    new DataQuery()
+//                            .withFilter('accounts.id', cloud.account.id)
+//                            .withFilter('category', "xenserver.image.${cloud.id}")
+//            )
+            def objListIds = objList.collect { it.uuid }?.unique()
 
             def uniqueIds = [] as Set
-            Observable domainRecords = morpheusContext.async.virtualImage.listIdentityProjections(cloud.id).filter { VirtualImageIdentityProjection proj ->
+            Observable domainRecords = morpheusContext.async.virtualImage.listIdentityProjections(
+                    new DataQuery().withFilters(
+                            new DataOrFilter(
+                                    new DataAndFilter(
+                                            new DataFilter('refType', 'ComputeZone'),
+                                            new DataFilter('refId', cloud.id)
+                                    ),
+                                    new DataAndFilter(
+                                            new DataFilter('accounts.id', cloud.account.id),
+                                            new DataFilter('category', "xenserver.image.${cloud.id}"),
+                                            new DataFilter('uniqueId', 'in', objListIds)
+                                    )
+                            )
+//                            new DataFilter('uniqueId', 'in', objListIds)
+                    )
+                ).filter { VirtualImageIdentityProjection proj ->
+                if(objListIds.contains(proj.externalId)){
+                    return true
+                }
                 def include = proj.imageType in allowedImageTypes && proj.name in names && (proj.systemImage || (!proj.ownerId || proj.ownerId == cloud.owner.id))
                 if (include) {
                     def uniqueKey = "${proj.imageType.toString()}:${proj.name}".toString()
