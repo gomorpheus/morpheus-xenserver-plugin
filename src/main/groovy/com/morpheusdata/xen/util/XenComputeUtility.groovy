@@ -737,10 +737,10 @@ class XenComputeUtility {
         return rtn
     }
 
-    static listStorageRepositories(opts) {
+    static listStorageRepositories(Map authConfig) {
         def rtn = [success: false, srList: []]
-        def config = getXenConnectionSession(opts.zone)
-        def srList = com.xensource.xenapi.SR.getAllRecords(config.connection)
+        def config = getXenConnectionSession(authConfig)
+        def srList = SR.getAllRecords(config.connection)
         srList?.each { srKey, srValue ->
             rtn.srList << srValue
         }
