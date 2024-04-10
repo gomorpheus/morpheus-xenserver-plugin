@@ -296,6 +296,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	String getName() {
-		return 'Morpheus XenServer Plugin Provisioning'
+		return 'XenServer'
 	}
 }

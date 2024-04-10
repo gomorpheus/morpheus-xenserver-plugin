@@ -38,7 +38,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getDescription() {
-		return 'Morpheus XenServer Plugin'
+		return 'XenServer'
 	}
 
 	/**
@@ -561,6 +561,6 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getName() {
-		return 'Morpheus XenServer Plugin'
+		return 'XenServer'
 	}
 }
