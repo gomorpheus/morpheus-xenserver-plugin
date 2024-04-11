@@ -11,6 +11,7 @@ import com.morpheusdata.model.*
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.xen.sync.HostSync
+import com.morpheusdata.xen.sync.ImagesSync
 import com.morpheusdata.xen.sync.NetworkSync
 import com.morpheusdata.xen.sync.PoolSync
 import com.morpheusdata.xen.sync.VirtualMachineSync
@@ -369,10 +370,13 @@ class XenserverCloudProvider implements CloudProvider {
 				log.info("${cloudInfo.name}: PoolSync in ${new Date().time - now}ms")
 				now = new Date().time
 				new VirtualMachineSync(cloudInfo, plugin, this).execute()
-				log.debug("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
+				log.info("${cloudInfo.name}: VirtualMachineSync in ${new Date().time - now}ms")
 				now = new Date().time
 				new HostSync(cloudInfo, plugin).execute()
 				log.debug("${cloudInfo.name}: HostSync in ${new Date().time - now}ms")
+				now = new Date().time
+				new ImagesSync(cloudInfo, plugin).execute()
+				log.info("${cloudInfo.name}: ImagesSync in ${new Date().time - now}ms")
 
 				rtn = ServiceResponse.success()
 			} else {

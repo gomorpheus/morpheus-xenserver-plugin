@@ -6,7 +6,6 @@ import com.morpheusdata.core.util.MorpheusUtils
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.Datastore
-import com.morpheusdata.xen.XenserverPlugin
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
 import groovy.util.logging.Slf4j
@@ -760,9 +759,16 @@ class XenComputeUtility {
         return rtn
     }
 
-    static listTemplates(opts) {
+    /**
+     * Retrieves a list of templates from the XenServer using the provided authentication configuration.
+     *
+     * @param authConfig A map containing authentication configuration for accessing the XenServer.
+     *                   This configuration may include details such as host, username, password, etc.
+     * @return A map with the success status and the list of templates.
+     */
+    static listTemplates(Map authConfig) {
         def rtn = [success: false, templateList: []]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(authConfig)
         def vmList = VM.getAllRecords(config.connection)
         vmList?.each { vmKey, vmValue ->
             if (vmValue.isATemplate == true && vmValue.isASnapshot == false && vmValue.VBDs?.size() > 0) {
@@ -786,9 +792,9 @@ class XenComputeUtility {
         return rtn
     }
 
-    static listVirtualMachines(Cloud cloud, XenserverPlugin plugin) {
+    static listVirtualMachines(Map authConfig) {
         def rtn = [success: false, vmList: []]
-        def config = getXenConnectionSession(plugin.getAuthConfig(cloud))
+        def config = getXenConnectionSession(authConfig)
         def vmList = VM.getAllRecords(config.connection)
         vmList?.each { vmKey, vmValue ->
             if (vmValue.isATemplate == false && vmValue.isControlDomain == false && vmValue.isASnapshot == false) {
