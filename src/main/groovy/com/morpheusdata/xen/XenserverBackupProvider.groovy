@@ -42,7 +42,7 @@ class XenserverBackupProvider extends AbstractBackupProvider {
 	 */
 	@Override
 	String getName() {
-		return 'Morpheus XenServer Plugin Backup Provider'
+		return 'XenServer'
 	}
 	
 	/**
