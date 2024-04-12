@@ -20,7 +20,6 @@ import groovy.util.logging.Slf4j
 
 @Slf4j
 class XenserverCloudProvider implements CloudProvider {
-//	public static final String CLOUD_PROVIDER_CODE = 'xenserver.cloud'
 	public static final String CLOUD_PROVIDER_CODE = 'xenserver'
 
 	protected MorpheusContext context
@@ -375,8 +374,6 @@ class XenserverCloudProvider implements CloudProvider {
 				now = new Date().time
 				new ImagesSync(cloudInfo, plugin).execute()
 				log.info("${cloudInfo.name}: ImagesSync in ${new Date().time - now}ms")
-//				new DatastoresSync(cloudInfo, plugin).execute()
-//				log.info("RAZI :: DatastoresSync completed")
 
 				rtn = ServiceResponse.success()
 			} else {

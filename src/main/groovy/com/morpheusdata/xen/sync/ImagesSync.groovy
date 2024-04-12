@@ -47,27 +47,18 @@ class ImagesSync {
             if (listResults.success == true) {
                 def cloudItems = listResults?.templateList
 
-//                Observable<VirtualImageIdentityProjection> existingVirtualImages = morpheusContext.async.virtualImage.listIdentityProjections(
-//                        new DataQuery()
-//                                .withFilter('accounts.id', cloud.account.id)
-//                                .withFilter('category', "xenserver.image.${cloud.id}")
-//                )
-//                log.info("RAZI :: existingRecords: ${existingVirtualImages.toList().blockingGet()}")
-
-                Observable<VirtualImageLocationIdentityProjection> domainRecords = morpheusContext.async.virtualImage.location.listIdentityProjections(cloud.id)
+                Observable<VirtualImageLocationIdentityProjection> domainRecords = morpheusContext.async.virtualImage.location.listSyncProjections(cloud.id)
                 SyncTask<VirtualImageLocationIdentityProjection, VM.Record, VirtualImageLocation> syncTask = new SyncTask<>(domainRecords, cloudItems as Collection<VM.Record>)
                 syncTask.addMatchFunction {existingItem, cloudItem ->
-                    log.info("RAZI :: existingItem.externalId: ${existingItem.externalId}")
-                    log.info("RAZI :: cloudItem.uuid: ${cloudItem.uuid}")
                     existingItem.externalId == cloudItem.uuid
                 }.onDelete { removeItems ->
                     removeMissingVirtualImageLocations(removeItems)
                 }.onUpdate {updateItems ->
                     updateMatchedVirtualImageLocations(updateItems)
                 }.onAdd { itemsToAdd ->
-                    addMissingVirtualImageLocations(itemsToAdd, existingVirtualImages)
+                    addMissingVirtualImageLocations(itemsToAdd)
                 }.withLoadObjectDetailsFromFinder { updateItems ->
-                    return morpheusContext.async.virtualImage.listById(updateItems.collect { it.existingItem.id } as List<Long>)
+                    return morpheusContext.async.virtualImage.location.listById(updateItems.collect { it.existingItem.id } as List<Long>)
                 }.start()
             } else {
                 log.error("Error not getting the listResults")
@@ -77,18 +68,17 @@ class ImagesSync {
         }
     }
 
-    def addMissingVirtualImageLocations(Collection<VM.Record> objList, Observable<VirtualImageIdentityProjection> existingVirtualImages) {
+    /**
+     * Adds missing virtual image locations for the provided collection of cloud items.
+     *
+     * @param objList A collection of VM.Record objects representing cloud items.
+     */
+    def addMissingVirtualImageLocations(Collection<VM.Record> objList) {
         log.debug "addMissingVirtualImageLocations: ${objList?.size()}"
         try {
             def names = objList.collect { it.nameLabel }?.unique()
-//            List<VirtualImageIdentityProjection> existingItems = []
             def allowedImageTypes = ['vhd', 'vmdk']
 
-//            Observable<VirtualImageIdentityProjection> existingVirtualImages = morpheusContext.async.virtualImage.listIdentityProjections(
-//                    new DataQuery()
-//                            .withFilter('accounts.id', cloud.account.id)
-//                            .withFilter('category', "xenserver.image.${cloud.id}")
-//            )
             def objListIds = objList.collect { it.uuid }?.unique()
 
             def uniqueIds = [] as Set
@@ -105,12 +95,12 @@ class ImagesSync {
                                             new DataFilter('uniqueId', 'in', objListIds)
                                     )
                             )
-//                            new DataFilter('uniqueId', 'in', objListIds)
                     )
                 ).filter { VirtualImageIdentityProjection proj ->
                 if(objListIds.contains(proj.externalId)){
                     return true
                 }
+
                 def include = proj.imageType in allowedImageTypes && proj.name in names && (proj.systemImage || (!proj.ownerId || proj.ownerId == cloud.owner.id))
                 if (include) {
                     def uniqueKey = "${proj.imageType.toString()}:${proj.name}".toString()
@@ -121,15 +111,10 @@ class ImagesSync {
                 }
                 return false
             }
+
             SyncTask<VirtualImageIdentityProjection, VM.Record, VirtualImage> syncTask = new SyncTask<>(domainRecords, objList)
             syncTask.addMatchFunction { VirtualImageIdentityProjection domainObject, VM.Record cloudItem ->
                 domainObject.name == cloudItem.nameLabel
-//        }.withLoadObjectDetails { List<SyncTask.UpdateItemDto<VirtualImageIdentityProjection, Map>> updateItems ->
-//            Map<Long, SyncTask.UpdateItemDto<VirtualImageIdentityProjection, Map>> updateItemMap = updateItems.collectEntries { [(it.existingItem.id): it] }
-//            morpheusContext.virtualImage.listById(updateItems?.collect { it.existingItem.id }).map { VirtualImage virtualImage ->
-//                SyncTask.UpdateItemDto<VirtualImageIdentityProjection, Map> matchItem = updateItemMap[virtualImage.id]
-//                return new SyncTask.UpdateItem<VirtualImage, Map>(existingItem: virtualImage, masterItem: matchItem.masterItem)
-//            }
             }.onAdd { itemsToAdd ->
                 addMissingVirtualImages(itemsToAdd)
             }.onUpdate { List<SyncTask.UpdateItem<VirtualImage, VM.Record>> updateItems ->
@@ -143,10 +128,13 @@ class ImagesSync {
         }
     }
 
+    /**
+     * Adds missing virtual images for the provided list of cloud items.
+     *
+     * @param addList A collection of VM.Record objects representing cloud items to be added as virtual images.
+     */
     private addMissingVirtualImages(Collection<VM.Record> addList) {
         log.debug "addMissingVirtualImages ${addList?.size()}"
-//        WindowsNativeDispatcher.Account account = cloud.account
-//        def regionCode = cloud.regionCode
         try{
             def adds = []
             def addExternalIds = []
@@ -160,7 +148,7 @@ class ImagesSync {
                 adds << add
             }
 
-            // Create em all!
+            // Create images
             log.debug "About to create ${adds.size()} virtualImages"
             morpheusContext.async.virtualImage.create(adds, cloud).blockingGet()
         } catch (e){
@@ -169,6 +157,11 @@ class ImagesSync {
 
     }
 
+    /**
+     * Adds missing virtual image locations for the provided list of update items.
+     *
+     * @param addItems A list of SyncTask.UpdateItem objects containing virtual image and cloud item records.
+     */
     private addMissingVirtualImageLocationsForImages(List<SyncTask.UpdateItem<VirtualImage, VM.Record>> addItems) {
         log.debug "addMissingVirtualImageLocationsForImages ${addItems?.size()}"
         try{
@@ -189,9 +182,13 @@ class ImagesSync {
         }
     }
 
+    /**
+     * Builds the configuration map for a virtual image based on the provided cloud item (VM.Record).
+     *
+     * @param cloudItem The cloud item (VM.Record) to build the virtual image configuration for.
+     * @return A Map containing the configuration properties for the virtual image.
+     */
     private buildVirtualImageConfig(VM.Record cloudItem) {
-//        Account account = cloud.account
-//        def regionCode = cloud.regionCode
 
         def imageConfig = [
                 account     : cloud.account,
@@ -211,6 +208,12 @@ class ImagesSync {
         return imageConfig
     }
 
+    /**
+     * Builds the configuration map for a virtual image location based on the provided virtual image.
+     *
+     * @param image The virtual image for which the location configuration is to be built.
+     * @return A Map containing the configuration properties for the virtual image location.
+     */
     private Map buildLocationConfig(VirtualImage image) {
         return [
                 virtualImage: image,
@@ -222,78 +225,10 @@ class ImagesSync {
     }
 
     /**
-     * Adds missing virtual images to the Morpheus context based on the provided list of VM records.
+     * Updates matched virtual image locations based on the provided list of update items.
      *
-     * @param addList A collection of VM records representing the virtual images to be added.
+     * @param updateList A list of SyncTask.UpdateItem objects containing virtual image location and cloud item records.
      */
-//    private addMissingVirtualImages(Collection<VM.Record> addList) {
-//        def imageAdds = []
-//        try {
-//            addList?.each { cloudItem ->
-//                def imageConfig = [
-//                        category    : "xenserver.image.${cloud.id}",
-//                        name        : cloudItem.nameLabel,
-//                        owner       : cloud.owner,
-//                        description : cloudItem.nameDescription,
-//                        imageType   : 'xen',
-//                        code        : "xenserver.image.${cloud.id}.${cloudItem.uuid}",
-//                        uniqueId    : cloudItem.uuid,
-//                        status      : 'Active',
-//                        externalId  : cloudItem.uuid,
-//                        refType     : 'ComputeZone',
-//                        refId       : "${cloud.id}"
-//                ]
-//                VirtualImage virtualImage = new VirtualImage(imageConfig)
-//                virtualImage.account
-//                def locationProps = [
-//                        virtualImage: virtualImage,
-//                        code        : "xenserver.image.${cloud.id}.${cloudItem.uuid}",
-//                        internalId  : virtualImage.externalId,
-//                        externalId  : virtualImage.externalId,
-//                        imageName   : virtualImage.name
-//                ]
-//                VirtualImageLocation virtualImageLocation = new VirtualImageLocation(locationProps)
-//                virtualImage.imageLocations = [virtualImageLocation]
-//                imageAdds << virtualImage
-//            }
-//            //create images
-//            morpheusContext.async.virtualImage.create(imageAdds, cloud).blockingGet()
-//        } catch (e) {
-//            log.error("Error in adding Image sync: ${e}", e)
-//        }
-//    }
-
-    /**
-     * Updates matched virtual images in the Morpheus context based on the provided list of update items.
-     *
-     * @param updateList A list of SyncTask.UpdateItem objects containing master and existing virtual image records.
-     */
-//    private void updateMatchedImages(List<SyncTask.UpdateItem<VirtualImage, VM.Record>> updateList) {
-//        try {
-//            log.debug("updateMatchedImages: ${updateList?.size()}")
-//            List<VirtualImage> imagesToUpdate = []
-//            updateList.each { it ->
-//                def masterItem = it.masterItem
-//                def existingItem = it.existingItem
-//                def doSave = false
-//
-//                if (existingItem.uniqueId != masterItem.uuid) {
-//                    existingItem.uniqueId = masterItem.uuid
-//                    doSave = true
-//                }
-//
-//                if (doSave) {
-//                    imagesToUpdate << existingItem
-//                }
-//            }
-//
-//            log.debug("Have ${imagesToUpdate?.size()} to update")
-//            morpheusContext.async.virtualImage.save(imagesToUpdate, cloud).blockingGet()
-//        } catch (e) {
-//            log.error("Error in updateMatchedImages method: ${e}", e)
-//        }
-//    }
-
     private updateMatchedVirtualImageLocations(List<SyncTask.UpdateItem<VirtualImageLocation, VM.Record>> updateList) {
         log.debug "updateMatchedVirtualImageLocations: ${updateList?.size()}"
 
@@ -332,33 +267,13 @@ class ImagesSync {
                     if(image) {
                         if (imageLocation.uuid != virtualImageConfig.externalId) {
                             imageLocation.uuid = virtualImageConfig.externalId
-    //                        if (image && (image.refId == imageLocation.refId.toString())) {
-    //                            image.refId = virtualImageConfig.refId
-    //                            imagesToUpdate << image
-    //                            saveImage = true
-    //                        }
                             save = true
                         }
-    //                    if (imageLocation.imageRegion != virtualImageConfig.imageRegion) {
-    //                        imageLocation.imageRegion = virtualImageConfig.imageRegion
-    //                        save = true
-    //                    }
                         if (image.refId != virtualImageConfig.refId) {
                             image.refId = virtualImageConfig.refId
                             saveImage = true
                         }
-    //                    if (image.imageRegion != virtualImageConfig.imageRegion) {
-    //                        image.imageRegion = virtualImageConfig.imageRegion
-    //                        saveImage = true
-    //                    }
-    //                    if (image.minDisk != virtualImageConfig.minDisk) {
-    //                        image.minDisk = virtualImageConfig.minDisk
-    //                        saveImage = true
-    //                    }
-    //                    if (image.bucketId != virtualImageConfig.bucketId) {
-    //                        image.bucketId = virtualImageConfig.bucketId
-    //                        saveImage = true
-    //                    }
+
                         if (save) {
                             locationsToUpdate << imageLocation
                         }
@@ -379,6 +294,7 @@ class ImagesSync {
                 }
 
             }
+
             if(locationsToCreate.size() > 0 ) {
                 morpheusContext.async.virtualImage.location.create(locationsToCreate, cloud).blockingGet()
             }
@@ -393,6 +309,11 @@ class ImagesSync {
         }
     }
 
+    /**
+     * Removes missing virtual image locations from the Morpheus context based on the provided list of identity projections.
+     *
+     * @param removeList A list of VirtualImageLocationIdentityProjection objects representing the virtual image locations to be removed.
+     */
     private removeMissingVirtualImageLocations(List<VirtualImageLocationIdentityProjection> removeList) {
         log.debug ("removeMissingVirtualImageLocations: ${cloud} ${removeList.size()}")
         morpheusContext.async.virtualImage.location.remove(removeList).blockingGet()
