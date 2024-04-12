@@ -31,24 +31,43 @@ class HostSync {
         log.debug "HostSync"
         log.info("Rahul::HostSync: execute: Entered")
         try {
-
             def listResults = XenComputeUtility.listHosts(plugin.getAuthConfig(cloud))
             log.info("Rahul::HostSync: execute: listResults: ${listResults}")
             log.debug("host list: {}", listResults)
             if (listResults.success == true) {
-                /*def domainRecords = morpheusContext.async.computeServer.listIdentityProjections(cloud.id, null).filter {
-                    ComputeServerIdentityProjection projection -> "xen.host.${cloud.id}".equalsIgnoreCase(projection.category)
-                }*/
+                def domainRecords = morpheusContext.async.computeServer.listIdentityProjections(cloud.id, null).filter {
+                    ComputeServerIdentityProjection projection -> projection.category == "xen.host.${cloud.id}"
+                }
 
-                /*def domainRecords = morpheusContext.async.computeServer.listIdentityProjections(
-                        new DataQuery().withFilters([new DataFilter('zone.id', cloud.id)])
-                )*/
-
-                def domainRecords = morpheusContext.async.computeServer.listIdentityProjections(
-                        new DataQuery().withFilter('zone.id', cloud.id)
+                def domainRecords1 = morpheusContext.services.computeServer.list(
+                        new DataQuery().withFilter('category', "xen.host.${cloud.id}")
                 )
-                log.info("Rahul::HostSync: execute: domainRecords: ${domainRecords}")
-                log.info("Rahul :: HostSync domainRecords2: ${domainRecords.map { "${it.externalId} - ${it.name}" }.toList().blockingGet()}")
+                log.info("Rahul::HostSync: execute: domainRecords1: ${domainRecords1}")
+                log.info("Rahul::HostSync: execute: domainRecords1.size(): ${domainRecords1.size()}")
+                log.info("Rahul::HostSync: execute: Before domainRecords1 print")
+                if (domainRecords1.size()>0) {
+                    log.info("Rahul::HostSync: execute: domainRecords1.size(): ${domainRecords1?.get(0)}")
+                    def computeServer = domainRecords1?.get(0)
+                    log.info("Rahul::HostSync: execute: domainRecords1:computeServer1: ${computeServer?.name}")
+                }
+                log.info("Rahul::HostSync: execute: After domainRecords1 print")
+
+                def domainRecords2 = morpheusContext.async.computeServer.list(
+                        new DataQuery().withFilter('name', "xenserver01.prod.dc2.den.morpheusdata.com")
+                ).toList().blockingGet()
+
+                log.info("Rahul::HostSync: execute: domainRecords2: ${domainRecords2}")
+                log.info("Rahul::HostSync: execute: domainRecords2.size(): ${domainRecords2.size()}")
+                log.info("Rahul::HostSync: execute: Before domainRecords2 print")
+                if (domainRecords2.size()>0) {
+                    log.info("Rahul::HostSync: execute: domainRecords2.size(): ${domainRecords2?.get(0)}")
+                    def computeServer = domainRecords2?.get(0)
+                    log.info("Rahul::HostSync: execute: domainRecords2:computeServer2: ${computeServer?.name}")
+                }
+                log.info("Rahul::HostSync: execute: After domainRecords2 print")
+
+                
+                log.info("Rahul :: HostSync domainRecords4: ${domainRecords.map { "${it.externalId} - ${it.name}" }.toList().blockingGet()}")
                 SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(domainRecords, listResults.hostList as Collection<Map>)
                 syncTask.addMatchFunction { ComputeServerIdentityProjection domainObject, Map cloudItem ->
                     log.info("Rahul::HostSync: execute: cloudItem: ${cloudItem}")
