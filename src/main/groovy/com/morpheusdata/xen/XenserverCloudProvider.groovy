@@ -21,7 +21,7 @@ import groovy.util.logging.Slf4j
 
 @Slf4j
 class XenserverCloudProvider implements CloudProvider {
-	public static final String CLOUD_PROVIDER_CODE = 'xenserver.cloud'
+	public static final String CLOUD_PROVIDER_CODE = 'xenserver'
 
 	protected MorpheusContext context
 	protected XenserverPlugin plugin
@@ -363,23 +363,33 @@ class XenserverCloudProvider implements CloudProvider {
 		try {
 			def testResults = XenComputeUtility.testConnection(plugin.getAuthConfig(cloudInfo))
 			if(testResults.success) {
+
 				def now = new Date().time
-				new NetworkSync(cloudInfo, plugin).execute()
-				log.info("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
-				now = new Date().time
-				new PoolSync(cloudInfo, plugin).execute()
-				log.info("${cloudInfo.name}: PoolSync in ${new Date().time - now}ms")
-				now = new Date().time
-				new VirtualMachineSync(cloudInfo, plugin, this).execute()
-				log.info("${cloudInfo.name}: VirtualMachineSync in ${new Date().time - now}ms")
-				now = new Date().time
 				new HostSync(cloudInfo, plugin).execute()
 				log.debug("${cloudInfo.name}: HostSync in ${new Date().time - now}ms")
+
 				now = new Date().time
 				new ImagesSync(cloudInfo, plugin).execute()
 				log.info("${cloudInfo.name}: ImagesSync in ${new Date().time - now}ms")
+
+				now = new Date().time
+				new NetworkSync(cloudInfo, plugin).execute()
+				log.info("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
+
+				now = new Date().time
 				new DatastoresSync(cloudInfo, plugin).execute()
 				log.info("${cloudInfo.name}: DatastoresSync in ${new Date().time - now}ms")
+
+				now = new Date().time
+				new PoolSync(cloudInfo, plugin).execute()
+				log.info("${cloudInfo.name}: PoolSync in ${new Date().time - now}ms")
+
+				def doInventory = cloudInfo.getConfigProperty('importExisting')
+				if (doInventory == 'on' || doInventory == 'true' || doInventory == true) {
+					now = new Date().time
+					new VirtualMachineSync(cloudInfo, plugin, this).execute()
+					log.info("${cloudInfo.name}: VirtualMachineSync in ${new Date().time - now}ms")
+				}
 
 				rtn = ServiceResponse.success()
 			} else {
