@@ -737,10 +737,16 @@ class XenComputeUtility {
         return rtn
     }
 
-    static listStorageRepositories(opts) {
+    /**
+     * Retrieves a list of storage repositories (SRs) from the XenServer using the provided authentication configuration.
+     *
+     * @param authConfig A map containing authentication configuration for accessing the XenServer.
+     * @return A map indicating the success status and the list of storage repositories.
+     */
+    static listStorageRepositories(Map authConfig) {
         def rtn = [success: false, srList: []]
-        def config = getXenConnectionSession(opts.zone)
-        def srList = com.xensource.xenapi.SR.getAllRecords(config.connection)
+        def config = getXenConnectionSession(authConfig)
+        def srList = SR.getAllRecords(config.connection)
         srList?.each { srKey, srValue ->
             rtn.srList << srValue
         }

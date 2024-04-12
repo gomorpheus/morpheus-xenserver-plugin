@@ -11,6 +11,7 @@ import com.morpheusdata.model.*
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.xen.sync.ImagesSync
+import com.morpheusdata.xen.sync.DatastoresSync
 import com.morpheusdata.xen.sync.NetworkSync
 import com.morpheusdata.xen.sync.PoolSync
 import com.morpheusdata.xen.sync.VirtualMachineSync
@@ -19,7 +20,7 @@ import groovy.util.logging.Slf4j
 
 @Slf4j
 class XenserverCloudProvider implements CloudProvider {
-	public static final String CLOUD_PROVIDER_CODE = 'xenserver.cloud'
+	public static final String CLOUD_PROVIDER_CODE = 'xenserver'
 
 	protected MorpheusContext context
 	protected XenserverPlugin plugin
@@ -36,7 +37,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getDescription() {
-		return 'Morpheus XenServer Plugin'
+		return 'XenServer'
 	}
 
 	/**
@@ -373,6 +374,8 @@ class XenserverCloudProvider implements CloudProvider {
 				now = new Date().time
 				new ImagesSync(cloudInfo, plugin).execute()
 				log.info("${cloudInfo.name}: ImagesSync in ${new Date().time - now}ms")
+				new DatastoresSync(cloudInfo, plugin).execute()
+				log.info("${cloudInfo.name}: DatastoresSync in ${new Date().time - now}ms")
 
 				rtn = ServiceResponse.success()
 			} else {
@@ -557,6 +560,6 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getName() {
-		return 'Morpheus XenServer Plugin'
+		return 'XenServer'
 	}
 }
