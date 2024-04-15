@@ -31,7 +31,6 @@ class HostSync {
 
     def execute() {
         log.debug "HostSync"
-        log.info("Rahul::HostSync: execute: Entered")
         try {
             def listResults = XenComputeUtility.listHosts(plugin.getAuthConfig(cloud))
             if (listResults.success == true) {
@@ -40,12 +39,9 @@ class HostSync {
 						.withFilter("computeServerType.code", HOST_SERVER_TYPE_CODE)
 						.withFilter("category", "xen.host.${cloud.id}")
 				)
-				log.info("domainRecords: ${domainRecords.toList().blockingGet()}")
 
 				SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(domainRecords, listResults.hostList as Collection<Map>)
                 syncTask.addMatchFunction { ComputeServerIdentityProjection domainObject, Map cloudItem ->
-                    log.info("Rahul::HostSync: execute: cloudItem: ${cloudItem}")
-                    log.info("Rahul::HostSync: execute: domainObject.externalId: ${domainObject.externalId}")
                     domainObject.externalId == cloudItem?.uuid
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<ComputeServerIdentityProjection, Map>> updateItems ->
                     morpheusContext.async.computeServer.listById(updateItems.collect { it.existingItem.id } as List<Long>)
@@ -69,37 +65,24 @@ class HostSync {
 
     private updateMatchedHosts(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList) {
         log.debug "updateMatchedHosts: ${cloud.id} ${updateList.size()}"
-        // log.info("Rahul::HostSync: updateMatchedHosts: updateList.size(): ${updateList.size()}")
         def saves = []
         def doSave = false
         try {
             for (updateItem in updateList) {
                 doSave = false
-                // log.info("Rahul::HostSync: updateMatchedHosts: updateItem: ${updateItem}")
                 ComputeServer existingItem = updateItem.existingItem
-                // log.info("Rahul::HostSync: updateMatchedHosts: existingItem?.name: ${existingItem?.name}")
                 def status = updateItem.masterItem?.status
-                // log.info("Rahul::HostSync: updateMatchedHosts: status: ${status}")
-                // log.info("Rahul::HostSync: updateMatchedHosts: existingItem?.status: ${existingItem?.status}")
                 if (existingItem?.status != status) {
                     existingItem.status = status
                     doSave = true
                 }
-                // log.info("Rahul::HostSync: updateMatchedHosts: existingItem?.status1: ${existingItem?.status}")
-                /*def status = updateMap.masterItem.status
-                if(updateMap.existingItem?.status != status) {
-                    updateMap.existingItem.status = status
-                    doSave = true
-                }*/
-                // log.info("Rahul::HostSync: updateMatchedHosts: doSave: ${doSave}")
+
                 if (doSave == true) {
                     saves << existingItem
                 }
             }
-            // log.info("Rahul::HostSync: updateMatchedHosts: saves.size(): ${saves.size()}")
             if (saves) {
                 //morpheusContext.async.computeServer.bulkSave(saves).blockingGet()
-                // log.info("Rahul::HostSync: updateMatchedHosts: Going to update records")
             }
         } catch (e) {
             log.error("updateMatchedHosts error: ${e}", e)
@@ -108,7 +91,6 @@ class HostSync {
 
     private addMissingHosts(Collection<Map> addList) {
         log.debug "addMissingHosts: ${cloud} ${addList.size()}"
-        // log.info("Rahul::HostSync: addMissingHosts: addList.size(): ${addList.size()}")
         def hostAdds = []
 
         try {
@@ -134,24 +116,18 @@ class HostSync {
                                 osType           : 'linux',
                                 hostname         : cloudItem.host.hostname
                         ]
-                // log.info("Rahul::HostSync: addMissingHosts: serverConfig: ${serverConfig}")
                 def newServer = new ComputeServer(serverConfig)
-                // log.info("Rahul::HostSync: addMissingHosts: cloudItem.host: ${cloudItem.host}")
-                // log.info("Rahul::HostSync: addMissingHosts: cloudItem.host?.address: ${cloudItem.host?.address}")
                 if (cloudItem.host.address) {
                     newServer.internalIp = cloudItem.host.address
                     newServer.externalIp = cloudItem.host.address
                     newServer.sshHost = cloudItem.host.address
                 }
-                // log.info("Rahul::HostSync: addMissingHosts: cloudItem.metrics: ${cloudItem.metrics}")
                 def serverMetrics = cloudItem.metrics
-                // log.info("Rahul::HostSync: addMissingHosts: serverMetrics?.dump(): ${serverMetrics?.dump()}")
-                // log.debug("metrics: {}", serverMetrics?.dump())
+                 log.debug("metrics: {}", serverMetrics?.dump())
                 newServer.maxMemory = serverMetrics?.memoryTotal ?: 0
                 newServer.maxStorage = 0l
                 newServer.capacityInfo = new ComputeCapacityInfo(maxMemory: newServer.maxMemory, maxStorage: newServer.maxStorage)
                 morpheusContext.async.computeServer.create(newServer).blockingGet()
-                // log.info("Rahul::HostSync: addMissingHosts: Going to add records")
             }
         } catch (e) {
             log.error("addMissingHosts error: ${e}", e)
