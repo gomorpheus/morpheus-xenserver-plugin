@@ -10,6 +10,7 @@ import com.morpheusdata.core.util.ConnectionUtils
 import com.morpheusdata.model.*
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.xen.sync.HostSync
 import com.morpheusdata.xen.sync.ImagesSync
 import com.morpheusdata.xen.sync.DatastoresSync
 import com.morpheusdata.xen.sync.NetworkSync
@@ -362,20 +363,33 @@ class XenserverCloudProvider implements CloudProvider {
 		try {
 			def testResults = XenComputeUtility.testConnection(plugin.getAuthConfig(cloudInfo))
 			if(testResults.success) {
+
 				def now = new Date().time
-				new NetworkSync(cloudInfo, plugin).execute()
-				log.info("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
-				now = new Date().time
-				new PoolSync(cloudInfo, plugin).execute()
-				log.info("${cloudInfo.name}: PoolSync in ${new Date().time - now}ms")
-				now = new Date().time
-				new VirtualMachineSync(cloudInfo, plugin, this).execute()
-				log.info("${cloudInfo.name}: VirtualMachineSync in ${new Date().time - now}ms")
+				new HostSync(cloudInfo, plugin).execute()
+				log.debug("${cloudInfo.name}: HostSync in ${new Date().time - now}ms")
+
 				now = new Date().time
 				new ImagesSync(cloudInfo, plugin).execute()
 				log.info("${cloudInfo.name}: ImagesSync in ${new Date().time - now}ms")
+
+				now = new Date().time
+				new NetworkSync(cloudInfo, plugin).execute()
+				log.info("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
+
+				now = new Date().time
 				new DatastoresSync(cloudInfo, plugin).execute()
 				log.info("${cloudInfo.name}: DatastoresSync in ${new Date().time - now}ms")
+
+				now = new Date().time
+				new PoolSync(cloudInfo, plugin).execute()
+				log.info("${cloudInfo.name}: PoolSync in ${new Date().time - now}ms")
+
+				def doInventory = cloudInfo.getConfigProperty('importExisting')
+				if (doInventory == 'on' || doInventory == 'true' || doInventory == true) {
+					now = new Date().time
+					new VirtualMachineSync(cloudInfo, plugin, this).execute()
+					log.info("${cloudInfo.name}: VirtualMachineSync in ${new Date().time - now}ms")
+				}
 
 				rtn = ServiceResponse.success()
 			} else {

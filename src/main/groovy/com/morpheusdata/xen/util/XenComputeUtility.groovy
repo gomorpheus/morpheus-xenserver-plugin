@@ -711,9 +711,9 @@ class XenComputeUtility {
         return VIF.create(opts.connection, newVif)
     }
 
-    static listHosts(Map opts) {
+    static listHosts(Map authConfig) {
         def rtn = [success: false, hostList: []]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(authConfig)
         def hostList = com.xensource.xenapi.Host.getAllRecords(config.connection)
         hostList?.each { hostKey, hostValue ->
             def hostRow = [host: hostValue, uuid: hostValue.uuid]
