@@ -16,13 +16,13 @@ import groovy.util.logging.Slf4j
 @Slf4j
 class HostSync {
 
-	static final String HOST_SERVER_TYPE_CODE = 'xenserverHypervisor'
+    static final String HOST_SERVER_TYPE_CODE = 'xenserverHypervisor'
 
-	private Cloud cloud
+    private Cloud cloud
     XenserverPlugin plugin
     private MorpheusContext morpheusContext
 
-	HostSync(Cloud cloud, XenserverPlugin plugin) {
+    HostSync(Cloud cloud, XenserverPlugin plugin) {
         this.cloud = cloud
         this.plugin = plugin
         this.morpheusContext = plugin.morpheusContext
@@ -35,25 +35,25 @@ class HostSync {
             def listResults = XenComputeUtility.listHosts(plugin.getAuthConfig(cloud))
             if (listResults.success == true) {
                 def domainRecords = morpheusContext.async.computeServer.listIdentityProjections(
-					new DataQuery().withFilter("zone.id", cloud.id.toLong())
-						.withFilter("computeServerType.code", HOST_SERVER_TYPE_CODE)
-						.withFilter("category", "xen.host.${cloud.id}")
-				)
+                        new DataQuery().withFilter("zone.id", cloud.id.toLong())
+                                .withFilter("computeServerType.code", HOST_SERVER_TYPE_CODE)
+                                .withFilter("category", "xen.host.${cloud.id}")
+                )
 
-				SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(domainRecords, listResults.hostList as Collection<Map>)
+                SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(domainRecords, listResults.hostList as Collection<Map>)
                 syncTask.addMatchFunction { ComputeServerIdentityProjection domainObject, Map cloudItem ->
                     domainObject.externalId == cloudItem?.uuid
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<ComputeServerIdentityProjection, Map>> updateItems ->
                     morpheusContext.async.computeServer.listById(updateItems.collect { it.existingItem.id } as List<Long>)
                 }.onAdd { itemsToAdd ->
-					log.debug("HostSync, onAdd: ${itemsToAdd}")
+                    log.debug("HostSync, onAdd: ${itemsToAdd}")
                     addMissingHosts(itemsToAdd)
                 }.onUpdate { List<SyncTask.UpdateItem<ComputeServer, Map>> updateItems ->
-					log.debug("HostSync, onUpdate: ${updateItems}")
-					updateMatchedHosts(updateItems)
+                    log.debug("HostSync, onUpdate: ${updateItems}")
+                    updateMatchedHosts(updateItems)
                 }.onDelete { removeItems ->
-					log.debug("HostSync, onDelete: ${removeItems}")
-					removeMissingHosts(removeItems)
+                    log.debug("HostSync, onDelete: ${removeItems}")
+                    removeMissingHosts(removeItems)
                 }.start()
             } else {
                 log.error "Error in getting disks : ${listResults}"
@@ -71,18 +71,18 @@ class HostSync {
             for (updateItem in updateList) {
                 doSave = false
                 ComputeServer existingItem = updateItem.existingItem
-                def status = updateItem.masterItem?.status
+                /*def status = updateItem.masterItem?.status
                 if (existingItem?.status != status) {
                     existingItem.status = status
                     doSave = true
-                }
+                }*/
 
                 if (doSave == true) {
                     saves << existingItem
                 }
             }
             if (saves) {
-                //morpheusContext.async.computeServer.bulkSave(saves).blockingGet()
+                morpheusContext.async.computeServer.bulkSave(saves).blockingGet()
             }
         } catch (e) {
             log.error("updateMatchedHosts error: ${e}", e)
@@ -123,7 +123,7 @@ class HostSync {
                     newServer.sshHost = cloudItem.host.address
                 }
                 def serverMetrics = cloudItem.metrics
-                 log.debug("metrics: {}", serverMetrics?.dump())
+                log.debug("metrics: {}", serverMetrics?.dump())
                 newServer.maxMemory = serverMetrics?.memoryTotal ?: 0
                 newServer.maxStorage = 0l
                 newServer.capacityInfo = new ComputeCapacityInfo(maxMemory: newServer.maxMemory, maxStorage: newServer.maxStorage)
@@ -136,7 +136,7 @@ class HostSync {
 
     def removeMissingHosts(List removeList) {
         log.debug "removeMissingHosts: ${removeList.size()}"
-        //morpheusContext.async.computeServer.remove(removeList).blockingGet()
+        morpheusContext.async.computeServer.remove(removeList).blockingGet()
     }
 }
 
