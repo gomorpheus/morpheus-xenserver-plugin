@@ -4,6 +4,7 @@ import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
+import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeServer
 import com.morpheusdata.model.Icon
 import com.morpheusdata.model.OptionType
@@ -14,17 +15,22 @@ import com.morpheusdata.model.provisioning.WorkloadRequest
 import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.xen.util.XenComputeUtility
+import groovy.util.logging.Slf4j
 
+@Slf4j
 class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider {
 	public static final String PROVISION_PROVIDER_CODE = 'xenserver.provision'
 
 	protected MorpheusContext context
 	protected Plugin plugin
+	XenserverPlugin xenPlugin
 
-	public XenserverProvisionProvider(Plugin plugin, MorpheusContext ctx) {
+	public XenserverProvisionProvider(Plugin plugin, MorpheusContext ctx, XenserverPlugin xenPlugin) {
 		super()
 		this.@context = ctx
 		this.@plugin = plugin
+		this.@xenPlugin = xenPlugin
 	}
 
 	/**
@@ -51,7 +57,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	/**
 	 * Some older clouds have a provision type code that is the exact same as the cloud code. This allows one to set it
-	 * to match and in doing so the provider will be fetched via the cloud providers {@link CloudProvider#getDefaultProvisionTypeCode()} method.
+	 * to match and in doing so the provider will be fetched via the cloud providers {CloudProvider#getDefaultProvisionTypeCode()} method.
 	 * @return code for overriding the ProvisionType record code property
 	 */
 	@Override
@@ -179,7 +185,28 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse stopWorkload(Workload workload) {
-		return ServiceResponse.success()
+		def rtn = [success: false, msg: null]
+		try {
+			if(workload.server?.externalId) {
+				workload.userStatus = Workload.Status.stopped
+				workload = context.async.workload.create(workload).blockingGet()
+				Cloud cloud = workload.server.cloud
+				def stopResults = XenComputeUtility.stopVm(xenPlugin.getAuthConfig(cloud), workload.server.externalId)
+				if(stopResults.success == true) {
+					workload.status = Workload.Status.stopped
+					workload = context.async.workload.create(workload).blockingGet()
+					//stopContainerUsage(container, false)
+					rtn.success = true
+				}
+			} else {
+				rtn.success = true
+				rtn.msg = 'vm not found'
+			}
+		} catch (e) {
+			log.error("stopContainer error: ${e}", e)
+			rtn.msg = e.message
+		}
+		return new ServiceResponse(rtn.success, rtn.msg, null, null)
 	}
 
 	/**
