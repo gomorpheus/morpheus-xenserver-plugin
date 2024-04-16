@@ -23,14 +23,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	public static final String PROVISION_PROVIDER_CODE = 'xenserver.provision'
 
 	protected MorpheusContext context
-	protected Plugin plugin
-	XenserverPlugin xenPlugin
+	protected XenserverPlugin plugin
 
-	public XenserverProvisionProvider(Plugin plugin, MorpheusContext ctx, XenserverPlugin xenPlugin) {
+	public XenserverProvisionProvider(XenserverPlugin plugin, MorpheusContext ctx) {
 		super()
 		this.@context = ctx
 		this.@plugin = plugin
-		this.@xenPlugin = xenPlugin
 	}
 
 	/**
@@ -191,7 +189,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				workload.userStatus = Workload.Status.stopped
 				workload = context.async.workload.create(workload).blockingGet()
 				Cloud cloud = workload.server.cloud
-				def stopResults = XenComputeUtility.stopVm(xenPlugin.getAuthConfig(cloud), workload.server.externalId)
+				def stopResults = XenComputeUtility.stopVm(plugin.getAuthConfig(cloud), workload.server.externalId)
 				if(stopResults.success == true) {
 					workload.status = Workload.Status.stopped
 					workload = context.async.workload.create(workload).blockingGet()
