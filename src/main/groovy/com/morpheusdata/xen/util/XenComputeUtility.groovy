@@ -336,10 +336,10 @@ class XenComputeUtility {
         return rtn
     }
 
-    static stopVm(opts, vmId) {
+    static stopVm(Map authConfig, String vmId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(authConfig)
             def vm = VM.getByUuid(config.connection, vmId)
             if (vm.getPowerState(config.connection) == com.xensource.xenapi.Types.VmPowerState.RUNNING) {
                 vm.shutdown(config.connection)
