@@ -16,7 +16,10 @@ import com.morpheusdata.response.ProvisionResponse
 import com.morpheusdata.response.ServiceResponse
 
 class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider {
-	public static final String PROVISION_PROVIDER_CODE = 'xenserver.provision'
+
+	public static final String PROVIDER_NAME = 'XenServer'
+	public static final String PROVIDER_CODE = 'xenserver.provision'
+	public static final String PROVISION_TYPE_CODE = 'xenserver'
 
 	protected MorpheusContext context
 	protected Plugin plugin
@@ -56,7 +59,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	String getProvisionTypeCode() {
-		return PROVISION_PROVIDER_CODE
+		return PROVISION_TYPE_CODE
 	}
 
 	/**
@@ -285,7 +288,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	String getCode() {
-		return PROVISION_PROVIDER_CODE
+		return PROVIDER_CODE
 	}
 
 	/**
@@ -296,6 +299,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	String getName() {
-		return 'XenServer'
+		return PROVIDER_NAME
 	}
 }
