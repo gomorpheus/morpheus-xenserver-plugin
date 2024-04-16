@@ -32,7 +32,7 @@ class HostSync {
     def execute() {
         log.debug "HostSync"
         try {
-            def listResults = x.listHosts(plugin.getAuthConfig(cloud))
+            def listResults = XenComputeUtility.listHosts(plugin.getAuthConfig(cloud))
             if (listResults.success == true) {
                 def domainRecords = morpheusContext.async.computeServer.listIdentityProjections(
                         new DataQuery().withFilter("zone.id", cloud.id.toLong())
