@@ -336,10 +336,10 @@ class XenComputeUtility {
         return rtn
     }
 
-    static stopVm(opts, vmId) {
+    static stopVm(Map authConfig, String vmId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(authConfig)
             def vm = VM.getByUuid(config.connection, vmId)
             if (vm.getPowerState(config.connection) == com.xensource.xenapi.Types.VmPowerState.RUNNING) {
                 vm.shutdown(config.connection)
@@ -711,9 +711,9 @@ class XenComputeUtility {
         return VIF.create(opts.connection, newVif)
     }
 
-    static listHosts(Map opts) {
+    static listHosts(Map authConfig) {
         def rtn = [success: false, hostList: []]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(authConfig)
         def hostList = com.xensource.xenapi.Host.getAllRecords(config.connection)
         hostList?.each { hostKey, hostValue ->
             def hostRow = [host: hostValue, uuid: hostValue.uuid]
