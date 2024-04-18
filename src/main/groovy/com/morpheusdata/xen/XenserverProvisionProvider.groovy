@@ -1,16 +1,21 @@
 package com.morpheusdata.xen
 
+import com.bertramlabs.plugins.karman.CloudFile
 import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
+import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeServer
+import com.morpheusdata.model.ComputeTypeSet
+import com.morpheusdata.model.HostType
 import com.morpheusdata.model.Icon
 import com.morpheusdata.model.OptionType
 import com.morpheusdata.model.ServicePlan
 import com.morpheusdata.model.StorageVolumeType
 import com.morpheusdata.model.Workload
+import com.morpheusdata.model.WorkloadType
 import com.morpheusdata.model.provisioning.WorkloadRequest
 import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
@@ -23,7 +28,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	public static final String PROVIDER_NAME = 'XenServer'
 	public static final String PROVIDER_CODE = 'xenserver.provision'
-	public static final String PROVISION_TYPE_CODE = 'xenserver'
+	public static final String PROVISION_TYPE_CODE = 'xen'
 
 	protected MorpheusContext context
 	protected XenserverPlugin plugin
@@ -58,7 +63,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	/**
 	 * Some older clouds have a provision type code that is the exact same as the cloud code. This allows one to set it
-	 * to match and in doing so the provider will be fetched via the cloud providers {CloudProvider#getDefaultProvisionTypeCode()} method.
+	 * to match and in doing so the provider will be fetched via the cloud providers method.
 	 * @return code for overriding the ProvisionType record code property
 	 */
 	@Override
@@ -144,6 +149,31 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse validateWorkload(Map opts) {
+		log.debug("validateWorkload: ${opts}")
+		log.info("Rahul:: validateWorkload:opts: ${opts}")
+		/*ServiceResponse rtn = new ServiceResponse(true, null, [:], null)
+		def validationOpts = [:]
+		try{
+			if (opts.containsKey('imageId') || opts?.config?.containsKey('imageId'))
+				validationOpts += [imageId: opts?.config?.imageId ?: opts?.imageId]
+			if(opts.networkInterfaces) {
+				validationOpts.networkInterfaces = opts.networkInterfaces
+			}
+			def validationResults = XenComputeUtility.validateServerConfig(validationOpts)
+				log.info("Rahul:: validateWorkload:validationResults: ${validationResults}")
+			*//*if(!validationResults.success) {
+				rtn.success = false
+				rtn.errors += validationResults.errors
+			}*//*
+			if(!validationResults.success) {
+				validationResults.errors?.each { it ->
+					rtn.addError(it.field, it.msg)
+				}
+			}
+		} catch(e) {
+			log.error("validate container error: ${e}", e)
+		}
+		return rtn*/
 		return ServiceResponse.success()
 	}
 
@@ -159,6 +189,105 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse<ProvisionResponse> runWorkload(Workload workload, WorkloadRequest workloadRequest, Map opts) {
+		log.debug "runWorkload: ${workload} ${workloadRequest} ${opts}"
+		log.info("Rahul:: runworkload: opts: ${opts}")
+		ProvisionResponse provisionResponse = new ProvisionResponse(success: true)
+		ComputeServer server = workload.server
+		log.info("Rahul:: runworkload: server.name: ${server.name}")
+		def containerConfig = workload.getConfigMap()
+		log.info("Rahul:: runworkload: workload.getConfigMap(): ${workload.getConfigMap()}")
+		log.info("Rahul:: runworkload: containerConfig: ${containerConfig}")
+		Cloud cloud = server.cloud
+		log.info("Rahul:: runworkload: cloud?.id: ${cloud?.id}")
+		try{
+			def virtualImage
+			def imageId
+			def imageFormat = 'vhd'
+			def rootVolume = server.volumes?.find{it.rootVolume == true}
+			log.info("Rahul:: runworkload: rootVolume: ${rootVolume}")
+			log.info("Rahul:: runworkload: rootVolume?.name: ${rootVolume?.name}")
+			def morphDatastore = context.async.cloud.datastore.listById([containerConfig.datastoreId?.toLong()]).firstOrError().blockingGet()
+			log.info("Rahul:: runworkload: morphDatastore: ${morphDatastore}")
+			log.info("Rahul:: runworkload: morphDatastore?.name: ${morphDatastore?.name}")
+			log.info("Rahul:: runworkload: rootVolume?.datastore?.name ${rootVolume?.datastore?.name}")
+			def datastore = rootVolume?.datastore ?: morphDatastore // rahul dataquery for datastore
+			log.info("Rahul:: runworkload: datastore?.name ${datastore?.name}")
+			def cloneContainer = opts.cloneContainerId
+			WorkloadType containerType
+			Long computeTypeSetId = server?.typeSet?.id
+			log.info("Rahul:: runworkload: computeTypeSetId ${computeTypeSetId}")
+			if(computeTypeSetId) {
+				ComputeTypeSet computeTypeSet = context.services.computeTypeSet.get(computeTypeSetId)
+				WorkloadType workloadType = computeTypeSet.getWorkloadType()
+				if(workloadType) {
+					containerType = context.services.containerType.get(workloadType.id)
+				}
+			}
+			log.info("Rahul:: runworkload: containerType?.name ${containerType?.name}")
+			log.info("Rahul:: runworkload: containerType?.virtualImage?.id ${containerType?.virtualImage?.id}")
+			if(containerConfig.imageId || containerConfig.template || containerType?.virtualImage?.id) { //-- rahul
+				def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: containerType?.virtualImage.id) // rahul
+				log.info("Rahul:: runworkload: virtualImageId ${virtualImageId}")
+				virtualImage = context.services.virtualImage.get(virtualImageId) // Rahul
+				log.info("Rahul:: runworkload: virtualImage ${virtualImage}")
+				log.info("Rahul:: runworkload: virtualImage?.externalId ${virtualImage?.externalId}")
+				imageId = virtualImage.externalId
+				log.info("Rahul:: runworkload: imageId ${imageId}")
+				if(!imageId) { //If its userUploaded and still needs uploaded
+					//TODO: We need to upload ovg/vmdk stuff here
+					def primaryNetwork = server.interfaces?.find{it.network}?.network
+					log.info("Rahul:: runworkload: primaryNetwork ${primaryNetwork}")
+					log.info("Rahul:: runworkload: primaryNetwork?.name ${primaryNetwork?.name}")
+					def cloudFiles = context.async.virtualImage.getVirtualImageFiles(virtualImage)
+					log.info("Rahul:: runworkload: cloudFiles: ${cloudFiles}")
+					log.debug("runContainer cloudFiles: {}", cloudFiles)
+					CloudFile imageFile = cloudFiles?.find{ cloudFile -> cloudFile.name.toLowerCase().indexOf('.' + imageFormat) > -1}
+					log.info("Rahul:: runworkload: imageFile: ${imageFile}")
+					log.info("Rahul:: runworkload: imageFile:url: ${imageFile?.getURL()} -  ${imageFile?.name}")
+					log.debug("runContainer imageFile: {}", imageFile)
+					def containerImage =
+							[
+									name			: virtualImage.name,
+									imageSrc		: imageFile?.getURL(),
+									minDisk			: virtualImage.minDisk ?: 5,
+									minRam			: virtualImage.minRam ?: (512* ComputeUtility.ONE_MEGABYTE),
+									tags			: 'morpheus, ubuntu',
+									imageType		: 'disk_image',
+									containerType	: 'vhd',
+									cloudFiles		: cloudFiles,
+									imageFile		: imageFile,
+									imageSize		: imageFile.contentLength
+							]
+					log.info("Rahul:: runworkload: containerImage: ${containerImage}")
+					def imageConfig =
+							[
+									zone		: opts.cloud,
+									image		: containerImage,
+									//cachePath	: //virtualImage.imageLocations.//context.async.virtualImage.getLocation(),//virtualImage.getLocalCachePath(),
+									name		: virtualImage.name,
+									datastore	: datastore,
+									network		: primaryNetwork,
+									osTypeCode	: virtualImage?.osType?.code
+							]
+					imageConfig.authConfig = plugin.getAuthConfig(cloud)
+					log.info("Rahul:: runworkload: imageConfig: ${imageConfig}")
+					def imageResults = XenComputeUtility.insertTemplate(imageConfig)
+					log.info("Rahul:: runworkload: imageResults: ${imageResults}")
+					if(imageResults.success == true) {
+						imageId = imageResults.imageId
+					}
+				} else {
+					log.info("Rahul:: not going in image block")
+				}
+
+			}
+
+		} catch(e) {
+			log.error("Rahul:: runworkload: error ${e}", e)
+		}
+
+
+
 		// TODO: this is where you will implement the work to create the workload in your cloud environment
 		return new ServiceResponse<ProvisionResponse>(
 			true,
@@ -325,5 +454,80 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	String getName() {
 		return PROVIDER_NAME
+	}
+
+	@Override
+	Boolean hasNetworks() {
+		true
+	}
+
+	@Override
+	HostType getHostType() {
+		HostType.vm
+	}
+
+	@Override
+	String serverType() {
+		return "vm"
+	}
+
+	@Override
+	Boolean supportsCustomServicePlans() {
+		return true;
+	}
+
+	@Override
+	Boolean multiTenant() {
+		return false
+	}
+
+	@Override
+	Boolean aclEnabled() {
+		return false
+	}
+
+	@Override
+	Boolean customSupported() {
+		return true;
+	}
+
+	@Override
+	Boolean hasDatastores() {
+		return true
+	}
+
+	@Override
+	Boolean supportsAutoDatastore() {
+		return false
+	}
+
+	@Override
+	Boolean lvmSupported() {
+		return true
+	}
+
+	@Override
+	String getHostDiskMode() {
+		return "lvm"
+	}
+
+	@Override
+	String getDeployTargetService() {
+		return "vmDeployTargetService"
+	}
+
+	@Override
+	String getNodeFormat() {
+		return "vm"
+	}
+
+	@Override
+	Boolean hasSecurityGroups() {
+		return false
+	}
+
+	@Override
+	Boolean hasNodeTypes() {
+		return true;
 	}
 }

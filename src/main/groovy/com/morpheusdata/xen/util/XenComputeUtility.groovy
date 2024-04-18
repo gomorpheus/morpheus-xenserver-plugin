@@ -1050,9 +1050,9 @@ class XenComputeUtility {
         return rtn
     }
 
-    static insertTemplate(opts) {
+    static insertTemplate(Map opts= [:]) {
         def rtn = [success: false]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(opts.authConfig)
         opts.connection = config.connection
         def imageResults = insertContainerImage(opts)
         if (imageResults.success == true) {
