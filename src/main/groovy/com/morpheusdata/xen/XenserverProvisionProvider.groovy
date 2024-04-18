@@ -4,6 +4,7 @@ import com.bertramlabs.plugins.karman.CloudFile
 import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
+import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.model.Cloud
@@ -27,7 +28,7 @@ import groovy.util.logging.Slf4j
 class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider {
 
 	public static final String PROVIDER_NAME = 'XenServer'
-	public static final String PROVIDER_CODE = 'xenserver.provision'
+	public static final String PROVIDER_CODE = 'xen'
 	public static final String PROVISION_TYPE_CODE = 'xen'
 
 	protected MorpheusContext context
@@ -111,9 +112,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	Collection<StorageVolumeType> getRootVolumeStorageTypes() {
-		Collection<StorageVolumeType> volumeTypes = []
-		// TODO: create some storage volume types and add to collection
-		return volumeTypes
+		context.async.storageVolume.storageVolumeType.list(
+				new DataQuery().withFilter("code", "standard")).toList().blockingGet()
 	}
 
 	/**
@@ -122,9 +122,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	Collection<StorageVolumeType> getDataVolumeStorageTypes() {
-		Collection<StorageVolumeType> dataVolTypes = []
-		// TODO: create some data volume types and add to collection
-		return dataVolTypes
+		context.async.storageVolume.storageVolumeType.list(
+				new DataQuery().withFilter("code", "standard")).toList().blockingGet()
 	}
 
 	/**
@@ -529,5 +528,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	Boolean hasNodeTypes() {
 		return true;
+	}
+
+	@Override
+	Boolean createDefaultInstanceType() {
+		return false
 	}
 }

@@ -1,0 +1,100 @@
+resource "option-type" "instanceType-xen-template" {
+  code             = "instanceType.xen.template"
+  type             = "select"
+  name             = "Template"
+  category         = "instanceType.xen"
+  fieldName        = "imageId"
+  optionSource     = "xenVirtualImages"
+  fieldCode        = "gomorpheus.optiontype.Image"
+  fieldLabel       = "Image"
+  fieldContext     = "config"
+  fieldGroup       = "Options"
+  required         = true
+  enabled          = true
+  editable         = false
+  global           = false
+  placeHolder      = null
+  helpBlock        = ""
+  defaultValue     = null
+  custom           = false
+  displayOrder     = 1
+  fieldClass       = null
+  description      = "Choose from a list of Virtual Images that might want to be provisioned."
+}
+
+resource "workload-type" "xen-1_0" {
+  code             = "xen-1.0"
+  shortName        = "xen"
+  name             = "Single Xen VM"
+  ports            = []
+  containerVersion = "1.0"
+  repositoryImage  = ""
+  entryPoint       = ""
+  category         = "xen"
+  statTypeCode     = "vm"
+  logTypeCode      = "xen"
+  checkTypeCode    = "vmCheck"
+  serverType       = "vm"
+  mountPoint       = "/data"
+  provisionType = "xen"
+  actions = ["generic-remove-node"]
+}
+
+resource "workload-type-set" "xen-1.0-set" {
+  code          = "xen-1.0-set"
+  workloadType = workload-type.xen-1_0
+  priorityOrder  = 0
+  dynamicCount   = true
+  containerCount = 1
+}
+
+resource "instance-type" "xen" {
+  code                 = "xen"
+  name                 = "xen"
+  category             = "cloud"
+  active               = true
+  enabled              = true
+  viewSet              = "xen"
+  stackTier            = 30
+  hasConfig            = false
+  hasSettings          = false
+  hasDeployment        = false
+  deploymentService    = "defaultDeployService"
+  versions             = ["1.0"]
+  hasAutoScale         = true
+  description          = "Provision any Xen Compatible Image to a Xen Hypervisor. Utilize the image alongside your other instances."
+  provisionService     = "xenContainerService"
+  provisionTypeDefault = true
+  environmentPrefix    = "XEN"
+  provisionSelectType  = "zone"
+  provisionType = "xen"
+  optionTypes = [
+    "instanceType.xen.template",
+    "instanceType.exposePorts"
+  ]
+}
+
+resource "instance-type-layout" "xen-1_0-single" {
+  code            = "xen-1.0-single"
+  name            = "Single Xen VM"
+  sortOrder       = 0
+  instanceVersion = "1.0"
+  description     = "This will provision a single process with no redundancy"
+  instanceType    = instance-type.xen
+  serverCount     = 1
+  portCount       = 1
+  enabled         = true
+  creatable       = true
+  containers      = [workload-type-set.xen-1.0-set]
+  actions         = ["generic-add-node"]
+  optionTypes   = []
+  provisionType = "xen"
+}
+
+resource "scale-action" "xen-1_0-single" {
+  code      = "xen-1.0-single"
+  scaleType = "action"
+  layout = instance-type-layout.xen-1_0-single
+  upAction = "generic-add-node"
+  downAction = "generic-remove-node"
+}
