@@ -40,7 +40,7 @@ resource "workload-type" "xen-1_0" {
   actions = ["generic-remove-node"]
 }
 
-resource "workload-type-set" "xen-1.0-set" {
+resource "workload-type-set" "xen-1_0-set" {
   code          = "xen-1.0-set"
   workloadType = workload-type.xen-1_0
   priorityOrder  = 0
@@ -85,7 +85,7 @@ resource "instance-type-layout" "xen-1_0-single" {
   portCount       = 1
   enabled         = true
   creatable       = true
-  containers      = [workload-type-set.xen-1.0-set]
+  containers      = [workload-type-set.xen-1_0-set]
   actions         = ["generic-add-node"]
   optionTypes   = []
   provisionType = "xen"

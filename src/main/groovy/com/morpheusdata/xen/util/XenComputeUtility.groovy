@@ -1051,10 +1051,14 @@ class XenComputeUtility {
     }
 
     static insertTemplate(Map opts= [:]) {
+        log.info("Ray:: XCU:runworkload:insertTemplate opts: ${opts}")
         def rtn = [success: false]
         def config = getXenConnectionSession(opts.authConfig)
+        log.info("Ray:: XCU:runworkload:insertTemplate config: ${config}")
         opts.connection = config.connection
+        log.info("Ray:: XCU:runworkload:insertTemplate opts1: ${opts}")
         def imageResults = insertContainerImage(opts)
+        log.info("Ray:: XCU:runworkload:insertTemplate imageResults: ${imageResults}")
         if (imageResults.success == true) {
             if (imageResults.found == true) {
                 rtn.success = true
@@ -1075,29 +1079,38 @@ class XenComputeUtility {
     }
 
     static insertContainerImage(opts) {
+        log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage opts1: ${opts}")
         def rtn = [success: false, found: false]
         def uploadTask
         try {
-            def currentList = listTemplates(opts)?.templateList
+            def currentList = listTemplates(opts.authConfig)?.templateList
+            log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage currentList: ${currentList}")
+            log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage opts.image: ${opts.image}")
             def image = opts.image
             def match = currentList.find { it.uuid == image.externalId || it.nameLabel == image.name }
+            log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage match: ${match}")
             if (!match) {
                 def insertOpts = [zone     : opts.zone, name: image.name, imageSrc: image.imageSrc, minDisk: image.minDisk, minRam: image.minRam,
                                   imageType: image.imageType, containerType: image.containerType, imageFile: image.imageFile, diskSize: image.imageSize, cloudFiles: image.cloudFiles,
                                   cachePath: opts.cachePath, datastore: opts.datastore, network: opts.network, connection: opts.connection]
+                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage insertOpts: ${insertOpts}")
 
                 //estimated disk size is wrong. we have to recalculate it
+                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage image.imageFile: ${image.imageFile}")
                 if (image.imageFile.name.endsWith('.tar.gz')) {
                     log.info("tar gz stream detected. recalculating size...")
                     def sourceStream = image.imageFile.inputStream
                     def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
                             new java.util.zip.GZIPInputStream(sourceStream))
                     def tarEntry = tarStream.getNextTarEntry()
+                    log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage tarEntry.getSize(): ${tarEntry.getSize()}")
                     insertOpts.diskSize = tarEntry.getSize()
                     log.info("Recalculated Template Size: ${insertOpts.diskSize}")
                     sourceStream.close()
                 }
+                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage insertOpts: ${insertOpts}")
                 def createResults = createVdi(insertOpts)
+                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage createResults: ${createResults}")
                 log.info("insertContainerImage: ${createResults}")
                 if (createResults.success == true) {
                     //upload it -
@@ -1113,6 +1126,7 @@ class XenComputeUtility {
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
                     def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
+                    log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage uploadResults: ${uploadResults}")
                     log.info("got: ${uploadResults}")
                     rtn.success = uploadResults.success
                 } else {
