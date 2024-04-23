@@ -9,6 +9,7 @@ import com.morpheusdata.core.util.SyncUtils
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeCapacityInfo
 import com.morpheusdata.model.ComputeServer
+import com.morpheusdata.model.ComputeServerType
 import com.morpheusdata.model.ResourcePermission
 import com.morpheusdata.model.ServicePlan
 import com.morpheusdata.model.projection.ComputeServerIdentityProjection
@@ -20,12 +21,15 @@ import groovy.util.logging.Slf4j
 @Slf4j
 class VirtualMachineSync {
 
+	static final String UNMANAGED_SERVER_TYPE_CODE = 'xenserverUnmanaged'
+	static final String HOST_SERVER_TYPE_CODE = 'xenserverHypervisor'
+
     private Cloud cloud
     private XenserverPlugin plugin
     private MorpheusContext morpheusContext
     private CloudProvider cloudProvider
 
-    VirtualMachineSync(Cloud cloud, XenserverPlugin plugin, CloudProvider cloudProvider) {
+	VirtualMachineSync(Cloud cloud, XenserverPlugin plugin, CloudProvider cloudProvider) {
         this.cloud = cloud
         this.plugin = plugin
         this.morpheusContext = plugin.morpheusContext
@@ -53,9 +57,9 @@ class VirtualMachineSync {
             }
 
             if (listResults.success == true){
-                def domainRecords = morpheusContext.async.computeServer.listIdentityProjections(cloud.id, null)
-                def blackListedNames = domainRecords.filter { it.status == 'provisioning' }
-                        .map { it.name }.toList().blockingGet()
+                def domainRecords = morpheusContext.async.computeServer.listIdentityProjections(
+					new DataQuery().withFilter("zone.id", cloud.id).withFilter("computerServerType.code", "!=", HOST_SERVER_TYPE_CODE)
+				)
 
                 SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(domainRecords, listResults.vmList as Collection<Map>)
                 syncTask.addMatchFunction { ComputeServerIdentityProjection domainObject, Map cloudItem ->
@@ -67,7 +71,7 @@ class VirtualMachineSync {
                         return new SyncTask.UpdateItem<ComputeServer, Map>(existingItem: server, masterItem: matchItem.masterItem)
                     }
                 }.onAdd {itemsToAdd ->
-                    addMissingVirtualMachines(itemsToAdd, blackListedNames, usageLists, availablePlans, availablePlanPermissions)
+                    addMissingVirtualMachines(itemsToAdd, usageLists, availablePlans, availablePlanPermissions)
                 }.onUpdate { List<SyncTask.UpdateItem<ComputeServer, VM.Record>> updateItems ->
                     updateMatchedVirtualMachines(updateItems)
                 }.onDelete { removeItems ->
@@ -79,9 +83,9 @@ class VirtualMachineSync {
         }
     }
 
-    def addMissingVirtualMachines(List addList, List blackListedNames,Map usageLists, Collection<ServicePlan> availablePlans,
+    def addMissingVirtualMachines(List addList,Map usageLists, Collection<ServicePlan> availablePlans,
                                   Collection<ResourcePermission> availablePlanPermissions) {
-        log.debug("addMissingVirtualMachines ${cloud} ${addList?.size()} ${blackListedNames} ${usageLists}")
+        log.debug("addMissingVirtualMachines ${cloud} ${addList?.size()} ${usageLists}")
         ServicePlan servicePlan = morpheusContext.services.servicePlan.find(new DataQuery().withFilter("code","internal-custom-xen"))
 
         for (cloudItem in addList) {
@@ -109,9 +113,7 @@ class VirtualMachineSync {
     }
 
     private buildVmConfig(Map cloudItem, ServicePlan servicePlan, Collection<ServicePlan> availablePlans, Collection<ResourcePermission> availablePlanPermissions) {
-        def computeServerType = cloudProvider.computeServerTypes.find {
-            it.code == 'xenserverUnmanaged'
-        }
+        def computeServerType = cloudProvider.computeServerTypes.find { it.code == UNMANAGED_SERVER_TYPE_CODE }
 
         def vmConfig = [
                 account          : cloud.account,
@@ -227,6 +229,9 @@ class VirtualMachineSync {
 
     def removeMissingVirtualMachines(List<ComputeServerIdentityProjection> removeList) {
         log.debug("removeMissingVirtualMachines: ${cloud} ${removeList.size()}")
-        morpheusContext.async.computeServer.remove(removeList).blockingGet()
+		def removeItems = morpheusContext.services.computeServer.list(
+			new DataQuery().withFilter("id", "in", removeList.collect { it.id }).withFilter("computeServerType.code", UNMANAGED_SERVER_TYPE_CODE)
+		)
+		morpheusContext.async.computeServer.remove(removeItems).blockingGet()
     }
 }

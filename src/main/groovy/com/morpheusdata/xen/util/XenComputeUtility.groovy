@@ -6,6 +6,7 @@ import com.morpheusdata.core.util.MorpheusUtils
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.Datastore
+import com.morpheusdata.xen.XenserverPlugin
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
 import groovy.util.logging.Slf4j
@@ -47,12 +48,13 @@ class XenComputeUtility {
         getXenConnectionSession(config)
     }
 
-    static createServer(opts) {
+//    static createServer(opts) {
+    static createServer(Map authConfig, opts) {
         def rtn = [success: false]
         log.debug "createServer: ${opts}"
         try {
-            def config = getXenConnectionSession(opts.zone)
-            opts.connection = config.connection
+            def config = getXenConnectionSession(authConfig)
+//            opts.connection = config.connection
             def srRecord = SR.getByUuid(config.connection, opts.datastore.externalId)
             def template = VM.getByUuid(config.connection, opts.imageId)
             def newVm = template.createClone(config.connection, opts.name)
@@ -64,7 +66,6 @@ class XenComputeUtility {
             //set cpu
             if (opts.maxCpu) {
                 newVm.setVCPUsMax(config.connection, opts.maxCpu)
-
                 newVm.setVCPUsAtStartup(config.connection, opts.maxCpu)
             }
             //disk
@@ -77,7 +78,8 @@ class XenComputeUtility {
             }
             //add cloud init iso
             def cdResults = opts.cloudConfigFile ? insertCloudInitDisk(opts) : [success: false]
-            def rootVolume = opts.server.volumes.find { it.rootVolume }
+//            def rootVolume = opts.server.volumes.find { it.rootVolume }
+            def rootVolume = opts.server.volumes?.find{it.rootVolume == true}
             if (rootVolume) {
                 rootVolume.unitNumber = "0"
                 rootVolume.save()
@@ -112,16 +114,18 @@ class XenComputeUtility {
             //set network
             setVmNetwork(opts, newVm, opts.networkConfig)
             def rootVbd = findRootDrive(opts, newVm)
-            def rootVbdSize = rootVbd.getVirtualSize(config.connection)
+            log.info("RAZI :: rootVbd: ${rootVbd}")
+            def rootVbdSize = rootVbd.getVirtualSize(config.connection) //check with Dustin
+            log.info("RAZI :: rootVbdSize: ${rootVbdSize}")
             log.info("resizing root drive: ${rootVbd} with size: ${rootVbdSize} to: ${newStorage}")
             if (rootVbd && newStorage > rootVbdSize)
                 rootVbd.resize(config.connection, newStorage)
             rtn.success = true
             rtn.vm = newVm
-            rtn.vmRecord = rtn.vm.getRecord(opts.connection)
+            rtn.vmRecord = rtn.vm.getRecord(config.connection)
             rtn.vmId = rtn.vmRecord.uuid
-            rtn.volumes = getVmVolumes(opts, newVm)
-            rtn.networks = getVmNetworks(opts, newVm)
+            rtn.volumes = getVmVolumes(config, newVm)
+            rtn.networks = getVmNetworks(config, newVm)
             //find vif - change
             //def networkRecord = com.xensource.xenapi.Network.getByUuid(config.connection, opts.network.externalId)
             //def newVif = createVif(opts, newVm, networkRecord)
@@ -336,10 +340,10 @@ class XenComputeUtility {
         return rtn
     }
 
-    static stopVm(opts, vmId) {
+    static stopVm(Map authConfig, String vmId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(authConfig)
             def vm = VM.getByUuid(config.connection, vmId)
             if (vm.getPowerState(config.connection) == com.xensource.xenapi.Types.VmPowerState.RUNNING) {
                 vm.shutdown(config.connection)
@@ -711,9 +715,9 @@ class XenComputeUtility {
         return VIF.create(opts.connection, newVif)
     }
 
-    static listHosts(Map opts) {
+    static listHosts(Map authConfig) {
         def rtn = [success: false, hostList: []]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(authConfig)
         def hostList = com.xensource.xenapi.Host.getAllRecords(config.connection)
         hostList?.each { hostKey, hostValue ->
             def hostRow = [host: hostValue, uuid: hostValue.uuid]
@@ -835,11 +839,11 @@ class XenComputeUtility {
         return rtn
     }
 
-    static getVirtualMachine(opts, externalId) {
+    static getVirtualMachine(Map authConfig, externalId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
-            opts.connection = config.connection
+            def config = getXenConnectionSession(authConfig)
+//            opts.connection = config.connection
             def vmRecord = VM.getByUuid(config.connection, externalId)
             rtn.vmId = externalId
             rtn.vm = vmRecord
@@ -865,8 +869,8 @@ class XenComputeUtility {
                     }
                 }
             }
-            rtn.volumes = getVmVolumes(opts, vmRecord)
-            rtn.networks = getVmNetworks(opts, vmRecord)
+            rtn.volumes = getVmVolumes(config, vmRecord)
+            rtn.networks = getVmNetworks(config, vmRecord)
             rtn.success = true
         } catch (e) {
             log.error("getVirtualMachine error: ${e}")
@@ -1050,11 +1054,15 @@ class XenComputeUtility {
         return rtn
     }
 
-    static insertTemplate(opts) {
+    static insertTemplate(Map opts= [:]) {
+        log.info("Ray:: XCU:runworkload:insertTemplate opts: ${opts}")
         def rtn = [success: false]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(opts.authConfig)
+        log.info("Ray:: XCU:runworkload:insertTemplate config: ${config}")
         opts.connection = config.connection
+        log.info("Ray:: XCU:runworkload:insertTemplate opts1: ${opts}")
         def imageResults = insertContainerImage(opts)
+        log.info("Ray:: XCU:runworkload:insertTemplate imageResults: ${imageResults}")
         if (imageResults.success == true) {
             if (imageResults.found == true) {
                 rtn.success = true
@@ -1075,29 +1083,38 @@ class XenComputeUtility {
     }
 
     static insertContainerImage(opts) {
+        log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage opts1: ${opts}")
         def rtn = [success: false, found: false]
         def uploadTask
         try {
-            def currentList = listTemplates(opts)?.templateList
+            def currentList = listTemplates(opts.authConfig)?.templateList
+            log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage currentList: ${currentList}")
+            log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage opts.image: ${opts.image}")
             def image = opts.image
             def match = currentList.find { it.uuid == image.externalId || it.nameLabel == image.name }
+            log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage match: ${match}")
             if (!match) {
                 def insertOpts = [zone     : opts.zone, name: image.name, imageSrc: image.imageSrc, minDisk: image.minDisk, minRam: image.minRam,
                                   imageType: image.imageType, containerType: image.containerType, imageFile: image.imageFile, diskSize: image.imageSize, cloudFiles: image.cloudFiles,
                                   cachePath: opts.cachePath, datastore: opts.datastore, network: opts.network, connection: opts.connection]
+                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage insertOpts: ${insertOpts}")
 
                 //estimated disk size is wrong. we have to recalculate it
+                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage image.imageFile: ${image.imageFile}")
                 if (image.imageFile.name.endsWith('.tar.gz')) {
                     log.info("tar gz stream detected. recalculating size...")
                     def sourceStream = image.imageFile.inputStream
                     def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
                             new java.util.zip.GZIPInputStream(sourceStream))
                     def tarEntry = tarStream.getNextTarEntry()
+                    log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage tarEntry.getSize(): ${tarEntry.getSize()}")
                     insertOpts.diskSize = tarEntry.getSize()
                     log.info("Recalculated Template Size: ${insertOpts.diskSize}")
                     sourceStream.close()
                 }
+                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage insertOpts: ${insertOpts}")
                 def createResults = createVdi(insertOpts)
+                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage createResults: ${createResults}")
                 log.info("insertContainerImage: ${createResults}")
                 if (createResults.success == true) {
                     //upload it -
@@ -1113,6 +1130,7 @@ class XenComputeUtility {
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
                     def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
+                    log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage uploadResults: ${uploadResults}")
                     log.info("got: ${uploadResults}")
                     rtn.success = uploadResults.success
                 } else {
