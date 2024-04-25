@@ -12,6 +12,24 @@ import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.model.*
 import com.morpheusdata.model.provisioning.HostRequest
+import com.morpheusdata.model.BackupResult
+import com.morpheusdata.model.Cloud
+import com.morpheusdata.model.ComputeCapacityInfo
+import com.morpheusdata.model.ComputeServer
+import com.morpheusdata.model.ComputeServerInterface
+import com.morpheusdata.model.ComputeServerInterfaceType
+import com.morpheusdata.model.ComputeServerType
+import com.morpheusdata.model.ComputeTypeSet
+import com.morpheusdata.model.HostType
+import com.morpheusdata.model.Icon
+import com.morpheusdata.model.NetAddress
+import com.morpheusdata.model.OptionType
+import com.morpheusdata.model.PlatformType
+import com.morpheusdata.model.ServicePlan
+import com.morpheusdata.model.StorageVolumeType
+import com.morpheusdata.model.Workload
+import com.morpheusdata.model.WorkloadType
+import com.morpheusdata.model.provisioning.UsersConfiguration
 import com.morpheusdata.model.provisioning.WorkloadRequest
 import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
@@ -88,6 +106,27 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	Collection<OptionType> getOptionTypes() {
 		Collection<OptionType> options = []
+		options << new OptionType(
+				name: 'skip agent install',
+				code: 'provisionType.xenserver.noAgent',
+				category: 'provisionType.xenserver',
+				inputType: OptionType.InputType.CHECKBOX,
+				fieldName: 'noAgent',
+				fieldContext: 'config',
+				fieldCode: 'gomorpheus.optiontype.SkipAgentInstall',
+				fieldLabel: 'Skip Agent Install',
+				fieldGroup:'Advanced Options',
+				displayOrder: 4,
+				required: false,
+				enabled: true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'Skipping Agent installation will result in a lack of logging and guest operating system statistics. Automation scripts may also be adversely affected.',
+				defaultValue:null,
+				custom:false,
+				fieldClass:null
+		)
 		// TODO: create some option types for provisioning and add them to collection
 		return options
 	}
@@ -184,13 +223,21 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse<ProvisionResponse> runWorkload(Workload workload, WorkloadRequest workloadRequest, Map opts) {
 		log.debug "runWorkload: ${workload} ${workloadRequest} ${opts}"
-		ProvisionResponse provisionResponse = new ProvisionResponse(success: true)
+
+		log.info("Ray:: runworkload: ========================================================")
+		log.info("Ray:: runworkload: opts: ${opts}")
+		log.info("Ray:: runworkload: ========================================================")
+
+		ProvisionResponse provisionResponse = new ProvisionResponse(success: true, installAgent: false)
+		def rtn = [success:false]
+
 		ComputeServer server = workload.server
 		Cloud cloud = server.cloud
-		def virtualImage
 		def imageId
-		def imageFormat = 'vhd'
 		def sourceVmId
+		def virtualImage
+		def imageFormat = 'vhd'
+		def authConfigMap = plugin.getAuthConfig(cloud)
 
 		try {
 			def containerConfig = workload.getConfigMap()
@@ -230,74 +277,90 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							[
 									zone		: cloud,//rahul: image 2 times
 									image		: containerImage,
-									//cachePath	: virtualImageService.getLocalCachePath(),
 									name		: virtualImage.name,
 									datastore	: datastore,
 									network		: primaryNetwork,
-									osTypeCode	: virtualImage?.osType?.code,
-									image		: containerImage //rahul: image 2 times
+									osTypeCode	: virtualImage?.osType?.code
 							]
-					imageConfig.authConfig = plugin.getAuthConfig(cloud)
+
+					imageConfig.authConfig = authConfigMap
+					log.info("Ray:: runworkload: imageConfig: ${imageConfig}")
 					def imageResults = XenComputeUtility.insertTemplate(imageConfig)
+					log.info("Ray:: runworkload: imageResults: ${imageResults}")
 					if(imageResults.success == true) {
 						imageId = imageResults.imageId
 					}
 				}
 			}
-			if(opts.backupSetId){
+
+			log.info("Ray:: runworkload: opts.backupSetId1: ${opts.backupSetId}")
+			if(opts.backupSetId){ // first create backup then only we can test it...test it later...
 				//if this is a clone or restore, use the snapshot id as the image
-				//rahul: need to backup provider logic
-				//def snapshot = backupService.getSnapshotForBackupResult(opts.backupSetId, opts.cloneContainerId) // rahul: how to get the snapshot
-				//def snapshots = new XenserverBackupTypeProvider(plugin, morpheus).getSnapshotsForBackupResult(opts.backupSetId, opts.cloneContainerId)
-				def snapshot = plugin.morpheus.async.backup.backupResult.listByBackupSetIdAndContainerId(opts.backupSetId, opts.cloneContainerId).blockingFirst()
+				def snapshots = context.services.backup.backupResult.list(
+						new DataQuery().withFilter("backupSetId", opts.backupSetId.toLong())
+								.withFilter("containerId", opts.cloneContainerId))
+				def snapshot = snapshots.find{it.backupSetId == opts.backupSetId}
 				def snapshotId = snapshot?.snapshotId
-				//sourceVmId = snapshot?.vmId
+				sourceVmId = snapshot?.configMap?.vmId
 				if(snapshotId) {
-					log.info("creating server from snapshot: ${snapshotId}")
 					imageId = snapshotId
 				}
-				if(!network && (cloneContainer /*|| snapshot.containerConfig*/)) { // rahul snapshot.configMap
-					def cloneContainerConfig = cloneContainer?.getConfigProperty("") ?: snapshot.configMap // rahul:: what need to be used in place of -> cloneContainer?.getConfigProperties()
-					//log.info("Ray:: runworkload: cloneContainerConfig: ${cloneContainerConfig}")
-					//networkId = cloneContainerConfig.networkId
+
+				if(!network && (cloneContainer || snapshot.configMap)) {
+					def cloneContainerConfig = cloneContainer.configMap ?: snapshot.configMap
+					networkId = cloneContainerConfig.networkId
 					if (networkId) {
 						containerConfig.networkId = networkId
-						//workload.setConfigProperties(containerConfig)
-						//container.save(flush: true)
-						//workload = context.async.workload.save(workload)
+						containerConfig.each {
+							it -> workload.setConfigProperty(it.key, it.value)
+						}
+						workload = context.async.workload.save(workload)
 						network = context.async.network.get(networkId).blockingGet()
 					}
 				}
 			}
-
-			/*if(imageId) {
+			log.info("Ray:: runworkload: Going for imageid: ${imageId}")
+			if(imageId) {
 				opts.installAgent = virtualImage ? virtualImage.installAgent : true
-				//user config
-				def createdBy = getInstanceCreateUser(container.instance) // Rahul: how to get created by
 				def userGroups = workload.instance.userGroups?.toList() ?: []
+				log.info("Ray:: runworkload: userGroups: ${userGroups}")
+				log.info("Ray:: runworkload: userGroups.size(): ${userGroups.size()}")
 				if (workload.instance.userGroup && userGroups.contains(workload.instance.userGroup) == false) {
 					userGroups << workload.instance.userGroup
 				}
-				opts.userConfig = userGroupService.buildContainerUserGroups(opts.account, virtualImage, userGroups,
-						createdBy, opts)
-				opts.server.sshUsername = opts.userConfig.sshUsername
-				opts.server.sshPassword = opts.userConfig.sshPassword
-				opts.server.sourceImage = virtualImage
-				opts.server.serverOs = opts.server.serverOs ?: virtualImage.osType
-				opts.server.osType = (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform
-				def newType = findVmNodeZoneType(opts.server.zone.zoneType, opts.server.osType)
-				if(newType && opts.server.computeServerType != newType)
-					opts.server.computeServerType = newType
-				opts.server.save(flush:true)
-				def maxMemory = container.maxMemory ?: container.instance.plan.maxMemory
-				def maxCores = container.maxCores ?: container.instance.plan.maxCores
-				def maxStorage = getContainerRootSize(container)
-				def dataDisks = getContainerDataDiskList(container)
-				def createOpts = [account:opts.account, name:opts.server.name, maxMemory:maxMemory, maxStorage:maxStorage, maxCpu:maxCores,
-								  imageId:imageId, server:opts.server, zone:opts.zone, externalId:opts.server.externalId,
-								  networkType:config.networkType, datastore:datastore, network:network, dataDisks:dataDisks, platform:opts.server.osType]
-				createOpts.hostname = opts.server.getExternalHostname()
-				createOpts.domainName = opts.server.getExternalDomain()
+				server.sourceImage = virtualImage
+				server.serverOs = server.serverOs ?: virtualImage.osType
+				server.osType = (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform
+				def newType = this.findVmNodeServerTypeForCloud(cloud.id, server.osType, 'xenserver-provision-provider')
+				if(newType && server.computeServerType != newType) {
+					server.computeServerType = newType
+				}
+				context.async.computeServer.save(server)
+				def maxMemory = workload.maxMemory ?: workload.instance.plan.maxMemory
+				def maxCores = workload.maxCores ?: workload.instance.plan.maxCores
+				def maxStorage = this.getRootSize(workload)
+				def dataDisks = server?.volumes?.findAll{it.rootVolume == false}?.sort{it.id}
+				def createOpts =
+						[
+								account		: server.account,
+								name		: server.name,
+								maxMemory	: maxMemory,
+								maxStorage	: maxStorage,
+								maxCpu		: maxCores,
+								imageId		: imageId,
+								server		: server,
+								zone		: cloud,
+								externalId	: server.externalId,
+								networkType	: workload.getConfigProperty('networkType'),
+								datastore	: datastore,
+								network		: network,
+								dataDisks	: dataDisks,
+								platform	: server.osType,
+								noAgent		: workload.getConfigProperty('noAgent')
+						]
+				createOpts.authConfig = authConfigMap
+				createOpts.hostname = server.getExternalHostname()
+				createOpts.domainName = server.getExternalDomain()
 				createOpts.fqdn = createOpts.hostname
 				if(createOpts.domainName) {
 					createOpts.fqdn += '.' + createOpts.domainName
@@ -305,66 +368,73 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 				createOpts.networkConfig = opts.networkConfig
 				//cloud init config
-				createOpts.isoDatastore = XenComputeUtility.findIsoDatastore(opts)
-				if(opts.zone.distributedWorkers) {
-					//we need to use a worker upload
-					opts.worker = opts.zone.distributedWorkers.first()
-					opts.workerCommandService = commandService
-					def applianceServerUrl = applianceService.getApplianceUrl(opts.server.zone)
-					opts.cloudFileUrl = applianceServerUrl + (applianceServerUrl.endsWith('/') ? '' : '/') + 'api/cloud-config/' + opts.server.apiKey
+				createOpts.isoDatastore = findIsoDatastore(cloud.id)
+				log.info("Ray:: runworkload: createOpts1: ${createOpts}")
 
-				}
+				def userData
+				def networkData
+				def metadata
+				log.info("Ray:: runworkload: virtualImage?.isCloudInit: ${virtualImage?.isCloudInit}")
+				log.info("Ray:: runworkload: virtualImage?.isSysprep: ${virtualImage?.isSysprep}")
 				if(virtualImage?.isCloudInit) {
-					def cloudConfigOpts = buildCloudConfigOpts(opts.zone, opts.server, !opts.noAgent, [doPing:true, hostname:opts.server.getExternalHostname(),
-																									   hosts:opts.server.getExternalHostname(), disableCloudInit:true, timezone: containerConfig.timezone])
+					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null
 					opts.installAgent = opts.installAgent && (cloudConfigOpts.installAgent != true) && !opts.noAgent
-					morpheusComputeService.buildCloudNetworkConfig(createOpts.platform, virtualImage, cloudConfigOpts, createOpts.networkConfig)
-					createOpts.cloudConfigUser = morpheusComputeService.buildCloudUserData(opts.server.osType, opts.userConfig, cloudConfigOpts)
-					createOpts.cloudConfigMeta = morpheusComputeService.buildCloudMetaData(opts.server.osType, "morpheus-${opts.server.id}", opts.server.getExternalHostname(), cloudConfigOpts)
-					createOpts.cloudConfigNetwork = morpheusComputeService.buildCloudNetworkData(createOpts.platform, cloudConfigOpts)
-					opts.server.cloudConfigUser = createOpts.cloudConfigUser
-					opts.server.cloudConfigMeta = createOpts.cloudConfigMeta
-					opts.server.cloudConfigNetwork = createOpts.cloudConfigNetwork
-					opts.server.save(flush:true)
-					def cloudFileDiskName = 'morpheus_server_' + opts.server.id + '.iso'
+					createOpts.cloudConfigUser = workloadRequest?.cloudConfigUser ?: null
+					createOpts.cloudConfigMeta = workloadRequest?.cloudConfigMeta ?: null
+					createOpts.cloudConfigNetwork = workloadRequest?.cloudConfigNetwork ?: null
+					server.cloudConfigUser = createOpts.cloudConfigUser
+					server.cloudConfigMeta = createOpts.cloudConfigMeta
+					server.cloudConfigNetwork = createOpts.cloudConfigNetwork
+					context.async.computeServer.save(server)
+					def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
 					createOpts.cloudConfigFile = cloudFileDiskName
 				} else if(virtualImage?.isSysprep) {
-					def cloudConfigOpts = buildCloudConfigOpts(opts.zone, opts.server, !opts.noAgent, [doPing:true, hostname:opts.server.getExternalHostname(),
-																									   hosts:opts.server.getExternalHostname(), disableCloudInit:true, timezone: containerConfig.timezone])
+
+					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null // Ask: how to get buildCloudConfigOpts
 					opts.installAgent = opts.installAgent && (cloudConfigOpts.installAgent != true) && !opts.noAgent
-					morpheusComputeService.buildCloudNetworkConfig(createOpts.platform, virtualImage, cloudConfigOpts, createOpts.networkConfig)
-					createOpts.cloudConfigUser = morpheusComputeService.buildCloudUserData(opts.server.osType, opts.userConfig, cloudConfigOpts)
-					opts.server.cloudConfigUser = createOpts.cloudConfigUser
-					opts.server.save(flush:true)
-					def cloudFileDiskName = 'morpheus_server_' + opts.server.id + '.iso'
+					createOpts.cloudConfigUser = workloadRequest?.cloudConfigUser ?: null // Ask: how to get buildCloudUserData
+					server.cloudConfigUser = createOpts.cloudConfigUser
+					context.async.computeServer.save(server)
+					def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
+					log.info("Ray:: runworkload: cloudFileDiskName: ${cloudFileDiskName}")
 					createOpts.cloudConfigFile = cloudFileDiskName
 				} else {
-					opts.createUserList = opts.userConfig.createUsers
+					log.info("Ray:: runworkload: opts.userConfig111: ${opts.userConfig}")
+					//opts.createUserList = opts.userConfig.createUsers
 				}
-				log.info("Creating XenServer VM: [Zone: {}, VM Name: {}, account: {}",createOpts.zone.name,createOpts.name,createOpts.account.name)
+				userData = createOpts.cloudConfigUser
+				metadata = createOpts.cloudConfigMeta
+				networkData = createOpts.cloudConfigNetwork
 				log.debug("Creating VM on Xen Server Additional Details: ${createOpts}")
+				def cloudIsoOutputStream = context.services.provision.buildIsoOutputStream(
+						virtualImage?.isSysprep, PlatformType.valueOf(createOpts.platform), metadata, userData, networkData)
 				def createResults
+				log.info("Ray:: runworkload: sourceVmId11: ${sourceVmId}")
 				if(sourceVmId) {
 					createOpts.sourceVmId = sourceVmId
-					createResults = XenComputeUtility.cloneServer(createOpts)
+					createResults = XenComputeUtility.cloneServer(createOpts, cloudIsoOutputStream)
 				} else {
-					createResults = XenComputeUtility.createServer(createOpts)
+					log.info("Ray:: runworkload: sourceVmId11 else:")
+					createResults = XenComputeUtility.createServer(createOpts, cloudIsoOutputStream)
 				}
-				log.info("Create XenServer VM Results: ${createResults}")
+				log.debug("Create XenServer VM Results: ${createResults}")
+				log.info("Ray:: runworkload: createResults: ${createResults}")
 				if(createResults.success == true && createResults.vmId) {
-					opts.server.externalId = createResults.vmId
-					opts.server.save(flush:true)
-					setVolumeInfo(opts.server.volumes, createResults.volumes, opts.zone)
-					opts.server.save(flush:true)
-					def startResults = XenComputeUtility.startVm(opts, opts.server.externalId)
+					server.externalId = createResults.vmId
+					provisionResponse.externalId = server.externalId
+					context.async.computeServer.save(server)
+					setVolumeInfo(server.volumes, createResults.volumes) // Ask:
+					context.async.computeServer.save(server)
+					def startResults = XenComputeUtility.startVm(authConfigMap, server.externalId)
+					log.info("Ray:: runworkload: startResults: ${startResults}")
 					log.debug("start: ${startResults.success}")
 					if(startResults.success == true) {
 						if(startResults.error == true) {
-							opts.server.statusMessage = 'Failed to start server'
+							server.statusMessage = 'Failed to start server'
 							//ouch - delet it?
 						} else {
 							//good to go
-							def serverDetail = checkServerReady([zone:opts.zone, externalId:opts.server.externalId])
+							def serverDetail = checkServerReady([authConfig: authConfigMap, externalId:server.externalId])
 							log.debug("serverDetail: ${serverDetail}")
 							if(serverDetail.success == true) {
 								def privateIp = serverDetail.ipAddress
@@ -373,76 +443,92 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								//save off interfaces
 								//opts.network = applyComputeServerNetworkIp(opts.server, privateIp, publicIp, hostname, poolId, 0)
 								serverDetail.ipAddresses.each { interfaceName, data ->
-									ComputeServerInterface netInterface = opts.server.interfaces.find{it.name == interfaceName}
+									ComputeServerInterface netInterface = server.interfaces.find{it.name == interfaceName}
 									if(netInterface) {
 										if(data.ipAddress) {
 											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-											if(!address.validate()){
-												log.debug("NetAddress Errors: ${address.errors}")
+											if(!NetworkUtility.validateIpAddr(address.address)){
+												log.debug("NetAddress Errors: ${address}")
 											}
-											netInterface.addToAddresses(address)
+											netInterface.addresses << address // use
 										}
 										if(data.ipv6Address) {
 											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-											if(!address.validate()){
-												log.debug("NetAddress Errors: ${address.errors}")
+											if(!NetworkUtility.validateIpAddr(address.address)){
+												log.debug("NetAddress Errors: ${address}")
 											}
-											netInterface.addToAddresses(address)
+											netInterface.addresses << address
 										}
 										netInterface.publicIpAddress = data.ipAddress
 										netInterface.publicIpv6Address = data.ipv6Address
-										netInterface.save(flush:true)
+										//netInterface.save(flush:true)
+										context.async.computeServer.computeServerInterface.save([network]).blockingGet()
 									}
 								}
 								if(privateIp) {
 									def newInterface = false
-									opts.server.internalIp = privateIp
-									opts.server.externalIp = publicIp
-									opts.server.sshHost = privateIp
+									server.internalIp = privateIp
+									server.externalIp = publicIp
+									server.sshHost = privateIp
 								}
 								//update external info
-								setNetworkInfo(opts.server.interfaces, serverDetail.networks)
-								opts.server.osDevice = '/dev/vda'
-								opts.server.dataDevice = '/dev/vda'
-								opts.server.lvmEnabled = false
-								opts.server.sshHost = privateIp ?: publicIp
-								opts.server.managed = true
-								opts.server.save(flush:true, failOnError:true)
-								opts.server.capacityInfo = new ComputeCapacityInfo(server:opts.server, maxCores:1,
-										maxMemory:container.getConfigProperty('maxMemory').toLong(), maxStorage:container.getConfigProperty('maxStorage').toLong())
-								opts.server.capacityInfo.save()
-								opts.server.status = 'provisioned'
-								opts.server.save(flush:true)
-								instanceService.updateInstance(container.instance)
+								setNetworkInfo(server.interfaces, serverDetail.networks)
+								server.osDevice = '/dev/vda'
+								server.dataDevice = '/dev/vda'
+								server.lvmEnabled = false
+								server.sshHost = privateIp ?: publicIp
+								server.managed = true
+								/*server.save(flush:true, failOnError:true)*/ // Ask:
+								context.async.computeServer.save(server)
+								server.capacityInfo = new ComputeCapacityInfo(
+										server: server, maxCores: 1,
+										maxMemory: workload.getConfigProperty('maxMemory').toLong(),
+										maxStorage: workload.getConfigProperty('maxStorage').toLong()
+								)
+								//server.capacityInfo.save()
+								server.status = 'provisioned'
+								//server.save(flush:true) // Ask:
+								context.async.computeServer.save(server)
+								//instanceService.updateInstance(container.instance) // Ask:
+								context.async.instance.save(workload.instance)
 								rtn.success = true
 								//ok - done - delete cloud disk
 								//XenComputeUtility.deleteImage(opts, cloudFileResults.imageId)
 							} else {
-								opts.server.statusMessage = 'Failed to load server details'
+								server.statusMessage = 'Failed to load server details'
 							}
+
 						}
 					} else {
-						opts.server.statusMessage = 'Failed to start server'
+						server.statusMessage = 'Failed to start server'
 					}
 				} else {
-					setProvisionFailed(server, container, createResults.msg ?: 'An unknown error occurred while making an API request to Xen.')
-					rtn.msg = createResults.msg ?: 'An unknown error occurred while making an API request to Xen.'
+					provisionResponse.setError('An unknown error occurred while making an API request to Xen.')
+					provisionResponse.success = false
+					//setProvisionFailed(server, container, createResults.msg ?: 'An unknown error occurred while making an API request to Xen.')
+					//rtn.msg = createResults.msg ?: 'An unknown error occurred while making an API request to Xen.'
 				}
 			} else {
-				opts.server.statusMessage = 'Image not found'
-			}*/
+				server.statusMessage = 'Image not found'
+			}
+			provisionResponse.noAgent = opts.noAgent
+			provisionResponse.installAgent = opts.installAgent
+
+			return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
 
 		} catch (e) {
 			log.error("initializeServer error:${e}", e)
 			log.error("Ray:: XCU:runworkload: exception: ${e.getMessage()}")
+			provisionResponse.setError(e.message)
+			return new ServiceResponse(success: false, msg: e.message, error: e.message, data: provisionResponse)
 		}
 		// TODO: this is where you will implement the work to create the workload in your cloud environment
-		return new ServiceResponse<ProvisionResponse>(
+		/*return new ServiceResponse<ProvisionResponse>(
 			true,
 			null, // no message
 			null, // no errors
 			new ProvisionResponse(success:true)
-		)
+		)*/
 	}
 
 	/**
@@ -1163,71 +1249,71 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		return getServerDetail
 	}
 
-	def checkServerReady(opts) {
-		def rtn = [success:false]
-		try {
-			def pending = true
-			def attempts = 0
-			while(pending) {
-				sleep(1000l * 5l)
-				def serverDetail = getServerDetail(opts)
-				log.info("RAZI :: serverDetail : checkServerReady: ${serverDetail}")
-				log.debug("serverDetail: ${serverDetail}")
-				if(serverDetail.success == true && serverDetail.vmRecord && serverDetail.ipAddress) {
-					if(serverDetail.ipAddress) {
-						rtn.success = true
-						rtn.ipAddress = serverDetail.ipAddress
-						if(serverDetail.vmNetworks) {
-							rtn.ipAddresses = [:]
-							serverDetail.vmNetworks.each {key, value ->
-								def keyInfo = key.tokenize('/')
-								def interfaceName = "eth${keyInfo[0]}"
-								rtn.ipAddresses[interfaceName] = rtn.ipAddresses[interfaceName] ?: [:]
-								if(keyInfo[1] == 'ip') {
-									rtn.ipAddresses[interfaceName].ipAddress = value
-									if(interfaceName == 'eth0') {
-										rtn.ipAddress = value
-									}
-								} else { //ipv6
-									rtn.ipAddresses[interfaceName].ipv6Address = value
-								}
-							}
-						}
-						rtn.vmRecord = serverDetail.vmRecord
-						rtn.vm = serverDetail.vm
-						rtn.vmId = serverDetail.vmId
-						rtn.vmDetails = serverDetail.vmDetails
-						rtn.volumes = serverDetail.volumes
-						rtn.networks = serverDetail.networks
-						pending = false
-//					} else {
-//						ComputeServer.withNewSession { session ->
-//							def serverInfo = ComputeServer.executeQuery("select cs.internalIp from ComputeServer cs where cs.id = :serverId", [serverId: opts.server.id])
-//							def serverIp = serverInfo[0]
-//							log.info("check server loading server: ip: ${serverIp}")
-//							if(serverIp) {
-//								rtn.success = true
-//								rtn.ipAddress = serverIp
-//								rtn.vmRecord = serverDetail.vmRecord
-//								rtn.vm = serverDetail.vm
-//								rtn.vmId = serverDetail.vmId
-//								rtn.vmDetails = serverDetail.vmDetails
-//								rtn.volumes = serverDetail.volumes
-//								rtn.networks = serverDetail.networks
-//								pending = false
+//	def checkServerReady(opts) {
+//		def rtn = [success:false]
+//		try {
+//			def pending = true
+//			def attempts = 0
+//			while(pending) {
+//				sleep(1000l * 5l)
+//				def serverDetail = getServerDetail(opts)
+//				log.info("RAZI :: serverDetail : checkServerReady: ${serverDetail}")
+//				log.debug("serverDetail: ${serverDetail}")
+//				if(serverDetail.success == true && serverDetail.vmRecord && serverDetail.ipAddress) {
+//					if(serverDetail.ipAddress) {
+//						rtn.success = true
+//						rtn.ipAddress = serverDetail.ipAddress
+//						if(serverDetail.vmNetworks) {
+//							rtn.ipAddresses = [:]
+//							serverDetail.vmNetworks.each {key, value ->
+//								def keyInfo = key.tokenize('/')
+//								def interfaceName = "eth${keyInfo[0]}"
+//								rtn.ipAddresses[interfaceName] = rtn.ipAddresses[interfaceName] ?: [:]
+//								if(keyInfo[1] == 'ip') {
+//									rtn.ipAddresses[interfaceName].ipAddress = value
+//									if(interfaceName == 'eth0') {
+//										rtn.ipAddress = value
+//									}
+//								} else { //ipv6
+//									rtn.ipAddresses[interfaceName].ipv6Address = value
+//								}
 //							}
 //						}
-					}
-				}
-				attempts ++
-				if(attempts > 300)
-					pending = false
-			}
-		} catch(e) {
-			log.error("An Exception in checkServerReady method: ${e.message}",e)
-		}
-		return rtn
-	}
+//						rtn.vmRecord = serverDetail.vmRecord
+//						rtn.vm = serverDetail.vm
+//						rtn.vmId = serverDetail.vmId
+//						rtn.vmDetails = serverDetail.vmDetails
+//						rtn.volumes = serverDetail.volumes
+//						rtn.networks = serverDetail.networks
+//						pending = false
+////					} else {
+////						ComputeServer.withNewSession { session ->
+////							def serverInfo = ComputeServer.executeQuery("select cs.internalIp from ComputeServer cs where cs.id = :serverId", [serverId: opts.server.id])
+////							def serverIp = serverInfo[0]
+////							log.info("check server loading server: ip: ${serverIp}")
+////							if(serverIp) {
+////								rtn.success = true
+////								rtn.ipAddress = serverIp
+////								rtn.vmRecord = serverDetail.vmRecord
+////								rtn.vm = serverDetail.vm
+////								rtn.vmId = serverDetail.vmId
+////								rtn.vmDetails = serverDetail.vmDetails
+////								rtn.volumes = serverDetail.volumes
+////								rtn.networks = serverDetail.networks
+////								pending = false
+////							}
+////						}
+//					}
+//				}
+//				attempts ++
+//				if(attempts > 300)
+//					pending = false
+//			}
+//		} catch(e) {
+//			log.error("An Exception in checkServerReady method: ${e.message}",e)
+//		}
+//		return rtn
+//	}
 
 	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
 		log.info("RAZI :: serverInterfaces: ${serverInterfaces}, externalNetworks: ${externalNetworks}")
@@ -1346,4 +1432,174 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	Boolean createDefaultInstanceType() {
 		return false
 	}
+
+	def setVolumeInfo(serverVolumes, externalVolumes) {
+		log.debug("volumes: ${externalVolumes}")
+		try {
+			def maxCount = externalVolumes?.size()
+			serverVolumes.sort{it.displayOrder}.eachWithIndex { volume, index ->
+				if(index < maxCount) {
+					if(volume.externalId) {
+						//check for changes?
+						log.debug("volume already assigned: ${volume.externalId}")
+					} else if(volume.internalId) {
+						externalVolumes.each { externalVolume ->
+							if(externalVolume.uuid == volume.internalId) {
+								volume.externalId = "${externalVolume.deviceIndex}"
+								volume.unitNumber = "${externalVolume.deviceIndex}"
+								volume.displayOrder = externalVolume.deviceIndex?.toLong()
+								/*volume.save(flush: true)*/ // Ask:
+								context.async.storageVolume.save(volume).blockingGet()
+							}
+						}
+					} else {
+						def unitFound = false
+						def volumeOrder = volume.displayOrder ? "${volume.displayOrder}" : null
+						def volumeUnit = volume.unitNumber ? "${volume.unitNumber}" : null
+						log.debug("finding volume: ${volume.id} - ${volumeOrder} - ${volumeUnit}")
+						externalVolumes.each { externalVolume ->
+							if(unitFound == false && volumeUnit == externalVolume.deviceIndex.toString()) {
+								log.debug("found matching unit disk: ${volume.displayOrder}")
+								unitFound = true
+								volume.externalId = "${externalVolume.deviceIndex}"
+								volume.internalId = externalVolume.uuid
+								//volume.save() Ask:
+								context.async.storageVolume.save(volume).blockingGet()
+							}
+						}
+						if(unitFound != true) {
+							externalVolumes.each { externalVolume ->
+								if(unitFound == false && volumeOrder == externalVolume.deviceIndex) {
+									log.debug("found matching order disk: ${volume.displayOrder}")
+									unitFound = true
+									volume.externalId = "${externalVolume.deviceIndex}"
+									volume.internalId = externalVolume.uuid
+									volume.unitNumber = "${externalVolume.deviceIndex}"
+									//volume.save()
+									context.async.storageVolume.save(volume).blockingGet()
+								}
+							}
+						}
+						if(unitFound != true) {
+							def sizeRange = [min:(volume.maxStorage - ComputeUtility.ONE_GIGABYTE), max:(volume.maxStorage + ComputeUtility.ONE_GIGABYTE)]
+							externalVolumes.each { externalVolume ->
+								def sizeCheck = externalVolume.size
+								def externalKey = externalVolume.deviceIndex
+								log.debug("volume size check - ${externalKey}: ${sizeCheck} between ${sizeRange.min} and ${sizeRange.max}")
+								if(unitFound != true && sizeCheck > sizeRange.min && sizeCheck < sizeRange.max) {
+									def dupeCheck = serverVolumes.find{it.externalId == externalKey}
+									if(!dupeCheck) {
+										//assign a match to the volume
+										unitFound = true
+										volume.externalId = "${externalVolume.deviceIndex}"
+										volume.internalId = externalVolume.uuid
+										volume.unitNumber = "${externalVolume.deviceIndex}"
+										//volume.save()
+										context.async.storageVolume.save(volume).blockingGet()
+									} else {
+										log.debug("found dupe volume")
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		} catch(e) {
+			log.error("setVolumeInfo error: ${e}", e)
+		}
+	}
+
+	def checkServerReady(opts) {
+		def rtn = [success:false]
+		try {
+			def pending = true
+			def attempts = 0
+			while(pending) {
+				sleep(1000l * 5l)
+				def serverDetail
+				try {
+					serverDetail = getServerDetail(opts)
+				} catch(ex) {
+					log.warn('An error occurred trying to get VM Details while waiting for server to be ready. This could be because the vm is not yet ready and can safely be ignored. ' +
+							'We will automatically retry. Any detailed exceptions will be logged at debug level.')
+					log.debug("Errors from get server detail: ${ex.message}", ex)
+				}
+				log.info("RAZI :: serverDetail : checkServerReady: ${serverDetail}")
+				log.debug("serverDetail: ${serverDetail}")
+				if(serverDetail?.success == true && serverDetail?.vmRecord && serverDetail?.ipAddress) {
+					if(serverDetail.ipAddress) {
+						rtn.success = true
+						rtn.ipAddress = serverDetail.ipAddress
+						if(serverDetail.vmNetworks) {
+							rtn.ipAddresses = [:]
+							serverDetail.vmNetworks.each {key, value ->
+								def keyInfo = key.tokenize('/')
+								def interfaceName = "eth${keyInfo[0]}"
+								rtn.ipAddresses[interfaceName] = rtn.ipAddresses[interfaceName] ?: [:]
+								if(keyInfo[1] == 'ip') {
+									rtn.ipAddresses[interfaceName].ipAddress = value
+									if(interfaceName == 'eth0') {
+										rtn.ipAddress = value
+									}
+								} else { //ipv6
+									rtn.ipAddresses[interfaceName].ipv6Address = value
+								}
+							}
+						}
+						rtn.vmRecord = serverDetail.vmRecord
+						rtn.vm = serverDetail.vm
+						rtn.vmId = serverDetail.vmId
+						rtn.vmDetails = serverDetail.vmDetails
+						rtn.volumes = serverDetail.volumes
+						rtn.networks = serverDetail.networks
+						pending = false
+					}
+				}
+				attempts ++
+				if(attempts > 300)
+					pending = false
+
+			}
+		} catch(e) {
+			log.error("An Exception in checkServerReady: ${e.message}",e)
+		}
+		return rtn
+	}
+
+//	def getServerDetail(opts) {
+//		//credentials
+//		//zoneService.loadFullZone(opts.zone)
+//		return XenComputeUtility.getVirtualMachine(opts, opts.externalId)
+//	}
+
+//	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
+//		log.info("networks: ${externalNetworks}")
+//		try {
+//			if(externalNetworks?.size() > 0) {
+//				serverInterfaces?.eachWithIndex { networkInterface, index ->
+//					if(networkInterface.externalId) {
+//						//check for changes?
+//					} else {
+//						def matchNetwork = externalNetworks.find{networkInterface.internalId == it.uuid}
+//						if(!matchNetwork) {
+//							def displayOrder = "${networkInterface.displayOrder}"
+//							matchNetwork = externalNetworks.find{displayOrder == it.deviceIndex}
+//						}
+//						if(matchNetwork) {
+//							networkInterface.externalId = "${matchNetwork.deviceIndex}"
+//							networkInterface.internalId = "${matchNetwork.uuid}"
+//							if(networkInterface.type == null) {
+//								networkInterface.type = new ComputeServerInterfaceType('code', 'xenNetwork')
+//							}
+//							//networkInterface.save()
+//							context.async.computeServer.computeServerInterface.save(networkInterface)
+//						}
+//					}
+//				}
+//			}
+//		} catch(e) {
+//			log.error("setNetworkInfo error: ${e}", e)
+//		}
+//	}
 }

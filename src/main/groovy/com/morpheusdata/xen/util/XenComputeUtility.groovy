@@ -4,11 +4,14 @@ import com.bertramlabs.plugins.karman.CloudFile
 import com.bertramlabs.plugins.karman.StorageProvider
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.data.DataQuery
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.MorpheusUtils
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.Datastore
 import com.morpheusdata.xen.XenserverPlugin
+import com.morpheusdata.model.NetworkProxy
+import com.morpheusdata.response.ServiceResponse
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
 import groovy.util.logging.Slf4j
@@ -24,6 +27,7 @@ import org.apache.http.conn.ssl.SSLConnectionSocketFactory
 import org.apache.http.conn.ssl.SSLContextBuilder
 import org.apache.http.conn.ssl.TrustStrategy
 import org.apache.http.conn.ssl.X509HostnameVerifier
+import org.apache.http.entity.ContentType
 import org.apache.http.entity.InputStreamEntity
 import org.apache.http.impl.client.BasicCredentialsProvider
 import org.apache.http.impl.client.HttpClients
@@ -50,11 +54,108 @@ class XenComputeUtility {
         getXenConnectionSession(config)
     }
 
-    static cloneServer(opts) {
+    static createServer(opts, cloudIsoOutputStream) {
+        def rtn = [success: false]
+        log.debug "createServer: ${opts}"
+        try {
+            def config = getXenConnectionSession(opts.authConfig)
+            opts.connection = config.connection
+            def srRecord = SR.getByUuid(config.connection, opts.datastore.externalId)
+            def template = VM.getByUuid(config.connection, opts.imageId)
+            def newVm = template.createClone(config.connection, opts.name)
+            newVm.setIsATemplate(config.connection, false)
+            //set ram
+            def newMemory = (opts.maxMemory).toLong()
+            def newStorage = (opts.maxStorage).toLong()
+            newVm.setMemoryLimits(config.connection, newMemory, newMemory, newMemory, newMemory)
+            //set cpu
+            if (opts.maxCpu) {
+                newVm.setVCPUsMax(config.connection, opts.maxCpu)
+
+                newVm.setVCPUsAtStartup(config.connection, opts.maxCpu)
+            }
+            //disk
+            def newConfig = newVm.getOtherConfig(config.connection)
+            def newDisks = newConfig.get('disks')
+            if (newDisks) {
+                newDisks = newDisks.replaceAll('sr=\"\"', 'sr=\"' + srRecord.getUuid(config.connection) + '\"')
+                newConfig.put('disks', newDisks)
+                newVm.setOtherConfig(config.connection, newConfig)
+            }
+            //add cloud init iso
+            def cdResults = opts.cloudConfigFile ? insertCloudInitDisk(opts, cloudIsoOutputStream) : [success: false]
+            def rootVolume = opts.server.volumes.find { it.rootVolume }
+            if (rootVolume) {
+                rootVolume.unitNumber = "0"
+                rootVolume.save()
+            }
+            def lastDiskIndex = 0
+            if (cdResults.success == true) {
+                lastDiskIndex = createCdromVbd(opts, newVm, cdResults.vdi, (lastDiskIndex + 1).toString()).deviceId.toInteger()
+            }
+            //add optional data disk
+            if (opts.dataDisks?.size() > 0) {
+                opts.dataDisks?.eachWithIndex { disk, diskIndex ->
+                    def dataSrRecord = SR.getByUuid(config.connection, disk.datastore.externalId)
+                    def dataVdi = createVdi(opts, dataSrRecord, disk.maxStorage)
+                    def dataVbd = createVbd(opts, newVm, dataVdi, (lastDiskIndex + 1).toString())
+                    lastDiskIndex = dataVbd.deviceId?.toInteger() ?: lastDiskIndex + 1
+                    if (dataVbd.success == true) {
+                        dataVbd.vbd.setUnpluggable(opts.connection, true)
+                        def deviceId = dataVbd.vbd.getUserdevice(opts.connection)
+                        if (deviceId) {
+                            disk.unitNumber = "${deviceId}"
+                        } else {
+                            disk.unitNumber = lastDiskIndex
+                        }
+                        disk.save()
+                    }
+                }
+            } else if (opts.diskSize) {
+                def dataVdi = createVdi(opts, srRecord, opts.diskSize)
+                def dataVbd = createVbd(opts, newVm, dataVdi, (lastDiskIndex + 1).toString())
+                lastDiskIndex = dataVbd.deviceId.toInteger()
+            }
+            //set network
+            setVmNetwork(opts, newVm, opts.networkConfig)
+            def rootVbd = findRootDrive(opts, newVm)
+            def rootVbdSize = rootVbd.getVirtualSize(config.connection)
+            log.info("resizing root drive: ${rootVbd} with size: ${rootVbdSize} to: ${newStorage}")
+            if (rootVbd && newStorage > rootVbdSize)
+                rootVbd.resize(config.connection, newStorage)
+            rtn.success = true
+            rtn.vm = newVm
+            rtn.vmRecord = rtn.vm.getRecord(opts.connection)
+            rtn.vmId = rtn.vmRecord.uuid
+            rtn.volumes = getVmVolumes(opts, newVm)
+            rtn.networks = getVmNetworks(opts, newVm)
+            //find vif - change
+            //def networkRecord = com.xensource.xenapi.Network.getByUuid(config.connection, opts.network.externalId)
+            //def newVif = createVif(opts, newVm, networkRecord)
+            //create vbd
+            //def newVbd = createVbd(opts, newVm, opts.vdi)
+            /*def newConfig = newVm.getOtherConfig(config.connection)
+            def newDisks = newConfig.get('disks')
+            if(newDisks) {
+                newDisks = newDisks.replaceAll('sr=\"\"', 'sr=\"' + opts.srRecord.getUuid(config.connection) + '\"')
+              newConfig.put('disks', newDisks)
+              newVm.setOtherConfig(config.connection, newConfig)
+            }
+            //pvargs
+            def pvArgs = newVm.getPVArgs(config.connection)
+            pvArgs += '-- quiet console=hvc0'
+            newVm.setPVArgs(opts.connection, pvArgs)*/
+        } catch (e) {
+            log.error("createServer error: ${e}", e)
+        }
+        return rtn
+    }
+
+    static cloneServer(opts, cloudIsoOutputStream) {
         def rtn = [success: false]
         log.info "cloneServer: ${opts}"
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts.authConfig)
             opts.connection = config.connection
             def srRecord = SR.getByUuid(config.connection, opts.datastore.externalId)
             def template = VM.getByUuid(config.connection, opts.imageId)
@@ -67,7 +168,7 @@ class XenComputeUtility {
             }
             //need to shut down source vm
             if (sourceVm) {
-                stopVm(opts, sourceVmId)
+                stopVm(opts.authConfig, sourceVmId)
             }
             def newVm = template.createClone(config.connection, opts.name)
             newVm.setIsATemplate(config.connection, false)
@@ -81,7 +182,7 @@ class XenComputeUtility {
             }
             def cdrom = newVm.getVBDs(config.connection).find { vbd -> vbd.getType(config.connection) == Types.VbdType.CD }
             if (cdrom) {
-                def cdResults = opts.cloudConfigFile ? insertCloudInitDisk(opts) : [success: false]
+                def cdResults = opts.cloudConfigFile ? insertCloudInitDisk(opts, cloudIsoOutputStream) : [success: false]
                 if (cdResults.success == true) {
                     cdrom.eject(config.connection)
                     cdrom.insert(config.connection, cdResults.vdi)
@@ -94,7 +195,7 @@ class XenComputeUtility {
             if (sourceVm) {
                 //restart the source vm
                 log.info "startng source VM ${sourceVmId}"
-                startVm(opts, sourceVmId)
+                startVm(opts.authConfig, sourceVmId)
             }
             //results
             rtn.success = true
@@ -1017,6 +1118,7 @@ class XenComputeUtility {
                         connection      :opts.connection
                 ]
 
+
                 //estimated disk size is wrong. we have to recalculate it
                 if (image.imageFile.name.endsWith('.tar.gz')) {
                     log.info("tar gz stream detected. recalculating size...")
@@ -1031,11 +1133,12 @@ class XenComputeUtility {
                 log.info("RAZI :: insertOpts : after sourceStream.close(): ${insertOpts}")
                 def createResults = createVdi(insertOpts)
                 log.info("RAZI :: createResults createVdi: ${createResults}")
+
                 if (createResults.success == true) {
                     //upload it -
                     log.info("RAZI :: opts.datastore.externalId : if (createResults.success == true): ${opts.datastore.externalId}")
                     def srRecord = SR.getByUuid(opts.connection, opts.datastore.externalId)
-                    def tgtUrl = getXenApiUrl(opts.zone) + '/import_raw_vdi?vdi=' + createResults.vdiId + '&format=vhd'
+                    def tgtUrl = getXenApiUrl(opts.zone, true) + '/import_raw_vdi?vdi=' + createResults.vdiId + '&format=vhd'
                     rtn.vdiId = createResults.vdiId
                     rtn.vdi = createResults.vdi
                     rtn.srRecord = srRecord
@@ -1048,10 +1151,11 @@ class XenComputeUtility {
                     log.info("RAZI :: insertContainerImage Import URL: ${tgtUrl}")
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
-//                    def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
-//                    log.info("RAZI :: uploadResults: ${uploadResults}")
-//                    rtn.success = uploadResults.success
-                    rtn.success = true
+                    def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
+                    log.info("RAZI :: uploadResults: ${uploadResults}")
+                    rtn.success = uploadResults.success
+//                    rtn.success = true
+
                 } else {
                     rtn.msg = createResults.msg ?: createResults.error
                 }
@@ -1077,18 +1181,14 @@ class XenComputeUtility {
             def isoPbd = pbdList.first()
             def pbdRecord = isoPbd.getRecord(opts.connection)
             def deviceConfig = pbdRecord.deviceConfig
-            log.info("RAZI :: deviceConfig : insertCloudInitDisk: ${deviceConfig}")
-            def isoOutput = cloudIsoOutputStream.toByteArray()
-            log.info("RAZI :: isoOutput : insertCloudInitDisk: ${isoOutput}")
-            log.info("Preparing to Upload ISO Disk to Datastore: ${isoDatastore.name} - with deviceConfig: ${deviceConfig.dump()} ${deviceConfig['type']}")
 
+            log.info("Preparing to Upload ISO Disk to Datastore: ${isoDatastore.name} - with deviceConfig: ${deviceConfig.dump()} ${deviceConfig['type']}")
             if (deviceConfig['type'] == 'nfs_iso') {
                 def locationArgs = deviceConfig['location'].tokenize(':')
                 log.info("Looking for nfs: ${locationArgs[0]}")
                 def provider = StorageProvider.create(provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1])
                 def iso = provider['/'][opts.cloudConfigFile]
-                log.info("RAZI :: iso : if (deviceConfig['type'] == 'nfs_iso'): ${iso}")
-                iso.setBytes(isoOutput)
+                iso.setBytes(cloudIsoOutputStream)
                 iso.save()
 
             } else {
@@ -1100,14 +1200,13 @@ class XenComputeUtility {
                     def secret = com.xensource.xenapi.Secret.getByUuid(opts.connection, deviceSecret)
                     devicePassword = secret.getValue(opts.connection)
                 }
-                log.info("Looking for cifs: ${deviceLocations[0]}")
+
+                log.debug("Looking for cifs: ${deviceLocations[0]}")
                 def provider = StorageProvider.create(provider: 'cifs', host: deviceLocations[0], username: deviceConfig['username'], password: devicePassword)
                 def iso = provider[share][opts.cloudConfigFile]
-                log.info("RAZI :: iso : if (deviceConfig['type'] == 'nfs_iso') - else: ${iso}")
-                iso.setBytes(isoOutput)
+                iso.setBytes(cloudIsoOutputStream)
                 iso.save()
             }
-
             srRecord.scan(opts.connection)
             //find it
             def vdiList = srRecord.getVDIs(opts.connection)
@@ -1141,18 +1240,19 @@ class XenComputeUtility {
             newRecord.readOnly = false
             newRecord.virtualSize = opts.diskSize ?: minDiskImageSize
             rtn.vdi = VDI.create(opts.connection, newRecord)
-            log.debug "createVdi got: ${rtn.vdi}"
+            log.info "createVdi got: ${rtn.vdi}"
             rtn.vdiRecord = rtn.vdi.getRecord(opts.connection)
             rtn.vdiId = rtn.vdiRecord.uuid
             rtn.success = true
         } catch (e) {
             log.error("create vdi error: ${e}", e)
         }
+        log.debug "createVdi rtn: ${rtn}"
         return rtn
     }
 
     static uploadImage(CloudFile cloudFile, String tgtUrl, String cachePath = null, Map opts = [:]) {
-        log.info("uploadImage cloudFile: ${cloudFile?.name} tgt: ${tgtUrl} cachePath: ${cachePath}")
+        log.debug("uploadImage cloudFile: ${cloudFile?.name} tgt: ${tgtUrl} cachePath: ${cachePath}")
         def rtn = [success: false]
         def usingCache = false
         def sourceStream
@@ -1191,6 +1291,7 @@ class XenComputeUtility {
     }
 
     static uploadImage(InputStream sourceStream, Long contentLength, String tgtUrl, Map opts = [:]) {
+        log.debug("uploadImage: stream: ${contentLength} :: ${tgtUrl} :: ${opts}")
         def outboundClient
         def progressStream
         def rtn = [success: false]
@@ -1229,28 +1330,29 @@ class XenComputeUtility {
             def outboundPut = new HttpPut(tgtUrl)
             def inputEntity
             log.info "Upload Data ${opts}"
-            log.debug "uploadImage opts.isTarGz: ${opts.isTarGz}"
-            log.debug "uploadImage opts.isXz: ${opts.isXz}"
+            log.info "uploadImage opts.isTarGz: ${opts.isTarGz}"
+            log.info "uploadImage opts.isXz: ${opts.isXz}"
             if (opts.isTarGz == true) {
                 def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
                         new java.util.zip.GZIPInputStream(sourceStream))
                 def tarEntry = tarStream.getNextTarEntry()
                 contentLength = tarEntry.getSize()
-                progressStream = new ProgressInputStream(new BufferedInputStream(tarStream, 8400), contentLength)
+                progressStream = new ProgressInputStream(new BufferedInputStream(tarStream, 8400), contentLength, 1, 1)
                 inputEntity = new InputStreamEntity(progressStream, contentLength)
                 inputEntity.setChunked(false)
                 // inputEntity = new InputStreamEntity(tarStream,contentLength)
             } else if (opts.isXz) {
                 def xzStream = new XZCompressorInputStream(sourceStream)
-                inputEntity = new InputStreamEntity(new ProgressInputStream(new BufferedInputStream(xzStream, 8400), contentLength), contentLength)
+                inputEntity = new InputStreamEntity(new ProgressInputStream(new BufferedInputStream(xzStream, 8400), contentLength, 1, 1), contentLength)
                 inputEntity.setChunked(false)
             } else {
-                progressStream = new ProgressInputStream(new BufferedInputStream(sourceStream, 8400), contentLength)
+                progressStream = new ProgressInputStream(new BufferedInputStream(sourceStream, 8400), contentLength, 1, 1, "uploadImage: progressStream:")
                 inputEntity = new InputStreamEntity(progressStream, contentLength)
                 inputEntity.setChunked(false)
             }
             //outboundPut.addHeader('Content-Type', 'application/octet-stream')
             log.debug "uploadImage opts.authHeader: ${opts.authHeader}"
+
             if (opts.authHeader) {
                 outboundPut.addHeader('Authorization', opts.authHeader)
                 outboundPut.addHeader('Proxy-Authorization', opts.authHeader)
@@ -1263,6 +1365,7 @@ class XenComputeUtility {
                 opts.vdi.resize(opts.connection, contentLength)
             log.debug "uploadImage opts.vdi: ${opts.vdi?.dump()}"
             def responseBody = outboundClient.execute(outboundPut)
+            log.info ("uploadImage: stream: responseBody.statusLine.statusCode: ${responseBody.statusLine.statusCode}")
             if (responseBody.statusLine.statusCode < 400) {
                 rtn.success = true
             } else {
@@ -1272,7 +1375,6 @@ class XenComputeUtility {
             }
         } catch (e) {
             log.error("uploadImage From Stream error: ${e} - Offset ${progressStream?.getOffset()}", e)
-
         } finally {
             outboundClient.close()
         }
@@ -1421,6 +1523,29 @@ class XenComputeUtility {
             log.error("downloadImage From Stream error: ${e}", e)
         } finally {
             inboundClient.close()
+        }
+        return rtn
+    }
+
+    static findIsoDatastore(MorpheusContext context, Long cloudId) {
+        def rtn
+        try {
+            /*def dsList = Datastore.withCriteria {
+                eq('category', "xenserver.sr.${cloudId}")
+                eq('type', 'iso')
+                gt('storageSize', 1024l * 100l)
+            }*/
+            def dsList = context.services.cloud.datastore.list(
+                    new DataQuery().withFilter("category", "eq", "xenserver.sr.${cloudId}")
+                            .withFilter("type", "eq", "iso")
+                            .withFilter("storageSize", "gt", 1024l * 100l))
+
+            if (dsList?.size() > 0) {
+                def allowedList =
+                        rtn = dsList?.size() > 0 ? dsList.first() : null
+            }
+        } catch (e) {
+            log.error("findIsoDatastore error: ${e}", e)
         }
         return rtn
     }
