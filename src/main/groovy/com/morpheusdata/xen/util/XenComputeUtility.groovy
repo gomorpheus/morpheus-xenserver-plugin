@@ -1057,14 +1057,10 @@ class XenComputeUtility {
     }
 
     static insertTemplate(Map opts= [:]) {
-        log.info("Ray:: XCU:runworkload:insertTemplate opts: ${opts}")
         def rtn = [success: false]
         def config = getXenConnectionSession(opts.authConfig)
-        log.info("Ray:: XCU:runworkload:insertTemplate config: ${config}")
         opts.connection = config.connection
-        log.info("Ray:: XCU:runworkload:insertTemplate opts1: ${opts}")
         def imageResults = insertContainerImage(opts)
-        log.info("Ray:: XCU:runworkload:insertTemplate imageResults: ${imageResults}")
         if (imageResults.success == true) {
             if (imageResults.found == true) {
                 rtn.success = true
@@ -1085,63 +1081,46 @@ class XenComputeUtility {
     }
 
     static insertContainerImage(opts) {
-        log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage opts1: ${opts}")
         def rtn = [success: false, found: false]
         def uploadTask
         try {
             def currentList = listTemplates(opts.authConfig)?.templateList
-            log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage currentList: ${currentList}")
-            log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage opts.image: ${opts.image}")
             def image = opts.image
             def match = currentList.find { it.uuid == image.externalId || it.nameLabel == image.name }
-            log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage match: ${match}")
             if (!match) {
                 def insertOpts = [zone     : opts.zone, name: image.name, imageSrc: image.imageSrc, minDisk: image.minDisk, minRam: image.minRam,
                                   imageType: image.imageType, containerType: image.containerType, imageFile: image.imageFile, diskSize: image.imageSize, cloudFiles: image.cloudFiles,
                                   cachePath: opts.cachePath, datastore: opts.datastore, network: opts.network, connection: opts.connection]
-                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage insertOpts: ${insertOpts}")
 
                 //estimated disk size is wrong. we have to recalculate it
-                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage image.imageFile: ${image.imageFile}")
                 if (image.imageFile.name.endsWith('.tar.gz')) {
                     log.info("tar gz stream detected. recalculating size...")
                     def sourceStream = image.imageFile.inputStream
                     def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
                             new java.util.zip.GZIPInputStream(sourceStream))
                     def tarEntry = tarStream.getNextTarEntry()
-                    log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage tarEntry.getSize(): ${tarEntry.getSize()}")
                     insertOpts.diskSize = tarEntry.getSize()
-                    log.info("Recalculated Template Size: ${insertOpts.diskSize}")
+                    log.debug("Recalculated Template Size: ${insertOpts.diskSize}")
                     sourceStream.close()
                 }
-                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage insertOpts: ${insertOpts}")
                 def createResults = createVdi(insertOpts)
-                log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage createResults: ${createResults}")
-                log.info("insertContainerImage: ${createResults}")
+                log.debug("insertContainerImage: ${createResults}")
                 if (createResults.success == true) {
                     //upload it -
                     def srRecord = SR.getByUuid(opts.connection, opts.datastore.externalId)
-                    log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage srRecord: ${srRecord}")
                     def tgtUrl = getXenApiUrl(opts.zone, true) + '/import_raw_vdi?vdi=' + createResults.vdiId + '&format=vhd'
-                    log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage tgtUrl: ${tgtUrl}")
                     rtn.vdiId = createResults.vdiId
                     rtn.vdi = createResults.vdi
                     rtn.srRecord = srRecord
                     insertOpts.vdi = rtn.vdi
-                    //def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
-                    //insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
                     insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
-                    insertOpts.username = opts.authConfig.username
-                    insertOpts.password = opts.authConfig.password
-                    log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage insertOpts: ${insertOpts}")
 
-                    log.info "insertContainerImage Import URL: ${tgtUrl}"
+                    log.debug "insertContainerImage Import URL: ${tgtUrl}"
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
 
                     def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
 
-                    log.info("Ray:: XCU:runworkload:insertTemplate:insertContainerImage uploadResults: ${uploadResults}")
                     log.info("got: ${uploadResults}")
                     rtn.success = uploadResults.success
                 } else {
@@ -1169,71 +1148,30 @@ class XenComputeUtility {
             def isoPbd = pbdList.first()
             def pbdRecord = isoPbd.getRecord(opts.connection)
             def deviceConfig = pbdRecord.deviceConfig
-            /*if(opts.platform == 'windows') {
-                //cloudIsoOutputStream = IsoUtility.buildAutoUnattendIso(cloudConfigUser)
-                cloudIsoOutputStream = IsoUtility.buildAutoUnattendIso(cloudConfigUser)
-            } else {
-                cloudIsoOutputStream = IsoUtility.buildCloudIso(opts.platform, cloudConfigMeta, cloudConfigUser)
-            }*/
-            //def isoOutput = cloudIsoOutputStream.toByteArray()
-            //def isoOutput = null // Rahul:: setting value to null as ISOutility not available
             log.info("Preparing to Upload ISO Disk to Datastore: ${isoDatastore.name} - with deviceConfig: ${deviceConfig.dump()} ${deviceConfig['type']}")
-            /*if (opts.worker && opts.workerCommandService) {
+            if (deviceConfig['type'] == 'nfs_iso') {
+                def locationArgs = deviceConfig['location'].tokenize(':')
+                log.info("Looking for nfs: ${locationArgs[0]}")
+                def provider = StorageProvider.create(provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1])
+                def iso = provider['/'][opts.cloudConfigFile]
+                iso.setBytes(cloudIsoOutputStream)
+                iso.save()
 
-                def fileCommand = [action: "file", sourceUrl: opts.cloudFileUrl]
-                if (deviceConfig['type'] == 'nfs_iso') {
-                    def locationArgs = deviceConfig['location'].tokenize(':')
-                    fileCommand.destinationProviderOptions = [provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1]]
-                    fileCommand.destinationBucketName = '/'
-                    fileCommand.destinationProviderPath = opts.cloudConfigFile
-                } else { //cifs
-                    def deviceLocations = deviceConfig['location'].tokenize('\\/')
-                    def share = deviceLocations[1..-1].join('/')
-                    def devicePassword = deviceConfig['cifspassword']
-                    def deviceSecret = deviceConfig['cifspassword_secret']
-                    if (deviceSecret) {
-                        def secret = com.xensource.xenapi.Secret.getByUuid(opts.connection, deviceSecret)
-                        devicePassword = secret.getValue(opts.connection)
-                    }
-                    fileCommand.destinationProviderOptions = [provider: 'cifs', host: deviceLocations[0], username: deviceConfig['username'], password: devicePassword]
-                    fileCommand.destinationBucketName = '/'
-                    fileCommand.destinationProviderPath = opts.cloudConfigFile
+            } else {
+                def deviceLocations = deviceConfig['location'].tokenize('\\/')
+                def share = deviceLocations[1..-1].join('/')
+                def devicePassword = deviceConfig['cifspassword']
+                def deviceSecret = deviceConfig['cifspassword_secret']
+                if (deviceSecret) {
+                    def secret = com.xensource.xenapi.Secret.getByUuid(opts.connection, deviceSecret)
+                    devicePassword = secret.getValue(opts.connection)
                 }
-                opts.workerCommandService.sendWorkerAction(opts.worker, fileCommand)?.get()
-            } else {*/
-                if (deviceConfig['type'] == 'nfs_iso') {
-                    def locationArgs = deviceConfig['location'].tokenize(':')
-                    log.info("Looking for nfs: ${locationArgs[0]}")
-                    def provider = StorageProvider.create(provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1])
-                    def iso = provider['/'][opts.cloudConfigFile]
-                    iso.setBytes(cloudIsoOutputStream)
-                    iso.save()
-
-                } else {
-                    def deviceLocations = deviceConfig['location'].tokenize('\\/')
-                    def share = deviceLocations[1..-1].join('/')
-                    def devicePassword = deviceConfig['cifspassword']
-                    def deviceSecret = deviceConfig['cifspassword_secret']
-                    if (deviceSecret) {
-                        def secret = com.xensource.xenapi.Secret.getByUuid(opts.connection, deviceSecret)
-                        devicePassword = secret.getValue(opts.connection)
-                    }
-                    log.info("Looking for cifs: ${deviceLocations[0]}")
-                    log.info("Ray:: calling StorageProvider for cifs: ${deviceLocations[0]}")
-                    def provider = StorageProvider.create(provider: 'cifs', host: deviceLocations[0], username: deviceConfig['username'], password: devicePassword)
-                    log.info("Ray:: after calling StorageProvider for cifs: ${provider}")
-                    def iso = provider[share][opts.cloudConfigFile]
-                    log.info("Ray:: after calling cloudConfigFile for cifs: ${opts.cloudConfigFile}")
-                    log.info("Ray:: after calling share for share: ${share}")
-                    iso.setBytes(cloudIsoOutputStream)
-                    log.info("Ray:: calling for setBytes")
-                    iso.save()
-                    log.info("Ray:: after calling for setBytes")
-
-                }
-           // }
-
-
+                log.debug("Looking for cifs: ${deviceLocations[0]}")
+                def provider = StorageProvider.create(provider: 'cifs', host: deviceLocations[0], username: deviceConfig['username'], password: devicePassword)
+                def iso = provider[share][opts.cloudConfigFile]
+                iso.setBytes(cloudIsoOutputStream)
+                iso.save()
+            }
             srRecord.scan(opts.connection)
             //find it
             def vdiList = srRecord.getVDIs(opts.connection)
@@ -1253,12 +1191,10 @@ class XenComputeUtility {
 
     static createVdi(opts) {
         log.debug "createVdi opts: ${opts}"
-        log.info "Ray:: createVdi opts: ${opts}"
         def rtn = [success: false]
         try {
             //HTTP PUT /import_raw_vdi?vdi=<VDI ref>[&session_id=<session ref>][&task_id=<task ref>][&format=<format>]
             def srRecord = SR.getByUuid(opts.connection, opts.datastore.externalId)
-            log.info "Ray:: createVdi opts.datastore.externalId: ${opts.datastore.externalId}"
             def newRecord = new VDI.Record()
             newRecord.nameLabel = opts.name
             newRecord.SR = srRecord
@@ -1266,25 +1202,19 @@ class XenComputeUtility {
             newRecord.readOnly = false
             newRecord.virtualSize = opts.diskSize ?: minDiskImageSize
             rtn.vdi = VDI.create(opts.connection, newRecord)
-            log.info "Ray:: createVdi rtn.vdi: ${rtn.vdi}"
             log.info "createVdi got: ${rtn.vdi}"
             rtn.vdiRecord = rtn.vdi.getRecord(opts.connection)
             rtn.vdiId = rtn.vdiRecord.uuid
             rtn.success = true
         } catch (e) {
             log.error("create vdi error: ${e}", e)
-            log.debug "Ray:: createVdi create vdi error:: ${e.message}"
         }
-        log.info "Ray:: createVdi rtn: ${rtn}"
+        log.debug "createVdi rtn: ${rtn}"
         return rtn
     }
 
     static uploadImage(CloudFile cloudFile, String tgtUrl, String cachePath = null, Map opts = [:]) {
-        log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage cloudFile: ${cloudFile}")
-        log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage tgtUrl: ${tgtUrl}")
-        log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage cachePath: ${cachePath}")
-        log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage opts: ${opts}")
-        log.info("uploadImage cloudFile: ${cloudFile?.name} tgt: ${tgtUrl} cachePath: ${cachePath}")
+        log.debug("uploadImage cloudFile: ${cloudFile?.name} tgt: ${tgtUrl} cachePath: ${cachePath}")
         def rtn = [success: false]
         def usingCache = false
         def sourceStream
@@ -1293,12 +1223,9 @@ class XenComputeUtility {
 
             sourceStream = cloudFile.inputStream
             totalCount = cloudFile.getContentLength()
-            log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage totalCount: ${totalCount}")
 
             opts.isTarGz = cloudFile.getName().endsWith('.tar.gz')
-            log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage opts.isTarGz: ${opts.isTarGz}")
             opts.isXz = XZUtils.isCompressedFilename(cloudFile.getName())
-            log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage opts.isXz: ${opts.isXz}")
             if (opts.isXz) {
                 def xzStream = new XZCompressorInputStream(sourceStream)
                 totalCount = 0
@@ -1310,15 +1237,10 @@ class XenComputeUtility {
                     }
                 }
                 xzStream.close()
-                log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage cachePath: ${cachePath}")
-                log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage cloudFile.name: ${cloudFile.name}")
                 def cacheFile = new File(cachePath, cloudFile.name)
-                log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage cacheFile?.name: ${cacheFile?.name}")
                 sourceStream = cacheFile.newInputStream()
             }
-            log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage calling uploadImage.....")
             rtn = uploadImage(sourceStream, totalCount, tgtUrl, opts)
-            log.info("Ray:: XCU:runworkload:IT:ICI:uploadImage rtn: ${rtn}")
         } catch (ex) {
             log.error("uploadImage cloudFile error: ${ex}", ex)
         } finally {
@@ -1330,48 +1252,8 @@ class XenComputeUtility {
         return rtn
     }
 
-
-    /*static uploadImageForXen(InputStream sourceStream, Long contentLength, String tgtUrl, Map opts = [:]) {
-        HttpApiClient client
-        log.info ("Ray:: uploadImageForXen....")
-        def rtn = [success: false]
-        try {
-            client = new HttpApiClient()
-            //NetworkProxy proxySettings = cloudInfo.apiProxy
-            //client.networkProxy = proxySettings
-            def imageStream = new BufferedInputStream(sourceStream, 8400)
-            log.info ("Ray:: calling api for uplaod....${tgtUrl} ::: ${contentLength} ::: ${opts}")
-            log.info "Ray:: uploadImage opts.authHeader: ${opts.authHeader}"
-            def results
-            if (opts.authHeader) {
-                log.info ("Ray:: uploadImageForXen calling if ....")
-                results = client.callApi(tgtUrl, "", opts.username, opts.password,
-                        new HttpApiClient.RequestOptions(headers:['Authorization': opts.authHeader, 'Proxy-Authorization': opts.authHeader, 'Content-Type': ContentType.APPLICATION_OCTET_STREAM.toString()], contentType: ContentType.APPLICATION_OCTET_STREAM, body: imageStream, contentLength: contentLength, ignoreSSL: true), 'PUT')
-            } else {
-                log.info ("Ray:: uploadImageForXen calling else ....")
-                results = client.callApi(tgtUrl, "", opts.username, opts.password,
-                        new HttpApiClient.RequestOptions(headers:['Content-Type': ContentType.APPLICATION_OCTET_STREAM.toString()], contentType: ContentType.APPLICATION_OCTET_STREAM, body: imageStream, contentLength: contentLength, ignoreSSL: true), 'PUT')
-            }
-
-            log.info ("Ray:: calling api after uplaod results.... ${results}")
-            if(results?.success) {
-                return ServiceResponse.success()
-            } else {
-                return ServiceResponse.error()
-            }
-        } catch (e) {
-            log.info("uploadImage From Stream error: ${e} - Offset ${e.message}", e)
-
-        } finally {
-
-        }
-        log.info ("Ray:: calling api after uplaod rtn.... ${rtn}")
-        return rtn
-    }*/
-
-
     static uploadImage(InputStream sourceStream, Long contentLength, String tgtUrl, Map opts = [:]) {
-        log.info ("Ray:: uploadImage: stream: ${contentLength} :: ${tgtUrl} :: ${opts}")
+        log.debug("uploadImage: stream: ${contentLength} :: ${tgtUrl} :: ${opts}")
         def outboundClient
         def progressStream
         def rtn = [success: false]
@@ -1396,12 +1278,8 @@ class XenComputeUtility {
             })
             clientBuilder.disableAutomaticRetries()
             clientBuilder.disableRedirectHandling()
-            log.info ("Ray:: uploadImage: stream: opts.authCreds: ${opts.authCreds}")
             if (opts.authCreds) {
                 def targetUri = new URI(tgtUrl)
-                log.info ("Ray:: uploadImage: stream: targetUri: ${targetUri}")
-                log.info ("Ray:: uploadImage: stream: targetUri.getHost(): ${targetUri.getHost()}")
-                log.info ("Ray:: uploadImage: stream: targetUri.getPort(): ${targetUri.getPort()}")
                 def authScope = new AuthScope(targetUri.getHost(), targetUri.getPort())
                 def credsProvider = new BasicCredentialsProvider()
                 credsProvider.setCredentials(authScope, opts.authCreds)
@@ -1430,14 +1308,13 @@ class XenComputeUtility {
                 inputEntity = new InputStreamEntity(new ProgressInputStream(new BufferedInputStream(xzStream, 8400), contentLength, 1, 1), contentLength)
                 inputEntity.setChunked(false)
             } else {
-                progressStream = new ProgressInputStream(new BufferedInputStream(sourceStream, 8400), contentLength, 1, 1, "Ray:: uploadImage: progressStream:")
+                progressStream = new ProgressInputStream(new BufferedInputStream(sourceStream, 8400), contentLength, 1, 1, "uploadImage: progressStream:")
                 inputEntity = new InputStreamEntity(progressStream, contentLength)
                 inputEntity.setChunked(false)
             }
-            //log.info ("Ray:: uploadImage: progressStream: ${progressStream.}")
             //outboundPut.addHeader('Content-Type', 'application/octet-stream')
             log.debug "uploadImage opts.authHeader: ${opts.authHeader}"
-            log.info ("Ray:: uploadImage: stream: opts.authHeader: ${opts.authHeader}")
+
             if (opts.authHeader) {
                 outboundPut.addHeader('Authorization', opts.authHeader)
                 outboundPut.addHeader('Proxy-Authorization', opts.authHeader)
@@ -1450,20 +1327,16 @@ class XenComputeUtility {
                 opts.vdi.resize(opts.connection, contentLength)
             log.debug "uploadImage opts.vdi: ${opts.vdi?.dump()}"
             def responseBody = outboundClient.execute(outboundPut)
-            log.info ("Ray:: uploadImage: stream: responseBody.statusLine.statusCode: ${responseBody.statusLine.statusCode}")
+            log.info ("uploadImage: stream: responseBody.statusLine.statusCode: ${responseBody.statusLine.statusCode}")
             if (responseBody.statusLine.statusCode < 400) {
                 rtn.success = true
-                log.info ("Ray:: uploadImage: stream: responseBody.statusLine.statusCode1: ${responseBody.statusLine.statusCode}")
             } else {
                 rtn.success = false
                 log.warn("Upload Image Error HTTP: ${responseBody.statusLine.statusCode}")
                 rtn.msg = "Upload Image Error HTTP: ${responseBody.statusLine.statusCode}"
-                log.info ("Ray:: uploadImage: stream: responseBody.statusLine.statusCode2: ${responseBody.statusLine.statusCode}")
             }
         } catch (e) {
             log.error("uploadImage From Stream error: ${e} - Offset ${progressStream?.getOffset()}", e)
-            log.info ("Ray:: uploadImage From Stream error: ${e} - Offset ${progressStream?.getOffset()}", e)
-
         } finally {
             outboundClient.close()
         }
