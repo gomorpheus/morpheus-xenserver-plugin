@@ -936,19 +936,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	def findIsoDatastore(Long cloudId) {
 		def rtn
 		try {
-			/*def dsList = Datastore.withCriteria {
-                eq('category', "xenserver.sr.${cloudId}")
-                eq('type', 'iso')
-                gt('storageSize', 1024l * 100l)
-            }*/
 			def dsList = context.services.cloud.datastore.list(
-					new DataQuery().withFilter("category", "eq", "xenserver.sr.${cloudId}")
-							.withFilter("type", "eq", "iso")
-							.withFilter("storageSize", "gt", 1024l * 100l))
-
+					new DataQuery().withFilter("category", "xenserver.sr.${cloudId}")
+							.withFilter("type", "iso")
+							.withFilter("storageSize", ">", 1024l * 100l))
 			if (dsList?.size() > 0) {
-				def allowedList =
-						rtn = dsList?.size() > 0 ? dsList.first() : null
+				rtn = dsList?.size() > 0 ? dsList.first() : null
 			}
 		} catch (e) {
 			log.error("findIsoDatastore error: ${e}", e)
