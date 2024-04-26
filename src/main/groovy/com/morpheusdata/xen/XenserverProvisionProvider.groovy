@@ -297,6 +297,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				if (newType && server.computeServerType != newType) {
 					server.computeServerType = newType
 				}
+				server = saveAndGet(server)
 				def maxMemory = workload.maxMemory ?: workload.instance.plan.maxMemory
 				def maxCores = workload.maxCores ?: workload.instance.plan.maxCores
 				def maxStorage = this.getRootSize(workload)
@@ -350,7 +351,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				server.cloudConfigNetwork = createOpts.cloudConfigNetwork
 				createOpts.isSysprep = virtualImage?.isSysprep
 				log.debug("Creating VM on Xen Server Additional Details: ${createOpts}")
-				context.async.computeServer.save(server).blockingGet()
+				server = saveAndGet(server)
 				createOpts.server = server
 				def createResults
 				if (sourceVmId) {
@@ -365,8 +366,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				if (createResults.success == true && createResults.vmId) {
 					server.externalId = createResults.vmId
 					provisionResponse.externalId = server.externalId
+					server = saveAndGet(server)
 					setVolumeInfo(server.volumes, createResults.volumes)
-					context.async.computeServer.save(server).blockingGet()
+					server = saveAndGet(server)
 					def startResults = XenComputeUtility.startVm(authConfigMap, server.externalId)
 					log.debug("start: ${startResults.success}")
 					if (startResults.success == true) {
@@ -409,19 +411,21 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 									server.sshHost = privateIp
 								}
 								//update external info
+								server = saveAndGet(server)
 								setNetworkInfo(server.interfaces, serverDetail.networks)
 								server.osDevice = '/dev/vda'
 								server.dataDevice = '/dev/vda'
 								server.lvmEnabled = false
 								server.sshHost = privateIp ?: publicIp
 								server.managed = true
+								server = saveAndGet(server)
 								server.capacityInfo = new ComputeCapacityInfo(
 										maxCores: 1,
 										maxMemory: workload.getConfigProperty('maxMemory').toLong(),
 										maxStorage: workload.getConfigProperty('maxStorage').toLong()
 								)
 								server.status = 'provisioned'
-								context.async.computeServer.save(server).blockingGet()
+								saveAndGet(server)
 								context.async.instance.save(workload.instance).blockingGet()
 								provisionResponse.success = true
 							} else {
@@ -431,7 +435,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						}
 					} else {
 						server.statusMessage = 'Failed to start server'
-						context.async.computeServer.save(server).blockingGet()
+						saveAndGet(server)
 					}
 				} else {
 					provisionResponse.setError('An unknown error occurred while making an API request to Xen.')
@@ -440,7 +444,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			} else {
 				server.statusMessage = 'Image not found'
 			}
-			log.info("Ray:: runworkload: server.statusMessage: ${server.statusMessage}")
 			provisionResponse.noAgent = opts.noAgent
 			provisionResponse.installAgent = opts.installAgent
 			if (provisionResponse.success != true) {
@@ -1039,7 +1042,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	def createProvisionServer(opts) {
 		def rtn = [success: false]
 		log.debug "createServer: ${opts}"
-		log.info("Ray:: runworkload: createProvisionServer: opts: ${opts}")
 		try {
 			def config = XenComputeUtility.getXenConnectionSession(opts.authConfig)
 			opts.connection = config.connection
@@ -1066,7 +1068,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			}
 			//add cloud init iso
 			def cdResults = opts.cloudConfigFile ? XenComputeUtility.insertCloudInitDisk(opts, getCloudIsoOutputStream(opts)) : [success: false]
-			log.info("Ray:: runworkload: createProvisionServer: cdResults: ${cdResults}")
+			log.debug("runworkload: createProvisionServer: cdResults: ${cdResults}")
 			def rootVolume = opts.server.volumes?.find{it.rootVolume == true}
 			if (rootVolume) {
 				rootVolume.unitNumber = "0"
@@ -1404,7 +1406,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	}
 
 	def getCloudIsoOutputStream(Map opts = [:]) {
-		log.info("Ray:: calling getCloudIsoOutputStream: opts: ${opts}")
 		def isoOutput = context.services.provision.buildIsoOutputStream(
 				opts.isSysprep, PlatformType.valueOf(opts.platform), opts.cloudConfigMeta, opts.cloudConfigUser, opts.cloudConfigNetwork)
 		return isoOutput
