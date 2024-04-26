@@ -1067,23 +1067,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	}
 
-	def findIsoDatastore(Long cloudId) {
-		def rtn
-		try {
-			def dsList = context.services.cloud.datastore.list(
-					new DataQuery().withFilter("category", "eq", "xenserver.sr.${cloudId}")
-							.withFilter("type", "eq", "iso")
-							.withFilter("storageSize", "gt", 1024l * 100l))
-
-			if (dsList?.size() > 0) {
-						rtn = dsList?.size() > 0 ? dsList.first() : null
-			}
-		} catch (e) {
-			log.error("findIsoDatastore error: ${e}", e)
-		}
-		return rtn
-	}
-
 	def findOrCreateServer(opts) {
 		def rtn = [success:false]
 		def found = false
@@ -1225,21 +1208,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		return rtn
 	}
 
-//	def createServer(opts) {
-//		def rtn = [success:false]
-//		if(!opts.imageId) {
-//			rtn.error = 'Please specify a template'
-//		} else if(!opts.name) {
-//			rtn.error = 'Please specify a name'
-//		} else {
-//			//credentials
-////			zoneService.loadFullZone(opts.zone)
-//			rtn = XenComputeUtility.createServer(opts)
-//			log.info("RAZI :: createServer : else: ${rtn}")
-//		}
-//		log.info("RAZI :: createServer : last: ${rtn}")
-//		return rtn
-//	}
 
 	def getServerDetail(opts) {
 		//credentials
@@ -1248,72 +1216,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		log.info("RAZI :: getServerDetail: ${getServerDetail}")
 		return getServerDetail
 	}
-
-//	def checkServerReady(opts) {
-//		def rtn = [success:false]
-//		try {
-//			def pending = true
-//			def attempts = 0
-//			while(pending) {
-//				sleep(1000l * 5l)
-//				def serverDetail = getServerDetail(opts)
-//				log.info("RAZI :: serverDetail : checkServerReady: ${serverDetail}")
-//				log.debug("serverDetail: ${serverDetail}")
-//				if(serverDetail.success == true && serverDetail.vmRecord && serverDetail.ipAddress) {
-//					if(serverDetail.ipAddress) {
-//						rtn.success = true
-//						rtn.ipAddress = serverDetail.ipAddress
-//						if(serverDetail.vmNetworks) {
-//							rtn.ipAddresses = [:]
-//							serverDetail.vmNetworks.each {key, value ->
-//								def keyInfo = key.tokenize('/')
-//								def interfaceName = "eth${keyInfo[0]}"
-//								rtn.ipAddresses[interfaceName] = rtn.ipAddresses[interfaceName] ?: [:]
-//								if(keyInfo[1] == 'ip') {
-//									rtn.ipAddresses[interfaceName].ipAddress = value
-//									if(interfaceName == 'eth0') {
-//										rtn.ipAddress = value
-//									}
-//								} else { //ipv6
-//									rtn.ipAddresses[interfaceName].ipv6Address = value
-//								}
-//							}
-//						}
-//						rtn.vmRecord = serverDetail.vmRecord
-//						rtn.vm = serverDetail.vm
-//						rtn.vmId = serverDetail.vmId
-//						rtn.vmDetails = serverDetail.vmDetails
-//						rtn.volumes = serverDetail.volumes
-//						rtn.networks = serverDetail.networks
-//						pending = false
-////					} else {
-////						ComputeServer.withNewSession { session ->
-////							def serverInfo = ComputeServer.executeQuery("select cs.internalIp from ComputeServer cs where cs.id = :serverId", [serverId: opts.server.id])
-////							def serverIp = serverInfo[0]
-////							log.info("check server loading server: ip: ${serverIp}")
-////							if(serverIp) {
-////								rtn.success = true
-////								rtn.ipAddress = serverIp
-////								rtn.vmRecord = serverDetail.vmRecord
-////								rtn.vm = serverDetail.vm
-////								rtn.vmId = serverDetail.vmId
-////								rtn.vmDetails = serverDetail.vmDetails
-////								rtn.volumes = serverDetail.volumes
-////								rtn.networks = serverDetail.networks
-////								pending = false
-////							}
-////						}
-//					}
-//				}
-//				attempts ++
-//				if(attempts > 300)
-//					pending = false
-//			}
-//		} catch(e) {
-//			log.error("An Exception in checkServerReady method: ${e.message}",e)
-//		}
-//		return rtn
-//	}
 
 	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
 		log.info("RAZI :: serverInterfaces: ${serverInterfaces}, externalNetworks: ${externalNetworks}")
@@ -1567,39 +1469,19 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		return rtn
 	}
 
-//	def getServerDetail(opts) {
-//		//credentials
-//		//zoneService.loadFullZone(opts.zone)
-//		return XenComputeUtility.getVirtualMachine(opts, opts.externalId)
-//	}
-
-//	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
-//		log.info("networks: ${externalNetworks}")
-//		try {
-//			if(externalNetworks?.size() > 0) {
-//				serverInterfaces?.eachWithIndex { networkInterface, index ->
-//					if(networkInterface.externalId) {
-//						//check for changes?
-//					} else {
-//						def matchNetwork = externalNetworks.find{networkInterface.internalId == it.uuid}
-//						if(!matchNetwork) {
-//							def displayOrder = "${networkInterface.displayOrder}"
-//							matchNetwork = externalNetworks.find{displayOrder == it.deviceIndex}
-//						}
-//						if(matchNetwork) {
-//							networkInterface.externalId = "${matchNetwork.deviceIndex}"
-//							networkInterface.internalId = "${matchNetwork.uuid}"
-//							if(networkInterface.type == null) {
-//								networkInterface.type = new ComputeServerInterfaceType('code', 'xenNetwork')
-//							}
-//							//networkInterface.save()
-//							context.async.computeServer.computeServerInterface.save(networkInterface)
-//						}
-//					}
-//				}
-//			}
-//		} catch(e) {
-//			log.error("setNetworkInfo error: ${e}", e)
-//		}
-//	}
+	def findIsoDatastore(Long cloudId) {
+		def rtn
+		try {
+			def dsList = context.services.cloud.datastore.list(
+					new DataQuery().withFilter("category", "xenserver.sr.${cloudId}")
+							.withFilter("type", "iso")
+							.withFilter("storageSize", ">", 1024l * 100l))
+			if (dsList?.size() > 0) {
+				rtn = dsList?.size() > 0 ? dsList.first() : null
+			}
+		} catch (e) {
+			log.error("findIsoDatastore error: ${e}", e)
+		}
+		return rtn
+	}
 }
