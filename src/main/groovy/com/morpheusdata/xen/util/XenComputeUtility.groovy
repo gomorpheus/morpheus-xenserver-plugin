@@ -1163,7 +1163,7 @@ class XenComputeUtility {
             log.info("Preparing to Upload ISO Disk to Datastore: ${isoDatastore.name} - with deviceConfig: ${deviceConfig.dump()} ${deviceConfig['type']}")
             if (deviceConfig['type'] == 'nfs_iso') {
                 def locationArgs = deviceConfig['location'].tokenize(':')
-                log.info("Looking for nfs: ${locationArgs[0]}")
+                log.debug("Looking for nfs: ${locationArgs[0]}")
                 def provider = StorageProvider.create(provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1])
                 def iso = provider['/'][opts.cloudConfigFile]
                 iso.setBytes(cloudIsoOutputStream)

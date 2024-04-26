@@ -1,6 +1,6 @@
 package com.morpheusdata.xen
 
-import com.bertramlabs.plugins.karman.StorageProvider
+
 import com.morpheusdata.PrepareHostResponse
 import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
@@ -12,24 +12,6 @@ import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.model.*
 import com.morpheusdata.model.provisioning.HostRequest
-import com.morpheusdata.model.BackupResult
-import com.morpheusdata.model.Cloud
-import com.morpheusdata.model.ComputeCapacityInfo
-import com.morpheusdata.model.ComputeServer
-import com.morpheusdata.model.ComputeServerInterface
-import com.morpheusdata.model.ComputeServerInterfaceType
-import com.morpheusdata.model.ComputeServerType
-import com.morpheusdata.model.ComputeTypeSet
-import com.morpheusdata.model.HostType
-import com.morpheusdata.model.Icon
-import com.morpheusdata.model.NetAddress
-import com.morpheusdata.model.OptionType
-import com.morpheusdata.model.PlatformType
-import com.morpheusdata.model.ServicePlan
-import com.morpheusdata.model.StorageVolumeType
-import com.morpheusdata.model.Workload
-import com.morpheusdata.model.WorkloadType
-import com.morpheusdata.model.provisioning.UsersConfiguration
 import com.morpheusdata.model.provisioning.WorkloadRequest
 import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
@@ -194,10 +176,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				validationOpts.networkInterfaces = opts.networkInterfaces
 			}
 			def validationResults = XenComputeUtility.validateServerConfig(validationOpts)
-			/*if(!validationResults.success) {
-				rtn.success = false
-				rtn.errors += validationResults.errors
-			}*/
 			if(!validationResults.success) {
 				validationResults.errors?.each { it ->
 					rtn.addError(it.field, it.msg)
@@ -207,7 +185,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			log.error("validate container error: ${e}", e)
 		}
 		return rtn
-		//return ServiceResponse.success()
 	}
 
 	/**
@@ -223,13 +200,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse<ProvisionResponse> runWorkload(Workload workload, WorkloadRequest workloadRequest, Map opts) {
 		log.debug "runWorkload: ${workload} ${workloadRequest} ${opts}"
-
-		log.info("Ray:: runworkload: ========================================================")
-		log.info("Ray:: runworkload: opts: ${opts}")
-		log.info("Ray:: runworkload: ========================================================")
-
 		ProvisionResponse provisionResponse = new ProvisionResponse(success: true, installAgent: false)
-		def rtn = [success:false]
 
 		ComputeServer server = workload.server
 		Cloud cloud = server.cloud
@@ -237,76 +208,69 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		def sourceVmId
 		def virtualImage
 		def imageFormat = 'vhd'
-		def authConfigMap = plugin.getAuthConfig(cloud)
-
 		try {
 			def containerConfig = workload.getConfigMap()
-			def rootVolume = server.volumes?.find{it.rootVolume == true}
+			def rootVolume = server.volumes?.find { it.rootVolume == true }
 			def networkId = containerConfig.networkId
 			def network = context.async.network.get(networkId).blockingGet()
 			def sourceWorkload = context.async.workload.get(opts.cloneContainerId).blockingGet()
 			def cloneContainer = opts.cloneContainerId ? sourceWorkload : null
 			def morphDataStores = context.async.cloud.datastore.listById([containerConfig.datastoreId?.toLong()])
-					.toMap {it.id.toLong()}.blockingGet()
+					.toMap { it.id.toLong() }.blockingGet()
 			def datastore = rootVolume?.datastore ?: morphDataStores[containerConfig.datastoreId?.toLong()]
-
-			if(containerConfig.imageId || containerConfig.template || server.sourceImage?.id) {
+			def authConfigMap = plugin.getAuthConfig(cloud)
+			if (containerConfig.imageId || containerConfig.template || server.sourceImage?.id) {
 				def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: server.sourceImage.id)
 				virtualImage = context.async.virtualImage.get(virtualImageId).blockingGet()
 				imageId = virtualImage?.externalId
-				if(!imageId) { //If its userUploaded and still needs uploaded
+				log.info("runworkload imageId1: ${imageId}")
+				if (!imageId) { //If its userUploaded and still needs uploaded
 					//TODO: We need to upload ovg/vmdk stuff here
-					def primaryNetwork = server.interfaces?.find{it.network}?.network
+					def primaryNetwork = server.interfaces?.find { it.network }?.network
 					def cloudFiles = context.async.virtualImage.getVirtualImageFiles(virtualImage).blockingGet()
-					def imageFile = cloudFiles?.find{cloudFile -> cloudFile.name.toLowerCase().indexOf('.' + imageFormat) > -1}
+					def imageFile = cloudFiles?.find { cloudFile -> cloudFile.name.toLowerCase().indexOf('.' + imageFormat) > -1 }
 					def containerImage =
 							[
-									name			: virtualImage.name,
-									imageSrc		: imageFile?.getURL(),
-									minDisk			: virtualImage.minDisk ?: 5,
-									minRam			: virtualImage.minRam ?: (512* ComputeUtility.ONE_MEGABYTE),
-									tags			: 'morpheus, ubuntu',
-									imageType		: 'disk_image',
-									containerType 	: 'vhd',
-									cloudFiles		: cloudFiles,
-									imageFile		: imageFile,
-									imageSize		: imageFile.contentLength
+									name         : virtualImage.name,
+									imageSrc     : imageFile?.getURL(),
+									minDisk      : virtualImage.minDisk ?: 5,
+									minRam       : virtualImage.minRam ?: (512 * ComputeUtility.ONE_MEGABYTE),
+									tags         : 'morpheus, ubuntu',
+									imageType    : 'disk_image',
+									containerType: 'vhd',
+									cloudFiles   : cloudFiles,
+									imageFile    : imageFile,
+									imageSize    : imageFile.contentLength
 							]
-
 					def imageConfig =
 							[
-									zone		: cloud,//rahul: image 2 times
-									image		: containerImage,
-									name		: virtualImage.name,
-									datastore	: datastore,
-									network		: primaryNetwork,
-									osTypeCode	: virtualImage?.osType?.code
+									zone      : cloud,
+									image     : containerImage,
+									name      : virtualImage.name,
+									datastore : datastore,
+									network   : primaryNetwork,
+									osTypeCode: virtualImage?.osType?.code
 							]
-
 					imageConfig.authConfig = authConfigMap
-					log.info("Ray:: runworkload: imageConfig: ${imageConfig}")
 					def imageResults = XenComputeUtility.insertTemplate(imageConfig)
-					log.info("Ray:: runworkload: imageResults: ${imageResults}")
-					if(imageResults.success == true) {
+					log.debug("insertTemplate: imageResults: ${imageResults}")
+					if (imageResults.success == true) {
 						imageId = imageResults.imageId
 					}
 				}
 			}
-
-			log.info("Ray:: runworkload: opts.backupSetId1: ${opts.backupSetId}")
-			if(opts.backupSetId){ // first create backup then only we can test it...test it later...
+			if (opts.backupSetId) { //TODO: first create backup then only we can test it...test it later...
 				//if this is a clone or restore, use the snapshot id as the image
 				def snapshots = context.services.backup.backupResult.list(
 						new DataQuery().withFilter("backupSetId", opts.backupSetId.toLong())
 								.withFilter("containerId", opts.cloneContainerId))
-				def snapshot = snapshots.find{it.backupSetId == opts.backupSetId}
+				def snapshot = snapshots.find { it.backupSetId == opts.backupSetId }
 				def snapshotId = snapshot?.snapshotId
 				sourceVmId = snapshot?.configMap?.vmId
-				if(snapshotId) {
+				if (snapshotId) {
 					imageId = snapshotId
 				}
-
-				if(!network && (cloneContainer || snapshot.configMap)) {
+				if (!network && (cloneContainer || snapshot.configMap)) {
 					def cloneContainerConfig = cloneContainer.configMap ?: snapshot.configMap
 					networkId = cloneContainerConfig.networkId
 					if (networkId) {
@@ -319,12 +283,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 			}
-			log.info("Ray:: runworkload: Going for imageid: ${imageId}")
-			if(imageId) {
+			log.info("runworkload imageId2: ${imageId}")
+			if (imageId) {
 				opts.installAgent = virtualImage ? virtualImage.installAgent : true
 				def userGroups = workload.instance.userGroups?.toList() ?: []
-				log.info("Ray:: runworkload: userGroups: ${userGroups}")
-				log.info("Ray:: runworkload: userGroups.size(): ${userGroups.size()}")
 				if (workload.instance.userGroup && userGroups.contains(workload.instance.userGroup) == false) {
 					userGroups << workload.instance.userGroup
 				}
@@ -332,134 +294,115 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				server.serverOs = server.serverOs ?: virtualImage.osType
 				server.osType = (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform
 				def newType = this.findVmNodeServerTypeForCloud(cloud.id, server.osType, 'xenserver-provision-provider')
-				if(newType && server.computeServerType != newType) {
+				if (newType && server.computeServerType != newType) {
 					server.computeServerType = newType
 				}
-				context.async.computeServer.save(server)
 				def maxMemory = workload.maxMemory ?: workload.instance.plan.maxMemory
 				def maxCores = workload.maxCores ?: workload.instance.plan.maxCores
 				def maxStorage = this.getRootSize(workload)
-				def dataDisks = server?.volumes?.findAll{it.rootVolume == false}?.sort{it.id}
+				def dataDisks = server?.volumes?.findAll { it.rootVolume == false }?.sort { it.id }
 				def createOpts =
 						[
-								account		: server.account,
-								name		: server.name,
-								maxMemory	: maxMemory,
-								maxStorage	: maxStorage,
-								maxCpu		: maxCores,
-								imageId		: imageId,
-								server		: server,
-								zone		: cloud,
-								externalId	: server.externalId,
-								networkType	: workload.getConfigProperty('networkType'),
-								datastore	: datastore,
-								network		: network,
-								dataDisks	: dataDisks,
-								platform	: server.osType,
-								noAgent		: workload.getConfigProperty('noAgent')
+								account    : server.account,
+								name       : server.name,
+								maxMemory  : maxMemory,
+								maxStorage : maxStorage,
+								maxCpu     : maxCores,
+								imageId    : imageId,
+								server     : server,
+								zone       : cloud,
+								externalId : server.externalId,
+								networkType: workload.getConfigProperty('networkType'),
+								datastore  : datastore,
+								network    : network,
+								dataDisks  : dataDisks,
+								platform   : server.osType,
+								noAgent    : workload.getConfigProperty('noAgent')
 						]
 				createOpts.authConfig = authConfigMap
 				createOpts.hostname = server.getExternalHostname()
 				createOpts.domainName = server.getExternalDomain()
 				createOpts.fqdn = createOpts.hostname
-				if(createOpts.domainName) {
+				if (createOpts.domainName) {
 					createOpts.fqdn += '.' + createOpts.domainName
 				}
-
 				createOpts.networkConfig = opts.networkConfig
 				//cloud init config
 				createOpts.isoDatastore = findIsoDatastore(cloud.id)
-				log.info("Ray:: runworkload: createOpts1: ${createOpts}")
-
-				log.info("Ray:: runworkload: virtualImage?.isCloudInit: ${virtualImage?.isCloudInit}")
-				log.info("Ray:: runworkload: virtualImage?.isSysprep: ${virtualImage?.isSysprep}")
-				if(virtualImage?.isCloudInit) {
+				if (virtualImage?.isCloudInit) {
 					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null
 					opts.installAgent = opts.installAgent && (cloudConfigOpts.installAgent != true) && !opts.noAgent
 					createOpts.cloudConfigUser = workloadRequest?.cloudConfigUser ?: null
 					createOpts.cloudConfigMeta = workloadRequest?.cloudConfigMeta ?: null
 					createOpts.cloudConfigNetwork = workloadRequest?.cloudConfigNetwork ?: null
-					server.cloudConfigUser = createOpts.cloudConfigUser
-					server.cloudConfigMeta = createOpts.cloudConfigMeta
-					server.cloudConfigNetwork = createOpts.cloudConfigNetwork
-					context.async.computeServer.save(server)
 					def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
 					createOpts.cloudConfigFile = cloudFileDiskName
-				} else if(virtualImage?.isSysprep) {
-
-					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null // Ask: how to get buildCloudConfigOpts
+				} else if (virtualImage?.isSysprep) {
+					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null
 					opts.installAgent = opts.installAgent && (cloudConfigOpts.installAgent != true) && !opts.noAgent
-					createOpts.cloudConfigUser = workloadRequest?.cloudConfigUser ?: null // Ask: how to get buildCloudUserData
+					createOpts.cloudConfigUser = workloadRequest?.cloudConfigUser ?: null
 					server.cloudConfigUser = createOpts.cloudConfigUser
-					context.async.computeServer.save(server)
 					def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
-					log.info("Ray:: runworkload: cloudFileDiskName: ${cloudFileDiskName}")
 					createOpts.cloudConfigFile = cloudFileDiskName
-				} else {
-					log.info("Ray:: runworkload: opts.userConfig111: ${opts.userConfig}")
-					//opts.createUserList = opts.userConfig.createUsers
 				}
-				log.debug("Creating VM on Xen Server Additional Details: ${createOpts}")
+				server.cloudConfigUser = createOpts.cloudConfigUser
+				server.cloudConfigMeta = createOpts.cloudConfigMeta
+				server.cloudConfigNetwork = createOpts.cloudConfigNetwork
 				createOpts.isSysprep = virtualImage?.isSysprep
+				log.debug("Creating VM on Xen Server Additional Details: ${createOpts}")
+				context.async.computeServer.save(server).blockingGet()
+				createOpts.server = server
 				def createResults
-				log.info("Ray:: runworkload: sourceVmId11: ${sourceVmId}")
-				if(sourceVmId) {
+				if (sourceVmId) {
 					createOpts.sourceVmId = sourceVmId
-					createResults = XenComputeUtility.cloneServer(createOpts, cloudIsoOutputStream)
+					log.info("runworkload: calling cloneServer")
+					createResults = XenComputeUtility.cloneServer(createOpts, getCloudIsoOutputStream(createOpts))
 				} else {
-					log.info("Ray:: runworkload: sourceVmId11 else:")
-					//createResults = XenComputeUtility.createServer(createOpts, cloudIsoOutputStream)
+					log.info("runworkload: calling createProvisionServer")
 					createResults = createProvisionServer(createOpts)
 				}
 				log.debug("Create XenServer VM Results: ${createResults}")
-				log.info("Ray:: runworkload: createResults: ${createResults}")
-				if(createResults.success == true && createResults.vmId) {
+				if (createResults.success == true && createResults.vmId) {
 					server.externalId = createResults.vmId
 					provisionResponse.externalId = server.externalId
-					context.async.computeServer.save(server)
-					setVolumeInfo(server.volumes, createResults.volumes) // Ask:
-					context.async.computeServer.save(server)
+					setVolumeInfo(server.volumes, createResults.volumes)
+					context.async.computeServer.save(server).blockingGet()
 					def startResults = XenComputeUtility.startVm(authConfigMap, server.externalId)
-					log.info("Ray:: runworkload: startResults: ${startResults}")
 					log.debug("start: ${startResults.success}")
-					if(startResults.success == true) {
-						if(startResults.error == true) {
+					if (startResults.success == true) {
+						if (startResults.error == true) {
 							server.statusMessage = 'Failed to start server'
 							//ouch - delet it?
 						} else {
 							//good to go
-							def serverDetail = checkServerReady([authConfig: authConfigMap, externalId:server.externalId])
+							def serverDetail = checkServerReady([authConfig: authConfigMap, externalId: server.externalId])
 							log.debug("serverDetail: ${serverDetail}")
-							if(serverDetail.success == true) {
+							if (serverDetail.success == true) {
 								def privateIp = serverDetail.ipAddress
 								def publicIp = serverDetail.ipAddress
-								//def poolId = createResults.results.server?.networkPoolId
-								//save off interfaces
-								//opts.network = applyComputeServerNetworkIp(opts.server, privateIp, publicIp, hostname, poolId, 0)
 								serverDetail.ipAddresses.each { interfaceName, data ->
-									ComputeServerInterface netInterface = server.interfaces.find{it.name == interfaceName}
-									if(netInterface) {
-										if(data.ipAddress) {
+									ComputeServerInterface netInterface = server.interfaces.find { it.name == interfaceName }
+									if (netInterface) {
+										if (data.ipAddress) {
 											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-											if(!NetworkUtility.validateIpAddr(address.address)){
+											if (!NetworkUtility.validateIpAddr(address.address)) {
 												log.debug("NetAddress Errors: ${address}")
 											}
-											netInterface.addresses << address // use
+											netInterface.addresses << address
 										}
-										if(data.ipv6Address) {
+										if (data.ipv6Address) {
 											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-											if(!NetworkUtility.validateIpAddr(address.address)){
+											if (!NetworkUtility.validateIpAddr(address.address)) {
 												log.debug("NetAddress Errors: ${address}")
 											}
 											netInterface.addresses << address
 										}
 										netInterface.publicIpAddress = data.ipAddress
 										netInterface.publicIpv6Address = data.ipv6Address
-										//netInterface.save(flush:true)
-										context.async.computeServer.computeServerInterface.save([network]).blockingGet()
+										context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
 									}
 								}
-								if(privateIp) {
+								if (privateIp) {
 									def newInterface = false
 									server.internalIp = privateIp
 									server.externalIp = publicIp
@@ -472,57 +415,44 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								server.lvmEnabled = false
 								server.sshHost = privateIp ?: publicIp
 								server.managed = true
-								/*server.save(flush:true, failOnError:true)*/ // Ask:
-								context.async.computeServer.save(server)
 								server.capacityInfo = new ComputeCapacityInfo(
-										server: server, maxCores: 1,
+										maxCores: 1,
 										maxMemory: workload.getConfigProperty('maxMemory').toLong(),
 										maxStorage: workload.getConfigProperty('maxStorage').toLong()
 								)
-								//server.capacityInfo.save()
 								server.status = 'provisioned'
-								//server.save(flush:true) // Ask:
-								context.async.computeServer.save(server)
-								//instanceService.updateInstance(container.instance) // Ask:
-								context.async.instance.save(workload.instance)
-								rtn.success = true
-								//ok - done - delete cloud disk
-								//XenComputeUtility.deleteImage(opts, cloudFileResults.imageId)
+								context.async.computeServer.save(server).blockingGet()
+								context.async.instance.save(workload.instance).blockingGet()
+								provisionResponse.success = true
 							} else {
 								server.statusMessage = 'Failed to load server details'
+								context.async.computeServer.save(server).blockingGet()
 							}
-
 						}
 					} else {
 						server.statusMessage = 'Failed to start server'
+						context.async.computeServer.save(server).blockingGet()
 					}
 				} else {
 					provisionResponse.setError('An unknown error occurred while making an API request to Xen.')
 					provisionResponse.success = false
-					//setProvisionFailed(server, container, createResults.msg ?: 'An unknown error occurred while making an API request to Xen.')
-					//rtn.msg = createResults.msg ?: 'An unknown error occurred while making an API request to Xen.'
 				}
 			} else {
 				server.statusMessage = 'Image not found'
 			}
+			log.info("Ray:: runworkload: server.statusMessage: ${server.statusMessage}")
 			provisionResponse.noAgent = opts.noAgent
 			provisionResponse.installAgent = opts.installAgent
-
-			return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
-
+			if (provisionResponse.success != true) {
+				return new ServiceResponse(success: false, msg: provisionResponse.message ?: 'vm config error', error: provisionResponse.message, data: provisionResponse)
+			} else {
+				return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
+			}
 		} catch (e) {
 			log.error("initializeServer error:${e}", e)
-			log.error("Ray:: XCU:runworkload: exception: ${e.getMessage()}")
 			provisionResponse.setError(e.message)
 			return new ServiceResponse(success: false, msg: e.message, error: e.message, data: provisionResponse)
 		}
-		// TODO: this is where you will implement the work to create the workload in your cloud environment
-		/*return new ServiceResponse<ProvisionResponse>(
-			true,
-			null, // no message
-			null, // no errors
-			new ProvisionResponse(success:true)
-		)*/
 	}
 
 	/**
@@ -833,7 +763,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				if(server.dataDevice == '/dev/xvda' || isKubernetes) {
 					server.lvmEnabled = false
 				}
-				context.async.computeServer.save(server).blockingGet()
 				def createOpts = [
 						account		: account,
 						name		: server.name,
@@ -918,6 +847,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								setNetworkInfo(server.interfaces, serverDetail.networks)
 								server.managed = true
 								context.async.computeServer.save(server).blockingGet()
+								provisionResponse.success = true
 
 							} else {
 								server.statusMessage = 'Failed to load server details'
@@ -986,6 +916,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	def createProvisionServer(opts) {
 		def rtn = [success: false]
 		log.debug "createServer: ${opts}"
+		log.info("Ray:: runworkload: createProvisionServer: opts: ${opts}")
 		try {
 			def config = XenComputeUtility.getXenConnectionSession(opts.authConfig)
 			opts.connection = config.connection
@@ -1011,10 +942,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				newVm.setOtherConfig(config.connection, newConfig)
 			}
 			//add cloud init iso
-			def platformType = PlatformType.valueOf(opts.platform)
-			def cloudIsoOutputStream = context.services.provision.buildIsoOutputStream(
-					opts.isSysprep, platformType, opts.cloudConfigMeta, opts.cloudConfigUser, opts.cloudConfigNetwork)
-			def cdResults = opts.cloudConfigFile ? XenComputeUtility.insertCloudInitDisk(opts, cloudIsoOutputStream) : [success: false]
+			def cdResults = opts.cloudConfigFile ? XenComputeUtility.insertCloudInitDisk(opts, getCloudIsoOutputStream(opts)) : [success: false]
 			def rootVolume = opts.server.volumes?.find{it.rootVolume == true}
 			if (rootVolume) {
 				rootVolume.unitNumber = "0"
@@ -1337,5 +1265,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			log.error("findIsoDatastore error: ${e}", e)
 		}
 		return rtn
+	}
+
+	def getCloudIsoOutputStream(Map opts = [:]) {
+		def isoOutput = context.services.provision.buildIsoOutputStream(
+				opts.isSysprep, PlatformType.valueOf(opts.platform), opts.cloudConfigMeta, opts.cloudConfigUser, opts.cloudConfigNetwork)
+		return isoOutput
 	}
 }
