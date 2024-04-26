@@ -250,16 +250,13 @@ class XenComputeUtility {
             templateName = 'Other install media' //templateName ?: 'Other install media'
             def vmTemplateList = VM.getByNameLabel(opts.connection, templateName)
             def vmTemplate = vmTemplateList ? vmTemplateList.first() : null
-            log.info("RAZI :: vmTemplate : createTemplate: ${vmTemplate}")
             if (!vmTemplate) {
                 VM.Record vm = new VM.Record()
                 vm.nameLabel = opts.name ?: 'Morpheus Template'
                 vm.memoryTarget = 512L * 1024L * 1024L
                 vm.isATemplate = true
                 VM newVm = VM.create(opts.connection, vm)
-                log.info("RAZI :: opts.network.externalId : createTemplate: ${opts.network.externalId}")
                 def networkRecord = com.xensource.xenapi.Network.getByUuid(opts.connection, opts.network.externalId)
-                log.info("RAZI :: networkRecord : createTemplate: ${networkRecord}")
                 createVif(opts, newVm, networkRecord)
                 //create vbd
                 createVbd(opts, newVm, opts.vdi)
@@ -1061,12 +1058,10 @@ class XenComputeUtility {
     }
 
     static insertTemplate(Map opts = [:]) {
-        log.info("RAZI :: opts : insertTemplate: ${opts}")
         def rtn = [success: false]
         def config = getXenConnectionSession(opts.authConfig)
         opts.connection = config.connection
         def imageResults = insertContainerImage(opts)
-        log.info("RAZI :: imageResults insertContainerImage: ${imageResults}")
         if (imageResults.success == true) {
             if (imageResults.found == true) {
                 rtn.success = true
@@ -1075,31 +1070,23 @@ class XenComputeUtility {
                 opts.vdi = imageResults.vdi
                 opts.srRecord = imageResults.srRecord
                 def templateResults = createTemplate(opts)
-                log.info("RAZI :: templateResults : insertTemplate: ${templateResults}")
                 rtn.success = templateResults.success
                 if (rtn.success == true)
                     rtn.imageId = templateResults.vmId
-                log.info("RAZI :: templateResults : final: ${templateResults}")
             }
         } else {
             log.warn("Image Upload Failed! ${imageResults}")
         }
-        log.info("RAZI :: rtn from insertTemplate: ${rtn}")
         return rtn
     }
 
     static insertContainerImage(opts) {
-        log.info("RAZI :: opts : insertContainerImage: ${opts}")
         def rtn = [success: false, found: false]
 //        def uploadTask
         try {
             def currentList = listTemplates(opts.authConfig)?.templateList
-            log.info("RAZI :: currentList: ${currentList}")
-            log.info("RAZI :: opts.image: ${opts.image}")
             def image = opts.image
-            log.info("RAZI :: image: ${image}")
             def match = currentList.find { it.uuid == image.externalId || it.nameLabel == image.name }
-            log.info("RAZI :: match: ${match}")
             if (!match) {
                 def insertOpts = [
                         zone            :opts.zone,
@@ -1126,17 +1113,13 @@ class XenComputeUtility {
                     def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
                             new java.util.zip.GZIPInputStream(sourceStream))
                     def tarEntry = tarStream.getNextTarEntry()
-                    log.info("RAZI :: tarEntry.getSize(): ${tarEntry.getSize()}")
                     insertOpts.diskSize = tarEntry.getSize()
                     sourceStream.close()
                 }
-                log.info("RAZI :: insertOpts : after sourceStream.close(): ${insertOpts}")
                 def createResults = createVdi(insertOpts)
-                log.info("RAZI :: createResults createVdi: ${createResults}")
 
                 if (createResults.success == true) {
                     //upload it -
-                    log.info("RAZI :: opts.datastore.externalId : if (createResults.success == true): ${opts.datastore.externalId}")
                     def srRecord = SR.getByUuid(opts.connection, opts.datastore.externalId)
                     def tgtUrl = getXenApiUrl(opts.zone, true) + '/import_raw_vdi?vdi=' + createResults.vdiId + '&format=vhd'
                     rtn.vdiId = createResults.vdiId
@@ -1145,16 +1128,11 @@ class XenComputeUtility {
                     insertOpts.vdi = rtn.vdi
 //                    def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
 //                    insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
-                    log.info("RAZI :: opts.authConfig.username: ${opts.authConfig.username}")
-                    log.info("RAZI :: opts.authConfig.password: ${opts.authConfig.password}")
                     insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
-                    log.info("RAZI :: insertContainerImage Import URL: ${tgtUrl}")
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
                     def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
-                    log.info("RAZI :: uploadResults: ${uploadResults}")
                     rtn.success = uploadResults.success
-//                    rtn.success = true
 
                 } else {
                     rtn.msg = createResults.msg ?: createResults.error
@@ -1210,10 +1188,7 @@ class XenComputeUtility {
             srRecord.scan(opts.connection)
             //find it
             def vdiList = srRecord.getVDIs(opts.connection)
-            log.info("RAZI :: vdiList: ${vdiList}")
             vdiList?.each {
-                log.info("RAZI :: it.getNameLabel(opts.connection): ${it.getNameLabel(opts.connection)}")
-                log.info("RAZI :: opts.cloudConfigFile: ${opts.cloudConfigFile}")
                 if (it.getNameLabel(opts.connection) == opts.cloudConfigFile) {
                     rtn.vdi = it
                     rtn.success = true

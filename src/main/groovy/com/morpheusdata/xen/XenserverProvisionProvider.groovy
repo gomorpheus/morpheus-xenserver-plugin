@@ -687,8 +687,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse validateHost(ComputeServer server, Map opts) {
 		log.debug("validateHost: ${server} ${opts}")
-		log.info("RAZI :: server : validateHost: ${server}")
-		log.info("RAZI :: opts : validateHost: ${opts}")
 		def rtn =  ServiceResponse.success()
 		try {
 			def validationOpts = [
@@ -701,9 +699,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			if(opts?.config?.containsKey('nodeCount')){
 				validationOpts += [nodeCount: opts.config.nodeCount]
 			}
-			log.info("RAZI :: validationOpts: ${validationOpts}")
 			def validationResults = XenComputeUtility.validateServerConfig(validationOpts)
-			log.info("RAZI :: validationResults: ${validationResults}")
 			if(!validationResults.success) {
 				rtn.success = false
 				rtn.errors += validationResults.errors
@@ -732,7 +728,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		try {
 			VirtualImage virtualImage
 			Long computeTypeSetId = server.typeSet?.id
-			log.info("RAZI :: computeTypeSetId: ${computeTypeSetId}")
 			if(computeTypeSetId) {
 				ComputeTypeSet computeTypeSet = morpheus.async.computeTypeSet.get(computeTypeSetId).blockingGet()
 				if(computeTypeSet.workloadType) {
@@ -759,7 +754,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	ServiceResponse<ProvisionResponse> runHost(ComputeServer server, HostRequest hostRequest, Map opts) {
 		log.debug("runHost: ${server} ${hostRequest} ${opts}")
 
-//		def rtn = [success:false]
 		ProvisionResponse provisionResponse = new ProvisionResponse(success: true, installAgent: false)
 		try {
 			def layout = server?.layout
@@ -767,66 +761,38 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def serverGroupType = layout?.groupType
 			Boolean isKubernetes = serverGroupType?.providerType == 'kubernetes'
 			def config = server.getConfigMap()
-			log.info("RAZI :: config: ${config}")
-			log.info("RAZI :: opts: ${opts}")
-//				opts.zone = zoneService.loadFullZone(opts.zone ?: opts.server.zone)
 			Cloud cloud = server.cloud
-//				opts.account = opts.server.account
 			Account account = server.account
-//			def zoneConfig = cloud.getConfigMap()
-//			def datastoreId = config.datastoreId
 			def imageFormat = 'vhd'
 			def imageType = config.templateTypeSelect ?: 'default'
 			def imageId
 			def virtualImage
 			Map authConfig = plugin.getAuthConfig(cloud)
-//				def rootVolume = getServerRootDisk(opts.server)
 			def rootVolume = server.volumes?.find{it.rootVolume == true}
-//				def datastore = rootVolume?.datastore ?: Datastore.read(config.datastoreId?.toLong())
 				def datastoreId = rootVolume.datastore?.id
 			def datastore = context.async.cloud.datastore.listById([datastoreId?.toLong()]).firstOrError().blockingGet()
-			log.info("RAZI :: datastore: ${datastore}")
 
 			log.debug("runHost datastore: ${datastore}")
-			log.info("RAZI :: config.imageId: ${config.imageId}")
-			log.info("RAZI :: imageType == 'custom' && config.imageId: ${imageType == 'custom' && config.imageId}")
 			if(layout && typeSet) { //check with Dustin
 				Long computeTypeSetId = server.typeSet?.id
-				log.info("RAZI :: computeTypeSetId: ${computeTypeSetId}")
 				if(computeTypeSetId) {
 					ComputeTypeSet computeTypeSet = morpheus.services.computeTypeSet.get(computeTypeSetId)
 					WorkloadType workloadType = computeTypeSet.getWorkloadType()
-					log.info("RAZI :: workloadType: ${workloadType}")
 					if(workloadType) {
 						Long workloadTypeId = workloadType.id
 						WorkloadType containerType = morpheus.services.containerType.get(workloadTypeId)
-//						imageId = containerType.virtualImage.id
 						Long virtualImageId = containerType.virtualImage.id
-						log.info("RAZI :: virtualImageId: ${virtualImageId}")
 						virtualImage = morpheus.services.virtualImage.get(virtualImageId)
-						log.info("RAZI :: virtualImage : layout && typeSet: ${virtualImage}")
 						def imageLocation = virtualImage?.imageLocations.find{it.refId == cloud.id && it.refType == "ComputeZone"}
-						log.info("RAZI :: imageLocation: ${imageLocation}")
 						imageId = imageLocation?.externalId
-//						imageId = virtualImage.externalId
-						log.info("RAZI :: imageId: in if(layout && typeSet): ${imageId}")
 					}
 				}
 			} else if(imageType == 'custom' && config.imageId) {
-//					def virtualImageId = config.imageId?.toLong()
-//					virtualImage = VirtualImage.get(virtualImageId)
 				virtualImage = server.sourceImage
-				log.info("RAZI :: virtualImage : config.imageId: ${virtualImage}")
 				imageId = virtualImage.externalId
-				log.info("RAZI :: imageId : config.imageId: ${imageId}")
 			} else {
-//					virtualImage = VirtualImage.findByCode('xen.image.morpheus.ubuntu.20.04-v1.amd64') //better this later
-//					virtualImage = context.async.virtualImage.getIdentityProperties()
-//					virtualImage = context.services.virtualImage.list(new DataQuery().withFilter('code', 'xen.image.morpheus.ubuntu.20.04-v1.amd64'))
 				virtualImage  = new VirtualImage(code: 'xen.image.morpheus.ubuntu.20.04-v1.amd64')
-				log.info("RAZI :: virtualImage : else: ${virtualImage}")
 			}
-			log.info("RAZI :: !imageId: ${!imageId}")
 			if(!imageId) {
 				def cloudFiles = context.async.virtualImage.getVirtualImageFiles(virtualImage).blockingGet()
 				def imageFile = cloudFiles?.find{cloudFile -> cloudFile.name.toLowerCase().indexOf('.' + imageFormat) > -1}
@@ -845,7 +811,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def imageConfig = [
 						zone		: cloud,
 						image		: containerImage,
-//							cachePath	: virtualImageService.getLocalCachePath(),
 						name		: virtualImage.name,
 						datastore	: datastore,
 						network		: primaryNetwork,
@@ -853,40 +818,21 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				]
 				imageConfig.authConfig = authConfig
 				def imageResults = XenComputeUtility.insertTemplate(imageConfig)
-				log.info("RAZI :: imageResults : !imageId: ${imageResults}")
 				if(imageResults.success == true) {
-					imageId = imageResults.imageId //uuid of the vm template
-					//virtualImage.externalId = imageId - add image location object
-					//virtualImage.save(flush:true)
-					log.info("RAZI :: imageId : imageResults.success: ${imageId}")
+					imageId = imageResults.imageId
 				}
 			}
-			log.info("RAZI :: imageId : before if(imageId) ${imageId}")
 			if(imageId) {
-//				setAgentInstallConfig(opts) //skip
-//				def createdBy = getServerCreateUser(opts.server) //skip
-//				def userGroups = server.userGroups?.toList() ?: []
-//				if (opts.server.userGroup && userGroups.contains(opts.server.userGroup) == false) {
-//					userGroups << opts.server.userGroup
-//				}
-//				opts.userConfig = userGroupService.buildContainerUserGroups(opts.account, virtualImage, userGroups,
-//						createdBy, opts) //skip
-//				server.sshUsername = opts.userConfig.sshUsername
-//				server.sshPassword = opts.userConfig.sshPassword
 				server.sourceImage = virtualImage
 				def maxMemory = server.maxMemory ?: server.plan.maxMemory
-				def maxCpu = server.maxCpu ?: server.plan.maxCpu
 				def maxCores = server.maxCores ?: server.plan.maxCores
-//				def maxStorage = getServerRootSize(opts.server)
 				def maxStorage = rootVolume.maxStorage
-//				def dataDisks = getServerDataDiskList(opts.server)
 				def dataDisks = server?.volumes?.findAll{it.rootVolume == false}?.sort{it.id}
 				server.osDevice = '/dev/xvda'
 				server.dataDevice = dataDisks ? dataDisks.first().deviceName : '/dev/xvda'
 				if(server.dataDevice == '/dev/xvda' || isKubernetes) {
 					server.lvmEnabled = false
 				}
-//				opts.server.save(flush:true)
 				context.async.computeServer.save(server).blockingGet()
 				def createOpts = [
 						account		: account,
@@ -912,49 +858,23 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.cloudConfigNetwork = hostRequest.cloudConfigNetwork
 				createOpts.networkConfig = hostRequest.networkConfiguration
 				createOpts.isSysprep = virtualImage?.isSysprep
-//				createOpts.networkConfig = networkConfigService.getNetworkConfig(opts.server, createOpts) //skip
-//				createOpts.isoDatastore = XenComputeUtility.findIsoDatastore(opts)
 				createOpts.isoDatastore = findIsoDatastore(cloud.id)
-				log.info("RAZI :: createOpts.isoDatastore: ${createOpts.isoDatastore}")
-				log.info("RAZI :: virtualImage?.isCloudInit: ${virtualImage?.isCloudInit}")
-//				if(virtualImage?.isCloudInit) {
-					//skip
-//					def cloudConfigOpts = xenProvisionService.buildCloudConfigOpts(opts.zone, opts.server, opts.installAgent, [doPing:true,
-//																																   hostname:opts.server.getExternalHostname(), hosts:opts.server.getExternalHostname(), disableCloudInit:true, timezone: opts.timezone])
-					//skip all below build methods
-//					morpheusComputeService.buildCloudNetworkConfig(createOpts.platform, virtualImage, cloudConfigOpts, createOpts.networkConfig)
-//					createOpts.cloudConfigUser = morpheusComputeService.buildCloudUserData(createOpts.platform, opts.userConfig, cloudConfigOpts)
-//					createOpts.cloudConfigMeta = morpheusComputeService.buildCloudMetaData(createOpts.platform, "morpheus-${opts.server.id}", opts.server.getExternalHostname(), cloudConfigOpts)
-//					createOpts.cloudConfigNetwork = morpheusComputeService.buildCloudNetworkData(createOpts.platform, cloudConfigOpts)
-					def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
-					createOpts.cloudConfigFile = cloudFileDiskName
-					server.cloudConfigUser = createOpts.cloudConfigUser
-					server.cloudConfigMeta = createOpts.cloudConfigMeta
-					server.cloudConfigNetwork = createOpts.cloudConfigNetwork
-//					opts.installAgent = (cloudConfigOpts.installAgent != true)
-//				} else {
-//					opts.createUserList = opts.userConfig.createUsers //check with Dustin
-//				}
-				//save it
-//				opts.server.save(flush:true)
+
+				def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
+				createOpts.cloudConfigFile = cloudFileDiskName
+				server.cloudConfigUser = createOpts.cloudConfigUser
+				server.cloudConfigMeta = createOpts.cloudConfigMeta
+				server.cloudConfigNetwork = createOpts.cloudConfigNetwork
+
 				context.async.computeServer.save(server).blockingGet()
 				//create it
 				log.debug("create server: ${createOpts}")
 				createOpts.authConfig = authConfig
-				log.info("RAZI :: createOpts: ${createOpts}")
 				def createResults = findOrCreateServer(createOpts)
-				log.info("RAZI :: createResults: ${createResults}")
-				log.info("RAZI :: createResults.success == true && createResults.vmId: ${createResults.success == true && createResults.vmId}")
 				if(createResults.success == true && createResults.vmId) {
 					server.externalId = createResults.vmId
-//					opts.server.save(flush:true)
-//					xenProvisionService.setVolumeInfo(opts.server.volumes, createResults.volumes, opts.zone)
-//					opts.server.save(flush:true)
 					context.async.computeServer.save(server).blockingGet()
-//					Map authConfig = plugin.getAuthConfig(cloud)
-					log.info("RAZI :: server.externalId: ${server.externalId}")
 					def startResults = XenComputeUtility.startVm(authConfig, server.externalId)
-					log.info("RAZI :: startResults: ${startResults}")
 					log.debug("start: ${startResults.success}")
 					if(startResults.success == true) {
 						if(startResults.error == true) {
@@ -962,34 +882,22 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							//ouch - delet it?
 						} else {
 							//good to go
-							log.info("RAZI ::  startResults.error: ${startResults.error}")
-							log.info("RAZI ::  opts.zone: ${opts.zone}")
-							log.info("RAZI ::  opts.server.externalId: ${server.externalId}")
 //							def serverDetail = checkServerReady([zone:opts.zone, externalId:opts.server.externalId])
-							def serverDetail = checkServerReady([zone:cloud, externalId:server.externalId])
-							log.info("RAZI ::  serverDetail : if(createResults.success == true && createResults.vmId) : else: ${serverDetail}")
+							def serverDetail = checkServerReady([authConfig: authConfig, externalId:server.externalId])
 							log.debug("serverDetail: ${serverDetail}")
 							if(serverDetail.success == true) {
 								def privateIp = serverDetail.ipAddress
 								def publicIp = serverDetail.ipAddress
-//								opts.server.sshHost = privateIp
-//								opts.server.internalIp = privateIp
-//								opts.server.externalIp = publicIp
+
 								server.sshHost = privateIp
 								server.internalIp = privateIp
 								server.externalIp = publicIp
-								log.info("RAZI :: serverDetail.ipAddresses : ${serverDetail.ipAddresses}")
 
 								serverDetail.ipAddresses.each { interfaceName, data ->
-//									ComputeServerInterface netInterface = opts.server.interfaces.find{it.name == interfaceName}
 									ComputeServerInterface netInterface = server.interfaces?.find{it.name == interfaceName}
 									if(netInterface) {
 										if(data.ipAddress) {
 											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-											/*if(!address.validate()){
-												log.debug("NetAddress Errors: ${address.errors}")
-											}
-											netInterface.addToAddresses(address)*/
 											if(!NetworkUtility.validateIpAddr(address.address)){
 												log.debug("NetAddress Errors: ${address}")
 											}
@@ -997,10 +905,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 										}
 										if(data.ipv6Address) {
 											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-											/*if(!address.validate()){
-												log.debug("NetAddress Errors: ${address.errors}")
-											}
-											netInterface.addToAddresses(address)*/
 											if(!NetworkUtility.validateIpAddr(address.address)){
 												log.debug("NetAddress Errors: ${address}")
 											}
@@ -1008,21 +912,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 										}
 										netInterface.publicIpAddress = data.ipAddress
 										netInterface.publicIpv6Address = data.ipv6Address
-//										netInterface.save(flush:true)
 										context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
 									}
 								}
-//								xenProvisionService.setNetworkInfo(opts.server.interfaces, serverDetail.networks)
 								setNetworkInfo(server.interfaces, serverDetail.networks)
-//								opts.server.managed = true
 								server.managed = true
-//								opts.server.save(flush:true, failOnError:true)
 								context.async.computeServer.save(server).blockingGet()
-//								def finalizeOpts = [server:opts.server, installAgent:opts.installAgent, createUserList:opts.createUserList,
-//													processId:opts.processId, processMap:opts.processMap, processStepMap:opts.processStepMap]
-//								def finalizeResults = xenProvisionService.finalizeComputeServer(opts.server, finalizeOpts)
-//								def postInitResults = postInitializeServer(opts.server, opts)
-//								rtn.success = finalizeResults?.success == true
+
 							} else {
 								server.statusMessage = 'Failed to load server details'
 							}
@@ -1043,22 +939,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			}
 		} catch(e) {
 			log.error("Error in runHost method: ${e}", e)
-//			server.statusMessage = "Failed to create server: ${e.message}"
 			provisionResponse.setError(e.message)
 			return new ServiceResponse(success: false, msg: e.message, error: e.message, data: provisionResponse)
 		}
-//		if(rtn.success == false) {
-//			try {
-//				opts.server.save(flush:true)
-//				ComputeServer.withNewSession {
-//					ComputeServer.where { id == opts.server.id }.updateAll(status:'failed', statusMessage:opts.server.statusMessage)
-//				}
-//			} catch(e) {
-//				log.error("initializeServer error updating error - ${e}", e)
-//			}
-//		}
-//		return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
-
 	}
 
 	def findOrCreateServer(opts) {
@@ -1066,7 +949,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		def found = false
 		if(opts.server.externalId) {
 			def serverDetail = getServerDetail(opts)
-			log.info("RAZI :: serverDetail: ${serverDetail}")
 			if(serverDetail.success == true) {
 				found = true
 				rtn.success = true
@@ -1096,13 +978,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		} else if(!opts.name) {
 			rtn.error = 'Please specify a name'
 		} else {
-			//credentials
-//			zoneService.loadFullZone(opts.zone)
-//			rtn = XenComputeUtility.createServer(opts)
 			rtn = createProvisionServer(opts)
-			log.info("RAZI :: createServer : else: ${rtn}")
 		}
-		log.info("RAZI :: createServer : last: ${rtn}")
 		return rtn
 	}
 
@@ -1137,8 +1014,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def platformType = PlatformType.valueOf(opts.platform)
 			def cloudIsoOutputStream = context.services.provision.buildIsoOutputStream(
 					opts.isSysprep, platformType, opts.cloudConfigMeta, opts.cloudConfigUser, opts.cloudConfigNetwork)
-			def cdResults = opts.cloudConfigFile ? XenComputeUtility.insertCloudInitDisk(opts, cloudIsoOutputStream) : [success: false] //check with Dustin
-//            def rootVolume = opts.server.volumes.find { it.rootVolume }
+			def cdResults = opts.cloudConfigFile ? XenComputeUtility.insertCloudInitDisk(opts, cloudIsoOutputStream) : [success: false]
 			def rootVolume = opts.server.volumes?.find{it.rootVolume == true}
 			if (rootVolume) {
 				rootVolume.unitNumber = "0"
@@ -1147,10 +1023,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def lastDiskIndex = 0
 			if (cdResults.success == true) {
 				lastDiskIndex = XenComputeUtility.createCdromVbd(opts, newVm, cdResults.vdi, (lastDiskIndex + 1).toString()).deviceId.toInteger()
-				log.info("RAZI :: lastDiskIndex : if (cdResults.success == true): ${lastDiskIndex}")
 			}
 			//add optional data disk
-			log.info("RAZI :: opts.dataDisks?.size(): ${opts.dataDisks?.size()}")
 			if (opts.dataDisks?.size() > 0) {
 				opts.dataDisks?.eachWithIndex { disk, diskIndex ->
 					def dataSrRecord = SR.getByUuid(config.connection, disk.datastore.externalId)
@@ -1165,7 +1039,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						} else {
 							disk.unitNumber = lastDiskIndex
 						}
-//						disk.save() //move the logic to provision, Volume = disk
 						context.async.storageVolume.save(disk).blockingGet()
 					}
 				}
@@ -1180,12 +1053,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			//set network
 			XenComputeUtility.setVmNetwork(opts, newVm, opts.networkConfig)
 			def rootVbd = XenComputeUtility.findRootDrive(opts, newVm)
-			log.info("RAZI :: rootVbd: ${rootVbd}")
-			def rootVbdSize = rootVbd.getVirtualSize(config.connection) //from sdk
-			log.info("RAZI :: rootVbdSize: ${rootVbdSize}")
+			def rootVbdSize = rootVbd.getVirtualSize(config.connection)
 			log.info("resizing root drive: ${rootVbd} with size: ${rootVbdSize} to: ${newStorage}")
 			if (rootVbd && newStorage > rootVbdSize)
-				rootVbd.resize(config.connection, newStorage) //from sdk
+				rootVbd.resize(config.connection, newStorage)
 			rtn.success = true
 			rtn.vm = newVm
 			rtn.vmRecord = rtn.vm.getRecord(config.connection)
@@ -1200,15 +1071,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 
 	def getServerDetail(opts) {
-		//credentials
-//		zoneService.loadFullZone(opts.zone)
 		def getServerDetail = XenComputeUtility.getVirtualMachine(opts.authConfig, opts.externalId)
-		log.info("RAZI :: getServerDetail: ${getServerDetail}")
 		return getServerDetail
 	}
 
 	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
-		log.info("RAZI :: serverInterfaces: ${serverInterfaces}, externalNetworks: ${externalNetworks}")
 		log.info("serverInterfaces: ${serverInterfaces}, externalNetworks: ${externalNetworks}")
 		try {
 			if(externalNetworks?.size() > 0) {
@@ -1225,10 +1092,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							networkInterface.externalId = "${matchNetwork.deviceIndex}"
 							networkInterface.internalId = "${matchNetwork.uuid}"
 							if(networkInterface.type == null) {
-//								networkInterface.type = ComputeServerInterfaceType.findByCode('xenNetwork')
 								networkInterface.type = new ComputeServerInterfaceType(code: 'xenNetwork')
 							}
-//							networkInterface.save()
 							context.async.computeServer.computeServerInterface.save(networkInterface).blockingGet()
 						}
 					}
@@ -1242,7 +1107,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	@Override
 	ServiceResponse finalizeHost(ComputeServer computeServer) {
-		return null
+		return ServiceResponse.success()
 	}
 
 	@Override
@@ -1417,7 +1282,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							'We will automatically retry. Any detailed exceptions will be logged at debug level.')
 					log.debug("Errors from get server detail: ${ex.message}", ex)
 				}
-				log.info("RAZI :: serverDetail : checkServerReady: ${serverDetail}")
 				log.debug("serverDetail: ${serverDetail}")
 				if(serverDetail?.success == true && serverDetail?.vmRecord && serverDetail?.ipAddress) {
 					if(serverDetail.ipAddress) {
