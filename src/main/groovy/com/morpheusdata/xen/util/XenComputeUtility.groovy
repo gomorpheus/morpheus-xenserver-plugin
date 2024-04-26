@@ -2,11 +2,10 @@ package com.morpheusdata.xen.util
 
 import com.bertramlabs.plugins.karman.CloudFile
 import com.bertramlabs.plugins.karman.StorageProvider
-import com.morpheusdata.core.MorpheusContext
-import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.util.MorpheusUtils
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
+import com.morpheusdata.model.Datastore
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
 import groovy.util.logging.Slf4j
@@ -1497,18 +1496,14 @@ class XenComputeUtility {
         return rtn
     }
 
-    static findIsoDatastore(MorpheusContext context, Long cloudId) {
+    static findIsoDatastore(Long cloudId) {
         def rtn
         try {
-            /*def dsList = Datastore.withCriteria {
+            def dsList = Datastore.withCriteria {
                 eq('category', "xenserver.sr.${cloudId}")
                 eq('type', 'iso')
                 gt('storageSize', 1024l * 100l)
-            }*/
-            def dsList = context.services.cloud.datastore.list(
-                    new DataQuery().withFilter("category", "eq", "xenserver.sr.${cloudId}")
-                            .withFilter("type", "eq", "iso")
-                            .withFilter("storageSize", "gt", 1024l * 100l))
+            }
 
             if (dsList?.size() > 0) {
                 def allowedList =
