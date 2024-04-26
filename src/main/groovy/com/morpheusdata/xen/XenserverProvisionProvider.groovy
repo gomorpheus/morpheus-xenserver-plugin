@@ -371,9 +371,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.isoDatastore = findIsoDatastore(cloud.id)
 				log.info("Ray:: runworkload: createOpts1: ${createOpts}")
 
-				def userData
-				def networkData
-				def metadata
 				log.info("Ray:: runworkload: virtualImage?.isCloudInit: ${virtualImage?.isCloudInit}")
 				log.info("Ray:: runworkload: virtualImage?.isSysprep: ${virtualImage?.isSysprep}")
 				if(virtualImage?.isCloudInit) {
@@ -402,12 +399,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					log.info("Ray:: runworkload: opts.userConfig111: ${opts.userConfig}")
 					//opts.createUserList = opts.userConfig.createUsers
 				}
-				userData = createOpts.cloudConfigUser
-				metadata = createOpts.cloudConfigMeta
-				networkData = createOpts.cloudConfigNetwork
 				log.debug("Creating VM on Xen Server Additional Details: ${createOpts}")
-				def cloudIsoOutputStream = context.services.provision.buildIsoOutputStream(
-						virtualImage?.isSysprep, PlatformType.valueOf(createOpts.platform), metadata, userData, networkData)
+				createOpts.isSysprep = virtualImage?.isSysprep
 				def createResults
 				log.info("Ray:: runworkload: sourceVmId11: ${sourceVmId}")
 				if(sourceVmId) {
@@ -415,7 +408,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					createResults = XenComputeUtility.cloneServer(createOpts, cloudIsoOutputStream)
 				} else {
 					log.info("Ray:: runworkload: sourceVmId11 else:")
-					createResults = XenComputeUtility.createServer(createOpts, cloudIsoOutputStream)
+					//createResults = XenComputeUtility.createServer(createOpts, cloudIsoOutputStream)
+					createResults = createProvisionServer(createOpts)
 				}
 				log.debug("Create XenServer VM Results: ${createResults}")
 				log.info("Ray:: runworkload: createResults: ${createResults}")
@@ -917,7 +911,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.cloudConfigMeta = hostRequest.cloudConfigMeta
 				createOpts.cloudConfigNetwork = hostRequest.cloudConfigNetwork
 				createOpts.networkConfig = hostRequest.networkConfiguration
-				createOpts.virtualImage = virtualImage
+				createOpts.isSysprep = virtualImage?.isSysprep
 //				createOpts.networkConfig = networkConfigService.getNetworkConfig(opts.server, createOpts) //skip
 //				createOpts.isoDatastore = XenComputeUtility.findIsoDatastore(opts)
 				createOpts.isoDatastore = findIsoDatastore(cloud.id)
@@ -1118,7 +1112,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		try {
 			def config = XenComputeUtility.getXenConnectionSession(opts.authConfig)
 			opts.connection = config.connection
-			log.info("RAZI :: opts : createServer: ${opts}")
 			def srRecord = SR.getByUuid(config.connection, opts.datastore.externalId)
 			def template = VM.getByUuid(config.connection, opts.imageId)
 			def newVm = template.createClone(config.connection, opts.name)
@@ -1142,16 +1135,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			}
 			//add cloud init iso
 			def platformType = PlatformType.valueOf(opts.platform)
-			def cloudIsoOutputStream = context.services.provision
-				.buildIsoOutputStream(opts.virtualImage?.isSysprep, platformType, opts.cloudConfigUser, opts.cloudConfigMeta, opts.cloudConfigNetwork)
-			log.info("RAZI :: cloudIsoOutputStream: ${cloudIsoOutputStream}")
+			def cloudIsoOutputStream = context.services.provision.buildIsoOutputStream(
+					opts.isSysprep, platformType, opts.cloudConfigMeta, opts.cloudConfigUser, opts.cloudConfigNetwork)
 			def cdResults = opts.cloudConfigFile ? XenComputeUtility.insertCloudInitDisk(opts, cloudIsoOutputStream) : [success: false] //check with Dustin
-			log.info("RAZI :: cdResults: ${cdResults}")
 //            def rootVolume = opts.server.volumes.find { it.rootVolume }
 			def rootVolume = opts.server.volumes?.find{it.rootVolume == true}
 			if (rootVolume) {
 				rootVolume.unitNumber = "0"
-//				rootVolume.save()
 				context.async.storageVolume.save(rootVolume).blockingGet()
 			}
 			def lastDiskIndex = 0
