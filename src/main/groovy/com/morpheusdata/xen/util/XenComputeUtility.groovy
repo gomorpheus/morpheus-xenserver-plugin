@@ -33,6 +33,7 @@ import java.lang.reflect.InvocationTargetException
 import java.security.cert.X509Certificate
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+
 /**
  * @author rahul.ray
  */
@@ -47,11 +48,11 @@ class XenComputeUtility {
         getXenConnectionSession(config)
     }
 
-    static createServer(opts) {
+    static createServer(opts, cloudIsoOutputStream) {
         def rtn = [success: false]
         log.debug "createServer: ${opts}"
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts.authConfig)
             opts.connection = config.connection
             def srRecord = SR.getByUuid(config.connection, opts.datastore.externalId)
             def template = VM.getByUuid(config.connection, opts.imageId)
@@ -76,7 +77,7 @@ class XenComputeUtility {
                 newVm.setOtherConfig(config.connection, newConfig)
             }
             //add cloud init iso
-            def cdResults = opts.cloudConfigFile ? insertCloudInitDisk(opts) : [success: false]
+            def cdResults = opts.cloudConfigFile ? insertCloudInitDisk(opts, cloudIsoOutputStream) : [success: false]
             def rootVolume = opts.server.volumes.find { it.rootVolume }
             if (rootVolume) {
                 rootVolume.unitNumber = "0"
@@ -144,11 +145,11 @@ class XenComputeUtility {
         return rtn
     }
 
-    static cloneServer(opts) {
+    static cloneServer(opts, cloudIsoOutputStream) {
         def rtn = [success: false]
         log.info "cloneServer: ${opts}"
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts.authConfig)
             opts.connection = config.connection
             def srRecord = SR.getByUuid(config.connection, opts.datastore.externalId)
             def template = VM.getByUuid(config.connection, opts.imageId)
@@ -161,7 +162,7 @@ class XenComputeUtility {
             }
             //need to shut down source vm
             if (sourceVm) {
-                stopVm(opts, sourceVmId)
+                stopVm(opts.authConfig, sourceVmId)
             }
             def newVm = template.createClone(config.connection, opts.name)
             newVm.setIsATemplate(config.connection, false)
@@ -175,7 +176,7 @@ class XenComputeUtility {
             }
             def cdrom = newVm.getVBDs(config.connection).find { vbd -> vbd.getType(config.connection) == Types.VbdType.CD }
             if (cdrom) {
-                def cdResults = opts.cloudConfigFile ? insertCloudInitDisk(opts) : [success: false]
+                def cdResults = opts.cloudConfigFile ? insertCloudInitDisk(opts, cloudIsoOutputStream) : [success: false]
                 if (cdResults.success == true) {
                     cdrom.eject(config.connection)
                     cdrom.insert(config.connection, cdResults.vdi)
@@ -188,7 +189,7 @@ class XenComputeUtility {
             if (sourceVm) {
                 //restart the source vm
                 log.info "startng source VM ${sourceVmId}"
-                startVm(opts, sourceVmId)
+                startVm(opts.authConfig, sourceVmId)
             }
             //results
             rtn.success = true
@@ -318,10 +319,10 @@ class XenComputeUtility {
         return rtn
     }
 
-    static startVm(opts, vmId) {
+    static startVm(Map authConfig, vmId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(authConfig)
             def vm = VM.getByUuid(config.connection, vmId)
             if (vm.getPowerState(config.connection) != com.xensource.xenapi.Types.VmPowerState.RUNNING) {
                 vm.start(config.connection, false, true)
@@ -835,11 +836,11 @@ class XenComputeUtility {
         return rtn
     }
 
-    static getVirtualMachine(opts, externalId) {
+    static getVirtualMachine(Map authConfig, externalId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
-            opts.connection = config.connection
+            def config = getXenConnectionSession(authConfig)
+//            opts.connection = config.connection
             def vmRecord = VM.getByUuid(config.connection, externalId)
             rtn.vmId = externalId
             rtn.vm = vmRecord
@@ -865,8 +866,8 @@ class XenComputeUtility {
                     }
                 }
             }
-            rtn.volumes = getVmVolumes(opts, vmRecord)
-            rtn.networks = getVmNetworks(opts, vmRecord)
+            rtn.volumes = getVmVolumes(config, vmRecord)
+            rtn.networks = getVmNetworks(config, vmRecord)
             rtn.success = true
         } catch (e) {
             log.error("getVirtualMachine error: ${e}")
@@ -1050,9 +1051,9 @@ class XenComputeUtility {
         return rtn
     }
 
-    static insertTemplate(opts) {
+    static insertTemplate(Map opts = [:]) {
         def rtn = [success: false]
-        def config = getXenConnectionSession(opts.zone)
+        def config = getXenConnectionSession(opts.authConfig)
         opts.connection = config.connection
         def imageResults = insertContainerImage(opts)
         if (imageResults.success == true) {
@@ -1066,7 +1067,6 @@ class XenComputeUtility {
                 rtn.success = templateResults.success
                 if (rtn.success == true)
                     rtn.imageId = templateResults.vmId
-                log.info("templateResults: ${templateResults}")
             }
         } else {
             log.warn("Image Upload Failed! ${imageResults}")
@@ -1076,15 +1076,29 @@ class XenComputeUtility {
 
     static insertContainerImage(opts) {
         def rtn = [success: false, found: false]
-        def uploadTask
+//        def uploadTask
         try {
-            def currentList = listTemplates(opts)?.templateList
+            def currentList = listTemplates(opts.authConfig)?.templateList
             def image = opts.image
             def match = currentList.find { it.uuid == image.externalId || it.nameLabel == image.name }
             if (!match) {
-                def insertOpts = [zone     : opts.zone, name: image.name, imageSrc: image.imageSrc, minDisk: image.minDisk, minRam: image.minRam,
-                                  imageType: image.imageType, containerType: image.containerType, imageFile: image.imageFile, diskSize: image.imageSize, cloudFiles: image.cloudFiles,
-                                  cachePath: opts.cachePath, datastore: opts.datastore, network: opts.network, connection: opts.connection]
+                def insertOpts = [
+                        zone            :opts.zone,
+                        name            :image.name,
+                        imageSrc        :image.imageSrc,
+                        minDisk         :image.minDisk,
+                        minRam          :image.minRam,
+                        imageType       :image.imageType,
+                        containerType   :image.containerType,
+                        imageFile       :image.imageFile,
+                        diskSize        :image.imageSize,
+                        cloudFiles      :image.cloudFiles,
+//                        cachePath       :opts.cachePath,
+                        datastore       :opts.datastore,
+                        network         :opts.network,
+                        connection      :opts.connection
+                ]
+
 
                 //estimated disk size is wrong. we have to recalculate it
                 if (image.imageFile.name.endsWith('.tar.gz')) {
@@ -1094,27 +1108,26 @@ class XenComputeUtility {
                             new java.util.zip.GZIPInputStream(sourceStream))
                     def tarEntry = tarStream.getNextTarEntry()
                     insertOpts.diskSize = tarEntry.getSize()
-                    log.info("Recalculated Template Size: ${insertOpts.diskSize}")
                     sourceStream.close()
                 }
                 def createResults = createVdi(insertOpts)
-                log.info("insertContainerImage: ${createResults}")
+
                 if (createResults.success == true) {
                     //upload it -
                     def srRecord = SR.getByUuid(opts.connection, opts.datastore.externalId)
-                    def tgtUrl = getXenApiUrl(opts.zone) + '/import_raw_vdi?vdi=' + createResults.vdiId + '&format=vhd'
+                    def tgtUrl = getXenApiUrl(opts.zone, true) + '/import_raw_vdi?vdi=' + createResults.vdiId + '&format=vhd'
                     rtn.vdiId = createResults.vdiId
                     rtn.vdi = createResults.vdi
                     rtn.srRecord = srRecord
                     insertOpts.vdi = rtn.vdi
-                    def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
-                    insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
-                    log.info "insertContainerImage Import URL: ${tgtUrl}"
+//                    def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
+//                    insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
+                    insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
                     def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
-                    log.info("got: ${uploadResults}")
                     rtn.success = uploadResults.success
+
                 } else {
                     rtn.msg = createResults.msg ?: createResults.error
                 }
@@ -1141,57 +1154,31 @@ class XenComputeUtility {
             def pbdRecord = isoPbd.getRecord(opts.connection)
             def deviceConfig = pbdRecord.deviceConfig
 
-            def isoOutput = cloudIsoOutputStream.toByteArray()
             log.info("Preparing to Upload ISO Disk to Datastore: ${isoDatastore.name} - with deviceConfig: ${deviceConfig.dump()} ${deviceConfig['type']}")
-            if (opts.worker && opts.workerCommandService) {
+            if (deviceConfig['type'] == 'nfs_iso') {
+                def locationArgs = deviceConfig['location'].tokenize(':')
+                log.debug("Looking for nfs: ${locationArgs[0]}")
+                def provider = StorageProvider.create(provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1])
+                def iso = provider['/'][opts.cloudConfigFile]
+                iso.setBytes(cloudIsoOutputStream)
+                iso.save()
 
-                def fileCommand = [action: "file", sourceUrl: opts.cloudFileUrl]
-                if (deviceConfig['type'] == 'nfs_iso') {
-                    def locationArgs = deviceConfig['location'].tokenize(':')
-                    fileCommand.destinationProviderOptions = [provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1]]
-                    fileCommand.destinationBucketName = '/'
-                    fileCommand.destinationProviderPath = opts.cloudConfigFile
-                } else { //cifs
-                    def deviceLocations = deviceConfig['location'].tokenize('\\/')
-                    def share = deviceLocations[1..-1].join('/')
-                    def devicePassword = deviceConfig['cifspassword']
-                    def deviceSecret = deviceConfig['cifspassword_secret']
-                    if (deviceSecret) {
-                        def secret = com.xensource.xenapi.Secret.getByUuid(opts.connection, deviceSecret)
-                        devicePassword = secret.getValue(opts.connection)
-                    }
-                    fileCommand.destinationProviderOptions = [provider: 'cifs', host: deviceLocations[0], username: deviceConfig['username'], password: devicePassword]
-                    fileCommand.destinationBucketName = '/'
-                    fileCommand.destinationProviderPath = opts.cloudConfigFile
-                }
-                opts.workerCommandService.sendWorkerAction(opts.worker, fileCommand)?.get()
             } else {
-                if (deviceConfig['type'] == 'nfs_iso') {
-                    def locationArgs = deviceConfig['location'].tokenize(':')
-                    log.info("Looking for nfs: ${locationArgs[0]}")
-                    def provider = StorageProvider.create(provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1])
-                    def iso = provider['/'][opts.cloudConfigFile]
-                    iso.setBytes(isoOutput)
-                    iso.save()
-
-                } else {
-                    def deviceLocations = deviceConfig['location'].tokenize('\\/')
-                    def share = deviceLocations[1..-1].join('/')
-                    def devicePassword = deviceConfig['cifspassword']
-                    def deviceSecret = deviceConfig['cifspassword_secret']
-                    if (deviceSecret) {
-                        def secret = com.xensource.xenapi.Secret.getByUuid(opts.connection, deviceSecret)
-                        devicePassword = secret.getValue(opts.connection)
-                    }
-                    log.info("Looking for cifs: ${deviceLocations[0]}")
-                    def provider = StorageProvider.create(provider: 'cifs', host: deviceLocations[0], username: deviceConfig['username'], password: devicePassword)
-                    def iso = provider[share][opts.cloudConfigFile]
-                    iso.setBytes(isoOutput)
-                    iso.save()
+                def deviceLocations = deviceConfig['location'].tokenize('\\/')
+                def share = deviceLocations[1..-1].join('/')
+                def devicePassword = deviceConfig['cifspassword']
+                def deviceSecret = deviceConfig['cifspassword_secret']
+                if (deviceSecret) {
+                    def secret = com.xensource.xenapi.Secret.getByUuid(opts.connection, deviceSecret)
+                    devicePassword = secret.getValue(opts.connection)
                 }
+
+                log.debug("Looking for cifs: ${deviceLocations[0]}")
+                def provider = StorageProvider.create(provider: 'cifs', host: deviceLocations[0], username: deviceConfig['username'], password: devicePassword)
+                def iso = provider[share][opts.cloudConfigFile]
+                iso.setBytes(cloudIsoOutputStream)
+                iso.save()
             }
-
-
             srRecord.scan(opts.connection)
             //find it
             def vdiList = srRecord.getVDIs(opts.connection)
@@ -1222,18 +1209,19 @@ class XenComputeUtility {
             newRecord.readOnly = false
             newRecord.virtualSize = opts.diskSize ?: minDiskImageSize
             rtn.vdi = VDI.create(opts.connection, newRecord)
-            log.debug "createVdi got: ${rtn.vdi}"
+            log.info "createVdi got: ${rtn.vdi}"
             rtn.vdiRecord = rtn.vdi.getRecord(opts.connection)
             rtn.vdiId = rtn.vdiRecord.uuid
             rtn.success = true
         } catch (e) {
             log.error("create vdi error: ${e}", e)
         }
+        log.debug "createVdi rtn: ${rtn}"
         return rtn
     }
 
     static uploadImage(CloudFile cloudFile, String tgtUrl, String cachePath = null, Map opts = [:]) {
-        log.info("uploadImage cloudFile: ${cloudFile?.name} tgt: ${tgtUrl} cachePath: ${cachePath}")
+        log.debug("uploadImage cloudFile: ${cloudFile?.name} tgt: ${tgtUrl} cachePath: ${cachePath}")
         def rtn = [success: false]
         def usingCache = false
         def sourceStream
@@ -1272,6 +1260,7 @@ class XenComputeUtility {
     }
 
     static uploadImage(InputStream sourceStream, Long contentLength, String tgtUrl, Map opts = [:]) {
+        log.debug("uploadImage: stream: ${contentLength} :: ${tgtUrl} :: ${opts}")
         def outboundClient
         def progressStream
         def rtn = [success: false]
@@ -1310,28 +1299,29 @@ class XenComputeUtility {
             def outboundPut = new HttpPut(tgtUrl)
             def inputEntity
             log.info "Upload Data ${opts}"
-            log.debug "uploadImage opts.isTarGz: ${opts.isTarGz}"
-            log.debug "uploadImage opts.isXz: ${opts.isXz}"
+            log.info "uploadImage opts.isTarGz: ${opts.isTarGz}"
+            log.info "uploadImage opts.isXz: ${opts.isXz}"
             if (opts.isTarGz == true) {
                 def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
                         new java.util.zip.GZIPInputStream(sourceStream))
                 def tarEntry = tarStream.getNextTarEntry()
                 contentLength = tarEntry.getSize()
-                progressStream = new ProgressInputStream(new BufferedInputStream(tarStream, 8400), contentLength)
+                progressStream = new ProgressInputStream(new BufferedInputStream(tarStream, 8400), contentLength, 1, 1)
                 inputEntity = new InputStreamEntity(progressStream, contentLength)
                 inputEntity.setChunked(false)
                 // inputEntity = new InputStreamEntity(tarStream,contentLength)
             } else if (opts.isXz) {
                 def xzStream = new XZCompressorInputStream(sourceStream)
-                inputEntity = new InputStreamEntity(new ProgressInputStream(new BufferedInputStream(xzStream, 8400), contentLength), contentLength)
+                inputEntity = new InputStreamEntity(new ProgressInputStream(new BufferedInputStream(xzStream, 8400), contentLength, 1, 1), contentLength)
                 inputEntity.setChunked(false)
             } else {
-                progressStream = new ProgressInputStream(new BufferedInputStream(sourceStream, 8400), contentLength)
+                progressStream = new ProgressInputStream(new BufferedInputStream(sourceStream, 8400), contentLength, 1, 1, "uploadImage: progressStream:")
                 inputEntity = new InputStreamEntity(progressStream, contentLength)
                 inputEntity.setChunked(false)
             }
             //outboundPut.addHeader('Content-Type', 'application/octet-stream')
             log.debug "uploadImage opts.authHeader: ${opts.authHeader}"
+
             if (opts.authHeader) {
                 outboundPut.addHeader('Authorization', opts.authHeader)
                 outboundPut.addHeader('Proxy-Authorization', opts.authHeader)
@@ -1344,6 +1334,7 @@ class XenComputeUtility {
                 opts.vdi.resize(opts.connection, contentLength)
             log.debug "uploadImage opts.vdi: ${opts.vdi?.dump()}"
             def responseBody = outboundClient.execute(outboundPut)
+            log.info ("uploadImage: stream: responseBody.statusLine.statusCode: ${responseBody.statusLine.statusCode}")
             if (responseBody.statusLine.statusCode < 400) {
                 rtn.success = true
             } else {
@@ -1353,7 +1344,6 @@ class XenComputeUtility {
             }
         } catch (e) {
             log.error("uploadImage From Stream error: ${e} - Offset ${progressStream?.getOffset()}", e)
-
         } finally {
             outboundClient.close()
         }
@@ -1502,24 +1492,6 @@ class XenComputeUtility {
             log.error("downloadImage From Stream error: ${e}", e)
         } finally {
             inboundClient.close()
-        }
-        return rtn
-    }
-
-    static findIsoDatastore(opts) {
-        def rtn
-        try {
-            def dsList = Datastore.withCriteria {
-                eq('category', "xenserver.sr.${opts.zone.id}")
-                eq('type', 'iso')
-                gt('storageSize', 1024l * 100l)
-            }
-            if (dsList?.size() > 0) {
-                def allowedList =
-                        rtn = dsList?.size() > 0 ? dsList.first() : null
-            }
-        } catch (e) {
-            log.error("findIsoDatastore error: ${e}", e)
         }
         return rtn
     }

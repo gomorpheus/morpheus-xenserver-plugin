@@ -430,7 +430,11 @@ class XenserverCloudProvider implements CloudProvider {
 		return false
 	}
 
-	/**
+	@Override
+	Boolean provisionRequiresResourcePool() {
+		return false
+	}
+/**
 	 * Returns whether a cloud supports {@link Network}
 	 * @return Boolean
 	 */
