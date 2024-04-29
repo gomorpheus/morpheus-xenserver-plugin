@@ -331,24 +331,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				//cloud init config
 				createOpts.isoDatastore = findIsoDatastore(cloud.id)
 				if (virtualImage?.isCloudInit) {
-					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null
-					opts.installAgent = opts.installAgent && (cloudConfigOpts.installAgent != true) && !opts.noAgent
 					createOpts.cloudConfigUser = workloadRequest?.cloudConfigUser ?: null
 					createOpts.cloudConfigMeta = workloadRequest?.cloudConfigMeta ?: null
 					createOpts.cloudConfigNetwork = workloadRequest?.cloudConfigNetwork ?: null
-					def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
-					createOpts.cloudConfigFile = cloudFileDiskName
 				} else if (virtualImage?.isSysprep) {
-					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null
-					opts.installAgent = opts.installAgent && (cloudConfigOpts.installAgent != true) && !opts.noAgent
 					createOpts.cloudConfigUser = workloadRequest?.cloudConfigUser ?: null
-					server.cloudConfigUser = createOpts.cloudConfigUser
-					def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
-					createOpts.cloudConfigFile = cloudFileDiskName
 				}
-				server.cloudConfigUser = createOpts.cloudConfigUser
-				server.cloudConfigMeta = createOpts.cloudConfigMeta
-				server.cloudConfigNetwork = createOpts.cloudConfigNetwork
+				createOpts.cloudConfigFile = getCloudFileDiskName(server.id)
 				createOpts.isSysprep = virtualImage?.isSysprep
 				log.debug("Creating VM on Xen Server Additional Details: ${createOpts}")
 				server = saveAndGet(server)
@@ -356,10 +345,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def createResults
 				if (sourceVmId) {
 					createOpts.sourceVmId = sourceVmId
-					log.info("runworkload: calling cloneServer")
+					log.debug("runworkload: calling cloneServer")
 					createResults = XenComputeUtility.cloneServer(createOpts, getCloudIsoOutputStream(createOpts))
 				} else {
-					log.info("runworkload: calling createProvisionServer")
+					log.debug("runworkload: calling createProvisionServer")
 					createResults = createProvisionServer(createOpts)
 				}
 				log.debug("Create XenServer VM Results: ${createResults}")
@@ -792,8 +781,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.isSysprep = virtualImage?.isSysprep
 				createOpts.isoDatastore = findIsoDatastore(cloud.id)
 
-				def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
-				createOpts.cloudConfigFile = cloudFileDiskName
+				createOpts.cloudConfigFile = getCloudFileDiskName(server.id)
 				server.cloudConfigUser = createOpts.cloudConfigUser
 				server.cloudConfigMeta = createOpts.cloudConfigMeta
 				server.cloudConfigNetwork = createOpts.cloudConfigNetwork
@@ -1274,5 +1262,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		def isoOutput = context.services.provision.buildIsoOutputStream(
 				opts.isSysprep, PlatformType.valueOf(opts.platform), opts.cloudConfigMeta, opts.cloudConfigUser, opts.cloudConfigNetwork)
 		return isoOutput
+	}
+
+	def getCloudFileDiskName (Long serverId) {
+		return 'morpheus_server_' + serverId + '.iso'
 	}
 }
