@@ -1248,7 +1248,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def dsList = context.services.cloud.datastore.list(
 					new DataQuery().withFilter("category", "xenserver.sr.${cloudId}")
 							.withFilter("type", "iso")
-							.withFilter("storageSize", ">", 1024l * 100l))
+							.withFilter("storageSize", ">", 1024l * 100l)
+							.withFilter("active", true))
 			if (dsList?.size() > 0) {
 				rtn = dsList?.size() > 0 ? dsList.first() : null
 			}
