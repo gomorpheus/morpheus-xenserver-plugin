@@ -200,7 +200,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse<ProvisionResponse> runWorkload(Workload workload, WorkloadRequest workloadRequest, Map opts) {
 		log.debug "runWorkload: ${workload} ${workloadRequest} ${opts}"
-		ProvisionResponse provisionResponse = new ProvisionResponse(success: true, installAgent: false)
+		ProvisionResponse provisionResponse = new ProvisionResponse(success: true)
 
 		ComputeServer server = workload.server
 		Cloud cloud = server.cloud
@@ -285,7 +285,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			}
 			log.info("runworkload imageId2: ${imageId}")
 			if (imageId) {
-				opts.installAgent = virtualImage ? virtualImage.installAgent : true
 				def userGroups = workload.instance.userGroups?.toList() ?: []
 				if (workload.instance.userGroup && userGroups.contains(workload.instance.userGroup) == false) {
 					userGroups << workload.instance.userGroup
@@ -433,8 +432,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			} else {
 				server.statusMessage = 'Image not found'
 			}
-			provisionResponse.noAgent = opts.noAgent
-			provisionResponse.installAgent = opts.installAgent
+			provisionResponse.noAgent = opts.noAgent ?: false
 			if (provisionResponse.success != true) {
 				return new ServiceResponse(success: false, msg: provisionResponse.message ?: 'vm config error', error: provisionResponse.message, data: provisionResponse)
 			} else {
@@ -676,7 +674,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	ServiceResponse<ProvisionResponse> runHost(ComputeServer server, HostRequest hostRequest, Map opts) {
 		log.debug("runHost: ${server} ${hostRequest} ${opts}")
 
-		ProvisionResponse provisionResponse = new ProvisionResponse(success: true, installAgent: false)
+		ProvisionResponse provisionResponse = new ProvisionResponse(success: true)
 		try {
 			def layout = server?.layout
 			def typeSet = server.typeSet
@@ -799,10 +797,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					if(startResults.success == true) {
 						if(startResults.error == true) {
 							server.statusMessage = 'Failed to start server'
-							//ouch - delet it?
 						} else {
-							//good to go
-//							def serverDetail = checkServerReady([zone:opts.zone, externalId:opts.server.externalId])
 							def serverDetail = checkServerReady([authConfig: authConfig, externalId:server.externalId])
 							log.debug("serverDetail: ${serverDetail}")
 							if(serverDetail.success == true) {
@@ -838,6 +833,16 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								setNetworkInfo(server.interfaces, serverDetail.networks)
 								server.managed = true
 								context.async.computeServer.save(server).blockingGet()
+								// Inform Morpheus to install the agent (or not) after the server is created
+								if(server.sourceImage?.isCloudInit) {
+									// Utilize the morpheus built cloud-init methods
+									Map cloudConfigOptions = hostRequest.cloudConfigOpts
+									log.debug("cloudConfigOptions ${cloudConfigOptions}")
+
+									// Inform Morpheus to install the agent (or not) after the server is created
+									provisionResponse.installAgent = opts.installAgent && (cloudConfigOptions.installAgent != true)
+								}
+								provisionResponse.noAgent = opts.noAgent ?: false
 								provisionResponse.success = true
 
 							} else {
@@ -943,6 +948,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			if (cdResults.success == true) {
 				lastDiskIndex = XenComputeUtility.createCdromVbd(opts, newVm, cdResults.vdi, (lastDiskIndex + 1).toString()).deviceId.toInteger()
 			}
+
 			//add optional data disk
 			if (opts.dataDisks?.size() > 0) {
 				opts.dataDisks?.eachWithIndex { disk, diskIndex ->
