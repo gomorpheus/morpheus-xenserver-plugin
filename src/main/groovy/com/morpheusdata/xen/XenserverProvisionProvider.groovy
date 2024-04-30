@@ -496,17 +496,19 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse startWorkload(Workload workload) {
+		log.debug("startWorkload: ${workload.id}")
 		try {
 			if(workload.server?.externalId) {
 				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
 				def startResults = XenComputeUtility.startVm(authConfigMap, workload.server.externalId)
+				log.debug("startWorkload: startResults: ${startResults}")
 				if(startResults.success == true) {
 					workload.status = Workload.Status.running
 					workload.userStatus = Workload.Status.running
 					context.async.workload.save(workload).blockingGet()
 					workload.instance.status = Instance.Status.running
-					context.async.instance.save(workload.instance)
-					ComputeServer computeServer = context.async.computeServer.get(workload.server.id)
+					context.async.instance.save(workload.instance).blockingGet()
+					ComputeServer computeServer = context.async.computeServer.get(workload.server.id).blockingGet()
 					computeServer.powerState = ComputeServer.PowerState.on
 					context.async.computeServer.save(computeServer).blockingGet()
 					return ServiceResponse.success()
