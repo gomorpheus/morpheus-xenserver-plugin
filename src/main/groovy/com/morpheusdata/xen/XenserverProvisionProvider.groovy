@@ -503,14 +503,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def startResults = XenComputeUtility.startVm(authConfigMap, workload.server.externalId)
 				log.debug("startWorkload: startResults: ${startResults}")
 				if(startResults.success == true) {
-					workload.status = Workload.Status.running
-					workload.userStatus = Workload.Status.running
-					context.async.workload.save(workload).blockingGet()
-					workload.instance.status = Instance.Status.running
-					context.async.instance.save(workload.instance).blockingGet()
-					ComputeServer computeServer = context.async.computeServer.get(workload.server.id).blockingGet()
-					computeServer.powerState = ComputeServer.PowerState.on
-					context.async.computeServer.save(computeServer).blockingGet()
+					context.async.computeServer.updatePowerState(workload.server.id, ComputeServer.PowerState.on).blockingGet()
 					return ServiceResponse.success()
 				} else {
 					return ServiceResponse.error("${startResults.msg}" ?: 'Failed to start vm')
