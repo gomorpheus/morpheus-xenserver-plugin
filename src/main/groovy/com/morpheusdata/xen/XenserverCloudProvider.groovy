@@ -458,7 +458,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean hasDatastores() {
-		return false
+		return true
 	}
 
 	/**
