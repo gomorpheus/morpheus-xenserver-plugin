@@ -1496,25 +1496,6 @@ class XenComputeUtility {
         return rtn
     }
 
-    static findIsoDatastore(Long cloudId) {
-        def rtn
-        try {
-            def dsList = Datastore.withCriteria {
-                eq('category', "xenserver.sr.${cloudId}")
-                eq('type', 'iso')
-                gt('storageSize', 1024l * 100l)
-            }
-
-            if (dsList?.size() > 0) {
-                def allowedList =
-                        rtn = dsList?.size() > 0 ? dsList.first() : null
-            }
-        } catch (e) {
-            log.error("findIsoDatastore error: ${e}", e)
-        }
-        return rtn
-    }
-
     static getXenConnectionSession(Map config) {
         def rtn = [success: false, invalidLogin: false]
         try {

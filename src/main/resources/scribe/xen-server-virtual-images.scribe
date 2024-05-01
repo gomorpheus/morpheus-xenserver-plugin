@@ -1,0 +1,198 @@
+resource "virtual-image" "xenserver-image-morpheus-ubuntu-20_04" {
+  code               = "xen.image.morpheus.ubuntu.20.04-v1.amd64"
+  category           = "xen.image.morpheus.ubuntu"
+  sshUsername        = "null"
+  sshPassword        = null
+  name               = "Morpheus Ubuntu 20.04 v1"
+  imageType          = "vhd"
+  remotePath         = "https://s3-us-west-1.amazonaws.com/morpheus-images/xen/ubuntu/ubuntu-20_04-v1-amd64/morpheus-ubuntu-20_04-v1-amd64.vhd"
+  imagePath          = "xen/ubuntu/ubuntu-20_04-v1-amd64"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "ubuntu-20-04-x64"
+  osType             = "ubuntu.20.04.64"
+  active             = true
+  delete             = false
+}
+
+resource "virtual-image" "xenserver-image-morpheus-ubuntu-22_04" {
+  code               = "xen.image.morpheus.ubuntu.22.04"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "Ubuntu 22.04 LTS (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "ubuntu-22-04-x64"
+  osType             = "ubuntu.22.04.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-debian-9" {
+  code               = "xen.image.morpheus.debian.9"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "Debian 9 (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "debian-9-x64"
+  osType             = "debian.9.13.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-debian-10" {
+  code               = "xen.image.morpheus.debian.10"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "Debian 10 (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "debian-10-x64"
+  osType             = "debian.10.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-debian-11" {
+  code               = "xen.image.morpheus.debian.11"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "Debian 11 (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "debian-11-x64"
+  osType             = "debian.11.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-centos-7_3" {
+  code               = "xen.image.morpheus.centos.7.3"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "CentOS 7 (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "centos-7-x64"
+  osType             = "cent.7.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-centos-7" {
+  code               = "xen.image.morpheus.centos.7"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "CentOS 7 (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "centos-7-x64"
+  osType             = "cent.7.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-centos-8-stream" {
+  code               = "xen.image.morpheus.centos.8-stream"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "CentOS 8 Stream (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "centos-stream-8-x64"
+  osType             = "cent.8.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-centos-9-stream" {
+  code               = "xen.image.morpheus.centos.9-stream"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "CentOS 9 Stream (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "centos-stream-9-x64"
+  osType             = "cent.9.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-rocky-8_4" {
+  code               = "xen.image.morpheus.rocky.8.4"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "Rocky Linux 8.4 (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "rockylinux-8-x64"
+  osType             = "rocky.8.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-rocky-8_6" {
+  code               = "xen.image.morpheus.rocky.8.6"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "Rocky Linux 8.6 (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "rockylinux-8-x64"
+  osType             = "rocky.8.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-rocky-9" {
+  code               = "xen.image.morpheus.rocky.9"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "Rocky Linux 9 (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "rockylinux-9-x64"
+  osType             = "rocky.9.64"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-almalinux-9" {
+  code               = "xen.image.morpheus.almalinux.9"
+  category           = "xen.image.morpheus"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "AlmaLinux 9 (Digital Ocean Marketplace)"
+  imageType          = "qcow2"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = true
+  isCloudInit        = true
+  externalId         = "almalinux-9-x64"
+  osType             = "almalinux.9.64"
+}

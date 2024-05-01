@@ -331,24 +331,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				//cloud init config
 				createOpts.isoDatastore = findIsoDatastore(cloud.id)
 				if (virtualImage?.isCloudInit) {
-					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null
-					opts.installAgent = opts.installAgent && (cloudConfigOpts.installAgent != true) && !opts.noAgent
 					createOpts.cloudConfigUser = workloadRequest?.cloudConfigUser ?: null
 					createOpts.cloudConfigMeta = workloadRequest?.cloudConfigMeta ?: null
 					createOpts.cloudConfigNetwork = workloadRequest?.cloudConfigNetwork ?: null
-					def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
-					createOpts.cloudConfigFile = cloudFileDiskName
 				} else if (virtualImage?.isSysprep) {
-					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null
-					opts.installAgent = opts.installAgent && (cloudConfigOpts.installAgent != true) && !opts.noAgent
 					createOpts.cloudConfigUser = workloadRequest?.cloudConfigUser ?: null
-					server.cloudConfigUser = createOpts.cloudConfigUser
-					def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
-					createOpts.cloudConfigFile = cloudFileDiskName
 				}
-				server.cloudConfigUser = createOpts.cloudConfigUser
-				server.cloudConfigMeta = createOpts.cloudConfigMeta
-				server.cloudConfigNetwork = createOpts.cloudConfigNetwork
+				createOpts.cloudConfigFile = getCloudFileDiskName(server.id)
 				createOpts.isSysprep = virtualImage?.isSysprep
 				log.debug("Creating VM on Xen Server Additional Details: ${createOpts}")
 				server = saveAndGet(server)
@@ -356,10 +345,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def createResults
 				if (sourceVmId) {
 					createOpts.sourceVmId = sourceVmId
-					log.info("runworkload: calling cloneServer")
+					log.debug("runworkload: calling cloneServer")
 					createResults = XenComputeUtility.cloneServer(createOpts, getCloudIsoOutputStream(createOpts))
 				} else {
-					log.info("runworkload: calling createProvisionServer")
+					log.debug("runworkload: calling createProvisionServer")
 					createResults = createProvisionServer(createOpts)
 				}
 				log.debug("Create XenServer VM Results: ${createResults}")
@@ -566,9 +555,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	ServiceResponse stopServer(ComputeServer computeServer) {
 		def rtn = [success: false, msg: null]
 		try {
+			log.info("RAZI :: computeServer?.externalId: ${computeServer?.externalId}")
 			if (computeServer?.externalId){
 				Cloud cloud = computeServer.cloud
+				log.info("RAZI :: cloud: ${cloud}")
 				def stopResults = XenComputeUtility.stopVm(plugin.getAuthConfig(cloud), computeServer.externalId)
+				log.info("RAZI :: stopResults: ${stopResults}")
 				if(stopResults.success == true){
 					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.off)
 					rtn.success = true
@@ -580,7 +572,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			log.error("stopServer error: ${e}", e)
 			rtn.msg = e.message
 		}
-		return new ServiceResponse(rtn.success, rtn.msg, null, null)
+		log.info("RAZI :: stopServer : RTN: ${rtn}")
+		return new ServiceResponse(rtn)
 	}
 
 	/**
@@ -807,12 +800,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.networkConfig = hostRequest.networkConfiguration
 				createOpts.isSysprep = virtualImage?.isSysprep
 				createOpts.isoDatastore = findIsoDatastore(cloud.id)
-
-				def cloudFileDiskName = 'morpheus_server_' + server.id + '.iso'
-				createOpts.cloudConfigFile = cloudFileDiskName
-				server.cloudConfigUser = createOpts.cloudConfigUser
-				server.cloudConfigMeta = createOpts.cloudConfigMeta
-				server.cloudConfigNetwork = createOpts.cloudConfigNetwork
+				createOpts.cloudConfigFile = getCloudFileDiskName(server.id)
 
 				context.async.computeServer.save(server).blockingGet()
 				//create it
@@ -831,46 +819,47 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						} else {
 							//good to go
 //							def serverDetail = checkServerReady([zone:opts.zone, externalId:opts.server.externalId])
-							def serverDetail = checkServerReady([authConfig: authConfig, externalId:server.externalId])
-							log.debug("serverDetail: ${serverDetail}")
-							if(serverDetail.success == true) {
-								def privateIp = serverDetail.ipAddress
-								def publicIp = serverDetail.ipAddress
+//							def serverDetail = checkServerReady([authConfig: authConfig, externalId:server.externalId])
+//							log.debug("serverDetail: ${serverDetail}")
+//							if(serverDetail.success == true) {
+//								def privateIp = serverDetail.ipAddress
+//								def publicIp = serverDetail.ipAddress
+//
+//								server.sshHost = privateIp
+//								server.internalIp = privateIp
+//								server.externalIp = publicIp
 
-								server.sshHost = privateIp
-								server.internalIp = privateIp
-								server.externalIp = publicIp
-
-								serverDetail.ipAddresses.each { interfaceName, data ->
-									ComputeServerInterface netInterface = server.interfaces?.find{it.name == interfaceName}
-									if(netInterface) {
-										if(data.ipAddress) {
-											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-											if(!NetworkUtility.validateIpAddr(address.address)){
-												log.debug("NetAddress Errors: ${address}")
-											}
-											netInterface.addresses << address
-										}
-										if(data.ipv6Address) {
-											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-											if(!NetworkUtility.validateIpAddr(address.address)){
-												log.debug("NetAddress Errors: ${address}")
-											}
-											netInterface.addresses << address
-										}
-										netInterface.publicIpAddress = data.ipAddress
-										netInterface.publicIpv6Address = data.ipv6Address
-										context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
-									}
-								}
-								setNetworkInfo(server.interfaces, serverDetail.networks)
-								server.managed = true
-								context.async.computeServer.save(server).blockingGet()
+//								serverDetail.ipAddresses.each { interfaceName, data ->
+//									ComputeServerInterface netInterface = server.interfaces?.find{it.name == interfaceName}
+//									if(netInterface) {
+//										if(data.ipAddress) {
+//											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
+//											if(!NetworkUtility.validateIpAddr(address.address)){
+//												log.debug("NetAddress Errors: ${address}")
+//											}
+//											netInterface.addresses << address
+//										}
+//										if(data.ipv6Address) {
+//											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
+//											if(!NetworkUtility.validateIpAddr(address.address)){
+//												log.debug("NetAddress Errors: ${address}")
+//											}
+//											netInterface.addresses << address
+//										}
+//										netInterface.publicIpAddress = data.ipAddress
+//										netInterface.publicIpv6Address = data.ipv6Address
+//										context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
+//									}
+//								}
+//								setNetworkInfo(server.interfaces, serverDetail.networks)
+//								server.managed = true
+//								context.async.computeServer.save(server).blockingGet()
 								provisionResponse.success = true
+							log.info("RAZI :: runHost : SUCCESSFULL")
 
-							} else {
-								server.statusMessage = 'Failed to load server details'
-							}
+//							} else {
+//								server.statusMessage = 'Failed to load server details'
+//							}
 						}
 					} else {
 						server.statusMessage = 'Failed to start server'
@@ -1051,10 +1040,74 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		}
 	}
 
+	@Override
+	ServiceResponse waitForHost(ComputeServer server){
+		log.debug("waitForHost: ${server}")
+		log.info("RAZI :: waitForHost : server.cloud: ${server.cloud}")
+		try {
+			Map authConfig = plugin.getAuthConfig(server.cloud)
+			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
+			log.info("RAZI :: waitForHost : serverDetail: ${serverDetail}")
+			return new ServiceResponse(success: serverDetail.success, msg: null)
+		} catch (e){
+			log.error("Error waitForHost: ${e}", e)
+			return new ServiceResponse(success: false, msg: "Error in waiting for Host: ${e}")
+		}
+	}
 
 	@Override
-	ServiceResponse finalizeHost(ComputeServer computeServer) {
-		return ServiceResponse.success()
+	ServiceResponse finalizeHost(ComputeServer server) {
+		ServiceResponse rtn = ServiceResponse.prepare()
+		log.debug("finalizeHost: ${server?.id}")
+		log.info("RAZI :: finalizeHost : server.cloud: ${server.cloud}")
+		try {
+			Map authConfig = plugin.getAuthConfig(server.cloud)
+			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
+			log.info("RAZI :: finalizeHost : serverDetail: ${serverDetail}")
+
+			if (serverDetail.success == true){
+				def privateIp = serverDetail.ipAddress
+				def publicIp = serverDetail.ipAddress
+
+				server.sshHost = privateIp
+				server.internalIp = privateIp
+				server.externalIp = publicIp
+
+				serverDetail.ipAddresses.each { interfaceName, data ->
+					ComputeServerInterface netInterface = server.interfaces?.find{it.name == interfaceName}
+					if(netInterface) {
+						if(data.ipAddress) {
+							def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
+							if(!NetworkUtility.validateIpAddr(address.address)){
+								log.debug("NetAddress Errors: ${address}")
+							}
+							netInterface.addresses << address
+						}
+						if(data.ipv6Address) {
+							def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
+							if(!NetworkUtility.validateIpAddr(address.address)){
+								log.debug("NetAddress Errors: ${address}")
+							}
+							netInterface.addresses << address
+						}
+						netInterface.publicIpAddress = data.ipAddress
+						netInterface.publicIpv6Address = data.ipv6Address
+						context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
+					}
+				}
+				setNetworkInfo(server.interfaces, serverDetail.networks)
+				server.managed = true
+				context.async.computeServer.save(server).blockingGet()
+				rtn.success = true
+			}
+
+		} catch (e){
+			rtn.success = false
+			rtn.msg = "Error in finalizing server: ${e.message}"
+			log.error("Error in finalizeWorkload: {}", e, e)
+		}
+		log.info("RAZI :: finalizeHost : RTN: ${rtn}")
+		return rtn
 	}
 
 	@Override
@@ -1290,5 +1343,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		def isoOutput = context.services.provision.buildIsoOutputStream(
 				opts.isSysprep, PlatformType.valueOf(opts.platform), opts.cloudConfigMeta, opts.cloudConfigUser, opts.cloudConfigNetwork)
 		return isoOutput
+	}
+
+	def getCloudFileDiskName (Long serverId) {
+		return 'morpheus_server_' + serverId + '.iso'
 	}
 }
