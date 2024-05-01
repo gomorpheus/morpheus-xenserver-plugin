@@ -494,7 +494,25 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse startWorkload(Workload workload) {
-		return ServiceResponse.success()
+		log.debug("startWorkload: ${workload.id}")
+		try {
+			if(workload.server?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
+				def startResults = XenComputeUtility.startVm(authConfigMap, workload.server.externalId)
+				log.debug("startWorkload: startResults: ${startResults}")
+				if(startResults.success == true) {
+					context.async.computeServer.updatePowerState(workload.server.id, ComputeServer.PowerState.on).blockingGet()
+					return ServiceResponse.success()
+				} else {
+					return ServiceResponse.error("${startResults.msg}" ?: 'Failed to start vm')
+				}
+			} else {
+				return ServiceResponse.error('vm not found')
+			}
+		} catch(e) {
+			log.error("startContainer error: ${e}", e)
+			return ServiceResponse.error(e.message)
+		}
 	}
 
 	/**
