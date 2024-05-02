@@ -7,6 +7,7 @@ import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.HostProvisionProvider
+import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.core.util.NetworkUtility
@@ -22,7 +23,7 @@ import com.xensource.xenapi.VM
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider {
+class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet {
 
 	public static final String PROVIDER_NAME = 'XenServer'
 	public static final String PROVIDER_CODE = 'xen'
@@ -553,12 +554,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	ServiceResponse stopServer(ComputeServer computeServer) {
 		def rtn = [success: false, msg: null]
 		try {
-			log.info("RAZI :: computeServer?.externalId: ${computeServer?.externalId}")
 			if (computeServer?.externalId){
 				Cloud cloud = computeServer.cloud
-				log.info("RAZI :: cloud: ${cloud}")
 				def stopResults = XenComputeUtility.stopVm(plugin.getAuthConfig(cloud), computeServer.externalId)
-				log.info("RAZI :: stopResults: ${stopResults}")
 				if(stopResults.success == true){
 					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.off)
 					rtn.success = true
@@ -570,7 +568,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			log.error("stopServer error: ${e}", e)
 			rtn.msg = e.message
 		}
-		log.info("RAZI :: stopServer : RTN: ${rtn}")
 		return new ServiceResponse(rtn)
 	}
 
@@ -853,7 +850,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 //								context.async.computeServer.save(server).blockingGet()
 
 								// Inform Morpheus to install the agent (or not) after the server is created
-							log.info("RAZI :: server.sourceImage?.isCloudInit: ${server.sourceImage?.isCloudInit}")
 								if(server.sourceImage?.isCloudInit) {
 									// Utilize the morpheus built cloud-init methods
 									Map cloudConfigOptions = hostRequest.cloudConfigOpts
@@ -864,7 +860,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								}
 								provisionResponse.noAgent = opts.noAgent ?: false
 								provisionResponse.success = true
-							log.info("RAZI :: runHost : SUCCESSFULL")
 
 //							} else {
 //								server.statusMessage = 'Failed to load server details'
@@ -1051,13 +1046,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	}
 
 	@Override
-	ServiceResponse waitForHost(ComputeServer server){
+	ServiceResponse<ProvisionResponse> waitForHost(ComputeServer server){
 		log.debug("waitForHost: ${server}")
-		log.info("RAZI :: waitForHost : server.cloud: ${server.cloud}")
 		try {
 			Map authConfig = plugin.getAuthConfig(server.cloud)
 			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
-			log.info("RAZI :: waitForHost : serverDetail: ${serverDetail}")
 			return new ServiceResponse(success: serverDetail.success, msg: null)
 		} catch (e){
 			log.error("Error waitForHost: ${e}", e)
@@ -1069,11 +1062,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	ServiceResponse finalizeHost(ComputeServer server) {
 		ServiceResponse rtn = ServiceResponse.prepare()
 		log.debug("finalizeHost: ${server?.id}")
-		log.info("RAZI :: finalizeHost : server.cloud: ${server.cloud}")
 		try {
 			Map authConfig = plugin.getAuthConfig(server.cloud)
 			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
-			log.info("RAZI :: finalizeHost : serverDetail: ${serverDetail}")
 
 			if (serverDetail.success == true){
 				def privateIp = serverDetail.ipAddress
@@ -1116,7 +1107,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			rtn.msg = "Error in finalizing server: ${e.message}"
 			log.error("Error in finalizeWorkload: {}", e, e)
 		}
-		log.info("RAZI :: finalizeHost : RTN: ${rtn}")
 		return rtn
 	}
 
@@ -1358,5 +1348,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	def getCloudFileDiskName (Long serverId) {
 		return 'morpheus_server_' + serverId + '.iso'
+	}
+
+	@Override
+	String[] getDiskNameList() {
+		//xvdb is skipped to make way for the cdrom
+		return ['xvda', 'xvdc', 'xvdd', 'xvde', 'xvdf', 'xvdg', 'xvdh', 'xvdi', 'xvdj', 'xvdk', 'xvdl'] as String[]
 	}
 }
