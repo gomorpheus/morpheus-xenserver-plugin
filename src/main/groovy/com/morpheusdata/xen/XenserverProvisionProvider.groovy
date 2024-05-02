@@ -691,7 +691,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	ServiceResponse<ProvisionResponse> runHost(ComputeServer server, HostRequest hostRequest, Map opts) {
 		log.debug("runHost: ${server} ${hostRequest} ${opts}")
 
-		ProvisionResponse provisionResponse = new ProvisionResponse(success: true)
+		ProvisionResponse provisionResponse = new ProvisionResponse()
 		try {
 			def layout = server?.layout
 			def typeSet = server.typeSet
@@ -803,67 +803,14 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.authConfig = authConfig
 				def createResults = findOrCreateServer(createOpts)
 				if(createResults.success == true && createResults.vmId) {
-					server.externalId = createResults.vmId
-					context.async.computeServer.save(server).blockingGet()
-					def startResults = XenComputeUtility.startVm(authConfig, server.externalId)
+					def startResults = XenComputeUtility.startVm(authConfig, createResults.vmId)
+					provisionResponse.externalId = createResults.vmId
 					log.debug("start: ${startResults.success}")
 					if(startResults.success == true) {
 						if(startResults.error == true) {
 							server.statusMessage = 'Failed to start server'
 						} else {
-							//good to go
-//							def serverDetail = checkServerReady([zone:opts.zone, externalId:opts.server.externalId])
-//							def serverDetail = checkServerReady([authConfig: authConfig, externalId:server.externalId])
-//							log.debug("serverDetail: ${serverDetail}")
-//							if(serverDetail.success == true) {
-//								def privateIp = serverDetail.ipAddress
-//								def publicIp = serverDetail.ipAddress
-//
-//								server.sshHost = privateIp
-//								server.internalIp = privateIp
-//								server.externalIp = publicIp
-
-//								serverDetail.ipAddresses.each { interfaceName, data ->
-//									ComputeServerInterface netInterface = server.interfaces?.find{it.name == interfaceName}
-//									if(netInterface) {
-//										if(data.ipAddress) {
-//											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-//											if(!NetworkUtility.validateIpAddr(address.address)){
-//												log.debug("NetAddress Errors: ${address}")
-//											}
-//											netInterface.addresses << address
-//										}
-//										if(data.ipv6Address) {
-//											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-//											if(!NetworkUtility.validateIpAddr(address.address)){
-//												log.debug("NetAddress Errors: ${address}")
-//											}
-//											netInterface.addresses << address
-//										}
-//										netInterface.publicIpAddress = data.ipAddress
-//										netInterface.publicIpv6Address = data.ipv6Address
-//										context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
-//									}
-//								}
-//								setNetworkInfo(server.interfaces, serverDetail.networks)
-//								server.managed = true
-//								context.async.computeServer.save(server).blockingGet()
-
-								// Inform Morpheus to install the agent (or not) after the server is created
-								if(server.sourceImage?.isCloudInit) {
-									// Utilize the morpheus built cloud-init methods
-									Map cloudConfigOptions = hostRequest.cloudConfigOpts
-									log.debug("cloudConfigOptions ${cloudConfigOptions}")
-
-									// Inform Morpheus to install the agent (or not) after the server is created
-									provisionResponse.installAgent = opts.installAgent && (cloudConfigOptions.installAgent != true)
-								}
-								provisionResponse.noAgent = opts.noAgent ?: false
-								provisionResponse.success = true
-
-//							} else {
-//								server.statusMessage = 'Failed to load server details'
-//							}
+							provisionResponse.success = true
 						}
 					} else {
 						server.statusMessage = 'Failed to start server'
@@ -1048,14 +995,28 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse<ProvisionResponse> waitForHost(ComputeServer server){
 		log.debug("waitForHost: ${server}")
+		def provisionResponse = new ProvisionResponse()
+		ServiceResponse<ProvisionResponse> rtn = ServiceResponse.prepare(provisionResponse)
 		try {
 			Map authConfig = plugin.getAuthConfig(server.cloud)
 			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
-			return new ServiceResponse(success: serverDetail.success, msg: null)
+			if (serverDetail.success == true) {
+				provisionResponse.privateIp = serverDetail.ipAddress
+				provisionResponse.publicIp = serverDetail.ipAddress
+				provisionResponse.externalId = server.externalId
+				def finalizeResults = finalizeHost(server)
+				if(finalizeResults.success == true) {
+					provisionResponse.success = true
+					rtn.success = true
+				}
+			}
 		} catch (e){
 			log.error("Error waitForHost: ${e}", e)
-			return new ServiceResponse(success: false, msg: "Error in waiting for Host: ${e}")
+			rtn.success = false
+			rtn.msg = "Error in waiting for Host: ${e}"
 		}
+
+		return rtn
 	}
 
 	@Override
@@ -1067,13 +1028,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
 
 			if (serverDetail.success == true){
-				def privateIp = serverDetail.ipAddress
-				def publicIp = serverDetail.ipAddress
-
-				server.sshHost = privateIp
-				server.internalIp = privateIp
-				server.externalIp = publicIp
-
 				serverDetail.ipAddresses.each { interfaceName, data ->
 					ComputeServerInterface netInterface = server.interfaces?.find{it.name == interfaceName}
 					if(netInterface) {
@@ -1097,7 +1051,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 				setNetworkInfo(server.interfaces, serverDetail.networks)
-				server.managed = true
 				context.async.computeServer.save(server).blockingGet()
 				rtn.success = true
 			}
