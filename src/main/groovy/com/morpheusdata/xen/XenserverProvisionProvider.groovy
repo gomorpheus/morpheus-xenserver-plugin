@@ -706,11 +706,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def virtualImage
 			Map authConfig = plugin.getAuthConfig(cloud)
 			def rootVolume = server.volumes?.find{it.rootVolume == true}
-				def datastoreId = rootVolume.datastore?.id
+			def datastoreId = rootVolume.datastore?.id
 			def datastore = context.async.cloud.datastore.listById([datastoreId?.toLong()]).firstOrError().blockingGet()
-
 			log.debug("runHost datastore: ${datastore}")
-			if(layout && typeSet) { //check with Dustin
+
+			if(layout && typeSet) {
 				Long computeTypeSetId = server.typeSet?.id
 				if(computeTypeSetId) {
 					ComputeTypeSet computeTypeSet = morpheus.services.computeTypeSet.get(computeTypeSetId)
@@ -956,7 +956,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		}
 		return rtn
 	}
-
 
 	def getServerDetail(opts) {
 		def getServerDetail = XenComputeUtility.getVirtualMachine(opts.authConfig, opts.externalId)
