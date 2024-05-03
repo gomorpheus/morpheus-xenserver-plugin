@@ -552,23 +552,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse stopServer(ComputeServer computeServer) {
-		def rtn = [success: false, msg: null]
-		try {
-			if (computeServer?.externalId){
-				Cloud cloud = computeServer.cloud
-				def stopResults = XenComputeUtility.stopVm(plugin.getAuthConfig(cloud), computeServer.externalId)
-				if(stopResults.success == true){
-					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.off)
-					rtn.success = true
-				}
-			} else {
-				rtn.msg = 'vm not found'
-			}
-		} catch(e) {
-			log.error("stopServer error: ${e}", e)
-			rtn.msg = e.message
-		}
-		return new ServiceResponse(rtn)
+		return ServiceResponse.success()
 	}
 
 	/**
