@@ -174,7 +174,52 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 	 */
 	@Override
 	ServiceResponse extractBackup(BackupResult backupResultModel, Map opts) {
-		return ServiceResponse.success()
+		//TODO: This method doesn't work in the embedded integration, so its likely to implement using
+		// legacy code.
+		/*def rtn = [success:false]
+		try {
+			rtn.backupResultId = backupResult.id
+			def backup = Backup.get(backupResult.backup.id)
+			def container = Container.read(backup.containerId)
+			def instance = Instance.read(container.instanceId)
+			def server = getBackupComputeServer(backup)
+			def zone = zoneService.loadFullZone(server.zoneId)
+			def zoneType = ComputeZoneType.read(zone.zoneTypeId)
+			String outputPath = backupStorageService.getWorkingBackupPath(backup.id, backupResult.id)
+			def outputFile = new File(outputPath)
+			outputFile.mkdirs()
+			//prep export
+			def exportOpts = [zone:zone, targetDir:outputPath, snapshotId:backupResult.snapshotId, vmName:"${instance.name}.${container.id}"]
+			log.debug("exportOpts: {}", exportOpts)
+			def exportResults = XenComputeUtility.exportVm(exportOpts, backupResult.snapshotId)
+			log.debug("exportResults: {}", exportResults)
+			def saveResults = backupStorageService.saveBackupResults(backup.account, outputFile.getPath(), backup.id)
+			if(saveResults.success == true) {
+				def statusMap = [backupResultId:rtn.backupResultId, destinationPath:outputPath, providerType:saveResults.providerType,
+								 providerBasePath:saveResults.basePath, targetBucket:saveResults.targetBucket,
+								 targetDirectory:saveResults.targetDirectory, snapshotExtracted:true, targetArchive:saveResults.targetArchive,
+								 backupSizeInMb:(saveResults.archiveSize ?: 1).div(ComputeUtility.ONE_MEGABYTE), success:true]
+				statusMap.config = [snapshotId:snapshotResults.snapshotId, snapshotName:snapshotName, vmId:snapshotResults.externalId]
+				updateBackupStatus(backupResult.id, null, statusMap)
+				rtn.success = true
+				rtn.destinationPath = outputPath
+				rtn.snapshotId = statusMap.snapshotId
+				rtn.targetBucket = statusMap.targetBucket
+				rtn.targetProvider = statusMap.providerType
+				rtn.targetBase = statusMap.providerBasePath
+				rtn.targetDirectory = statusMap.targetDirectory
+				rtn.targetArchive = statusMap.targetArchive
+			} else {
+				def error = saveResults.error ?: "Failed to save backup result"
+				rtn.message = error
+			}
+		} catch(e) {
+			log.error("extractBackup: ${e}", e)
+			def error = "Failed to extract backup"
+			rtn.message = "Failed to extract backup: ${e.getMessage()}"
+		}
+		return rtn*/
+		return ServiceResponse.error()
 	}
 
 }		
