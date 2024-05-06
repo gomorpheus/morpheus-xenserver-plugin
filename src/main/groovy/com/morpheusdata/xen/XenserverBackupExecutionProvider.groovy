@@ -4,17 +4,24 @@ import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupExecutionProvider
 import com.morpheusdata.core.backup.response.BackupExecutionResponse
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.model.Backup
 import com.morpheusdata.model.BackupResult
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeServer
+import com.morpheusdata.model.PlatformType
+import com.morpheusdata.model.Snapshot
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.xen.util.XenComputeUtility
 import groovy.util.logging.Slf4j
+
+import java.util.zip.ZipOutputStream
 
 @Slf4j
 class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 
-	Plugin plugin
+//	Plugin plugin
+	XenserverPlugin plugin
 	MorpheusContext morpheusContext
 
 	XenserverBackupExecutionProvider(Plugin plugin, MorpheusContext morpheusContext) {
@@ -136,15 +143,144 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 	 * @return a {@link ServiceResponse} indicating the success or failure of the backup execution. A success value
 	 * of 'false' will halt the execution process.
 	 */
+	ServiceResponse<BackupExecutionResponse> updateBackupStatus(BackupExecutionResponse backupExecutionResponse){
+		ServiceResponse<BackupExecutionResponse> rtn = ServiceResponse.prepare(backupExecutionResponse)
+		rtn.data.backupResult.status = BackupResult.Status.IN_PROGRESS
+		rtn.data.updates = true
+		log.info("RAZI :: updateBackupStatus : RTN: ${rtn}")
+		return rtn
+	}
+
 	@Override
-	ServiceResponse<BackupExecutionResponse> executeBackup(Backup backup, BackupResult backupResult, Map executionConfig, Cloud cloud, ComputeServer computeServer, Map opts) {
-		return ServiceResponse.success(new BackupExecutionResponse(backupResult))
+	ServiceResponse<BackupExecutionResponse> executeBackup(Backup backup, BackupResult backupResult, Map executionConfig, Cloud cloud, ComputeServer server, Map opts) {
+		log.debug("Executing backup {} with result {}", backup.id, backupResult.id)
+		BackupExecutionResponse backupExecutionResponse = new BackupExecutionResponse(backupResult)
+		ServiceResponse<BackupExecutionResponse> rtn = ServiceResponse.prepare(backupExecutionResponse)
+
+		Map authConfig = plugin.getAuthConfig(cloud)
+		String vmUuid = server.externalId
+
+		try {
+			def snapshotName = "${server.name}.${server.id}.${System.currentTimeMillis()}".toString()
+			def snapshotOpts = [zone:cloud, server:server, externalId:server.externalId, snapshotName:snapshotName, snapshotDescription:'']
+			snapshotOpts.authConfig = authConfig
+			def outputPath = executionConfig.backupConfig.workingPath //executionConfig
+			def outputFile = new File(outputPath)
+			outputFile.mkdirs()
+			//update status
+//			updateBackupStatus(backupResult.id, 'IN_PROGRESS', [containerConfig:container?.configMap]) // skip
+			updateBackupStatus(backupExecutionResponse)
+			log.info("RAZI :: updateBackupStatus : SUCCESS1")
+			//remove cloud init
+			if(server.sourceImage && server.sourceImage.isCloudInit && server.serverOs?.platform != 'windows')
+				getPlugin().morpheus.executeCommandOnServer(server, 'sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; sudo cp /etc/machine-id /tmp/machine-id-old ; sync', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+			//take snapshot
+			def snapshotResults
+			try {
+				snapshotResults = XenComputeUtility.snapshotVm(snapshotOpts, server.externalId)
+			} finally {
+				//restore cloud init
+				if(server.sourceImage && server.sourceImage.isCloudInit && server.serverOs?.platform != 'windows')
+					getPlugin().morpheus.executeCommandOnServer(server, "sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\"; sudo cat /tmp/machine-id-old > /etc/machine-id ; sudo rm /tmp/machine-id-old ; sync", false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+			}
+//			log.info("backup complete: {}", snapshotResults)
+			log.info("RAZI :: backup complete: {}", snapshotResults)
+			if(snapshotResults.success) {
+				//save the snapshot
+				Snapshot snapshotRecord = new Snapshot(account:server.account, externalId:snapshotResults.snapshotId, name:"snapshot-${new Date().time}")
+				morpheusContext.async.snapshot.save(snapshotRecord).blockingGet()
+
+				server.snapshots << snapshotRecord
+				morpheusContext.async.computeServer.save(server).blockingGet()
+				if(backup.copyToStore == true) {
+					log.info("snapshot complete - saving to target storage: {}", snapshotResults)
+
+					def providerInfo = backupStorageService.getBackupStorageProviderConfig(backup.account, backup.id)// Dustin will check
+
+					def archiveName = "backup.${backupResult.id}.zip"
+					def zipFile = providerInfo.provider[providerInfo.bucketName]["backup.${backup.id}/${archiveName}"]
+					//we have to do some piping magic for this one
+					PipedOutputStream outStream = new PipedOutputStream()
+					InputStream istream  = new PipedInputStream(outStream)
+					BufferedOutputStream buffOut = new BufferedOutputStream(outStream,1048576)
+					ZipOutputStream zipStream = new ZipOutputStream(buffOut)
+					def saveResults = [success:false]
+					def saveThread = Thread.start {
+						try {
+							zipFile.setInputStream(istream)
+							zipFile.save()
+							saveResults.archiveSize = zipFile.getContentLength()
+							saveResults.success = true
+						} catch(ex) {
+							log.error("Error Saving Backup File! ${ex.message}",ex)
+							try {
+								zipStream.close()
+							} catch(ex2) {
+								//dont care about exception on this but we need to close it on save failure thread in the event we need to cutoff the stream
+							}
+						}
+					}
+					//download it to output path
+					def instance = morpheusContext.async.instance.get(backup.instanceId).blockingGet()
+					def exportOpts = [zone:cloud, targetDir:outputPath, targetZipStream:zipStream, snapshotId:snapshotResults.snapshotId,
+									  vmName:"${instance.name}.${backup.containerId}"]
+					log.info("RAZI :: exportOpts: ${exportOpts}")
+					exportOpts.authConfig = authConfig
+					log.debug("exportOpts: {}", exportOpts)
+					def exportResults = XenComputeUtility.exportVm(exportOpts, snapshotResults.snapshotId)
+					log.debug("exportResults: {}", exportResults)
+					saveThread.join()
+					log.info("RAZI :: exportResults: ${exportResults}")
+					if(saveResults.success == true) {
+//						def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress, destinationPath:outputPath, snapshotId: snapshotResults.snapshotId,
+//										 providerType:providerInfo.providerType, targetBucket:providerInfo.bucketName, imageType:'xva',
+//										 targetDirectory:"backup.${backup.id}", backupSizeInMb:(saveResults.archiveSize ?: 1).div(ComputeUtility.ONE_MEGABYTE),
+//										 targetArchive:archiveName, success:true]
+//						statusMap.config = [snapshotId:snapshotResults.snapshotId, snapshotName:snapshotName, vmId:snapshotResults.externalId]
+//						updateBackupStatus(backupResult.id, null, statusMap)
+						rtn.success = true
+						updateBackupStatus(backupExecutionResponse)
+					} else {
+//						def error = saveResults.error ?: "Failed to save backup result"
+//						def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress, destinationPath:outputPath,
+//										 snapshotExtracted:false, backupSizeInMb:0, success:false, errorOutput:error.encodeAsBase64()]
+//						updateBackupStatus(backupResult.id, null, statusMap)
+						updateBackupStatus(backupExecutionResponse)
+					}
+				} else {
+//					def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress, destinationPath:outputPath,
+//									 providerType:'xen', providerBasePath:'xen', targetBucket:snapshotResults.externalId, targetDirectory:snapshotName,
+//									 targetArchive:snapshotResults.snapshotId, backupSizeInMb:0, snapshotExtracted:false, success:true]
+//					statusMap.config = [snapshotId:snapshotResults.snapshotId, snapshotName:snapshotName, vmId:snapshotResults.externalId]
+//					updateBackupStatus(backupResult.id, null, statusMap)
+					updateBackupStatus(backupExecutionResponse)
+				}
+			} else {
+//				//error
+//				def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress, destinationPath:outputPath,
+//								 snapshotExtracted:false, backupSizeInMb:0, success:false, errorOutput:snapshotResults.error?.toString()?.encodeAsBase64()]
+//				updateBackupStatus(backupResult.id, null, statusMap)
+				updateBackupStatus(backupExecutionResponse)
+			}
+//			clearBackupProcessId(backupResult)
+			rtn.success = true
+		} catch(e) {
+			log.error("executeBackup: ${e}", e)
+//			rtn.message = e.getMessage()
+//			def error = "Failed to execute backup"
+//			def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress,
+//							 snapshotExtracted:false, backupSizeInMb:0, success:false, errorOutput:error.encodeAsBase64()]
+//			updateBackupStatus(backupResult.id, null, statusMap)
+			updateBackupStatus(backupResult)
+		}
+
+		return rtn
 	}
 
 	/**
 	 * Periodically call until the backup execution has successfully completed. The default refresh interval is 60 seconds.
 	 * @param backupResult the reference to the results of the backup execution including the last known status. Set the
-	 *                     status to a canceled/succeeded/failed value from one of the {@link BackupStatusUtility} values
+	 *                     status to a canceled/succeeded/failed value from one of the BackupStatusUtility values
 	 *                     to end the execution process.
 	 * @return a {@link ServiceResponse} indicating the success or failure of the method. A success value
 	 * of 'false' will halt the further execution process.n
@@ -170,11 +306,56 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 	 * a download or full archive of the backup.
 	 * @param backupResultModel the details associated with the results of the backup execution.
 	 * @param opts additional options.
-	 * @return a {@link ServiceResponse} indicating the success or failure of the backup extraction.
+	 * @return a ServiceResponse indicating the success or failure of the backup extraction.
 	 */
 	@Override
 	ServiceResponse extractBackup(BackupResult backupResultModel, Map opts) {
-		return ServiceResponse.success()
+		//TODO: This method doesn't work in the embedded integration, so its likely to implement using
+		// legacy code.
+		/*def rtn = [success:false]
+		try {
+			rtn.backupResultId = backupResult.id
+			def backup = Backup.get(backupResult.backup.id)
+			def container = Container.read(backup.containerId)
+			def instance = Instance.read(container.instanceId)
+			def server = getBackupComputeServer(backup)
+			def zone = zoneService.loadFullZone(server.zoneId)
+			def zoneType = ComputeZoneType.read(zone.zoneTypeId)
+			String outputPath = backupStorageService.getWorkingBackupPath(backup.id, backupResult.id)
+			def outputFile = new File(outputPath)
+			outputFile.mkdirs()
+			//prep export
+			def exportOpts = [zone:zone, targetDir:outputPath, snapshotId:backupResult.snapshotId, vmName:"${instance.name}.${container.id}"]
+			log.debug("exportOpts: {}", exportOpts)
+			def exportResults = XenComputeUtility.exportVm(exportOpts, backupResult.snapshotId)
+			log.debug("exportResults: {}", exportResults)
+			def saveResults = backupStorageService.saveBackupResults(backup.account, outputFile.getPath(), backup.id)
+			if(saveResults.success == true) {
+				def statusMap = [backupResultId:rtn.backupResultId, destinationPath:outputPath, providerType:saveResults.providerType,
+								 providerBasePath:saveResults.basePath, targetBucket:saveResults.targetBucket,
+								 targetDirectory:saveResults.targetDirectory, snapshotExtracted:true, targetArchive:saveResults.targetArchive,
+								 backupSizeInMb:(saveResults.archiveSize ?: 1).div(ComputeUtility.ONE_MEGABYTE), success:true]
+				statusMap.config = [snapshotId:snapshotResults.snapshotId, snapshotName:snapshotName, vmId:snapshotResults.externalId]
+				updateBackupStatus(backupResult.id, null, statusMap)
+				rtn.success = true
+				rtn.destinationPath = outputPath
+				rtn.snapshotId = statusMap.snapshotId
+				rtn.targetBucket = statusMap.targetBucket
+				rtn.targetProvider = statusMap.providerType
+				rtn.targetBase = statusMap.providerBasePath
+				rtn.targetDirectory = statusMap.targetDirectory
+				rtn.targetArchive = statusMap.targetArchive
+			} else {
+				def error = saveResults.error ?: "Failed to save backup result"
+				rtn.message = error
+			}
+		} catch(e) {
+			log.error("extractBackup: ${e}", e)
+			def error = "Failed to extract backup"
+			rtn.message = "Failed to extract backup: ${e.getMessage()}"
+		}
+		return rtn*/
+		return ServiceResponse.error()
 	}
 
 }		

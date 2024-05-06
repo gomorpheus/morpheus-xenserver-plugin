@@ -356,10 +356,10 @@ class XenComputeUtility {
         return rtn
     }
 
-    static destroyVm(opts, vmId) {
+    static destroyVm(Map authConfig, vmId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(authConfig)
             def vm = VM.getByUuid(config.connection, vmId)
             def vbdList = vm.getVBDs(config.connection)
             def vdiList = []
@@ -951,7 +951,7 @@ class XenComputeUtility {
     static snapshotVm(opts, vmId) {
         def rtn = [success: false, externalId: vmId]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts.authConfig)
             def vm = VM.getByUuid(config.connection, vmId)
             if (vm) {
                 def snapshotName = opts.snapshotName ?: "${vm.getNameLabel(config.connection)}.${System.currentTimeMillis()}"
@@ -972,12 +972,14 @@ class XenComputeUtility {
         def rtn = [success: false]
         ZipOutputStream targetZipStream
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts.authConfig)
             def vm = VM.getByUuid(config.connection, vmId)
             def vmName = vm.getNameLabel(config.connection)
-            def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
+//            def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
+            def creds = opts.authConfig.username + ':' + opts.authConfig.password
             def insertOpts = [zone: opts.zone]
-            insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
+//            insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
+            insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
             def srcUrl = getXenApiUrl(opts.zone, true, creds) + '/export?uuid=' + vmId
             def targetFileName = (opts.vmName ?: "${vmName}.${System.currentTimeMillis()}") + '.xva'
             def targetFolder = opts.targetDir

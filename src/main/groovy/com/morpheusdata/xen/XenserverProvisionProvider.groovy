@@ -9,6 +9,7 @@ import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.HostProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.model.*
 import com.morpheusdata.model.provisioning.HostRequest
@@ -1292,4 +1293,5 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	def getCloudFileDiskName (Long serverId) {
 		return 'morpheus_server_' + serverId + '.iso'
 	}
+
 }
