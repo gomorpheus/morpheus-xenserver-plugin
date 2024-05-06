@@ -387,7 +387,7 @@ class XenComputeUtility {
     static adjustVmResources(opts, vmId, allocationSpecs) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             def vm = VM.getByUuid(config.connection, vmId)
             def newMemory = allocationSpecs.maxMemory
             def newCores = allocationSpecs.maxCpu
@@ -471,7 +471,7 @@ class XenComputeUtility {
     static deleteVmNetwork(opts, vmId, networkUuid) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             opts.connection = config.connection
             def vm = VM.getByUuid(opts.connection, vmId)
             def vmVif = findVif(opts, vm, networkUuid)
@@ -513,7 +513,7 @@ class XenComputeUtility {
     static resizeVmDisk(opts, vmId, diskConfig) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             opts.connection = config.connection
             def vm = VM.getByUuid(opts.connection, vmId)
             def vmDrive = findDriveVdi(opts, vm, diskConfig.uuid)
@@ -536,7 +536,7 @@ class XenComputeUtility {
     static deleteVmDisk(opts, vmId, diskUuid) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             opts.connection = config.connection
             def vm = VM.getByUuid(opts.connection, vmId)
             def vmDrive = findDriveVbd(opts, vm, diskUuid)

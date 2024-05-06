@@ -14,6 +14,7 @@ import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.model.*
 import com.morpheusdata.model.provisioning.HostRequest
 import com.morpheusdata.model.provisioning.WorkloadRequest
+import com.morpheusdata.request.ResizeRequest
 import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
 import com.morpheusdata.response.ServiceResponse
@@ -23,7 +24,7 @@ import com.xensource.xenapi.VM
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet {
+class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet {
 
 	public static final String PROVIDER_NAME = 'XenServer'
 	public static final String PROVIDER_CODE = 'xen'
@@ -1359,5 +1360,242 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	String[] getDiskNameList() {
 		//xvdb is skipped to make way for the cdrom
 		return ['xvda', 'xvdc', 'xvdd', 'xvde', 'xvdf', 'xvdg', 'xvdh', 'xvdi', 'xvdj', 'xvdk', 'xvdl'] as String[]
+	}
+
+	@Override
+	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
+		def rtn = [success: false, supported: true]
+		ComputeServer computeServer = workload.server
+		Cloud cloud = computeServer.cloud
+		def authConfigMap = plugin.getAuthConfig(cloud)
+		try {
+			log.info("resizing vm: ${opts}")
+			computeServer.status = 'resizing'
+			computeServer = saveAndGet(computeServer)
+			//def servicePlanOptions = opts.servicePlanOptions ?: [:]
+			ServicePlan plan = resizeRequest.plan
+			def requestedMemory = plan.customMaxMemory ? (resizeRequest.maxMemory ?: plan.maxMemory) : plan.maxMemory
+			def requestedCores = plan.customCores ? (resizeRequest?.maxCores ?: plan.maxCores) : plan.maxCores
+			def currentMemory = workload.maxMemory ?: workload.getConfigProperty('maxMemory')?.toLong()
+			def currentCores = workload.maxCores ?: 1
+			def neededMemory = requestedMemory - currentMemory
+			def neededCores = (requestedCores ?: 1) - (currentCores ?: 1)
+			def allocationSpecs = [externalId: computeServer.externalId, maxMemory: requestedMemory, maxCpu: requestedCores]
+			def multipleContainers = instance.containers?.size() > 1
+			def modified = false
+			def stopped = false
+			def stopResults
+			//check for stop - we have weird math going on
+			def doStop = computeServer.hotResize != true && (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0 || resizeRequest.volumesUpdate?.size() > 0)
+			// || volumeSyncLists?.volumeDeletes?.size() > 0)
+			if (doStop) {
+				log.info("stopping vm for resize: memory ${neededMemory} cores ${neededCores}")
+				stopped = true
+				opts.stopped = stopped
+				//instanceTaskService.runShutdownTasks(instance, opts.userId)
+				//workload.server = computeServer// check: do we need this line, do we need to set server back to workload as updated earlier
+				stopResults = stopWorkload(workload)
+			}
+			//adjust plan size
+			if (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0) {
+				log.info("resizing vm: ${allocationSpecs}")
+				def allocationResults = XenComputeUtility.adjustVmResources(authConfigMap, computeServer.externalId, allocationSpecs)
+				if (allocationResults.success) {
+					modified = true
+					workload.setConfigProperty('maxMemory', requestedMemory)
+					workload.maxMemory = requestedMemory.toLong()
+					workload.setConfigProperty('maxCores', (requestedCores ?: 1))
+					workload.maxCores = (requestedCores ?: 1).toLong()
+					workload.plan = plan
+					workload.server.plan = plan
+					workload.server.maxCores = (requestedCores ?: 1).toLong()
+					workload.server.maxMemory = requestedMemory.toLong()
+					context.async.workload.save(workload).blockingGet()
+					computeServer = workload.server
+					computeServer = saveAndGet(computeServer)
+				}
+			}
+			def maxStorage = 0
+			if (opts.volumes) {
+				//def rootDisk = getContainerRootDisk(container)
+				def newCounter = computeServer.volumes?.size()
+				//maxStorage = volumeSyncLists.totalStorage
+				//volumes
+				//log.info("volumeSyncLists?.volumeUpdates? ${volumeSyncLists?.volumeUpdates}")
+				resizeRequest.volumesUpdate?.each { volumeUpdate ->
+					StorageVolume existing = volumeUpdate.existingModel
+					Map updateProps = volumeUpdate.updateProps
+					log.info("resizing vm storage: ${volumeUpdate}")
+					//existing disk - resize it
+					if (updateProps.maxStorage > existing.maxStorage) {
+						def resizeDiskConfig = [diskSize: updateProps.maxStorage, diskIndex: existing.externalId, uuid: existing.internalId]
+						def resizeResults = XenComputeUtility.resizeVmDisk(authConfigMap, computeServer.externalId, resizeDiskConfig)
+						def storageVolumeId = existing.id
+						def existingVolume = context.async.storageVolume.get(existing.id).blockingGet()
+						existingVolume.maxStorage = updateProps?.maxStorage
+						context.async.storageVolume.save(existingVolume).blockingGet()
+						modified = true
+					}
+				}
+				resizeRequest.volumesAdd.each { volumeAdd ->
+					//new disk add it
+					log.info("resizing vm adding storage: ${volumeAdd}")
+					def addDiskConfig = [diskSize: volumeAdd.maxStorage, diskName: "morpheus_data_${newCounter}", diskIndex: newCounter]
+					addDiskConfig.datastoreId = getDatastoreExternalId(volumeAdd.datastoreId)
+					def addDiskResults = XenComputeUtility.addVmDisk(authConfigMap, computeServer.externalId, addDiskConfig)
+					log.info("addDiskResults: ${addDiskResults} - ${addDiskResults.datastore}")
+					if (addDiskResults.success == true) {
+						volumeAdd.volume.internalId = addDiskResults.volume?.uuid
+						volumeAdd.volume.unitNumber = addDiskResults.volume?.deviceIndex
+						volumeAdd.volume.displayOrder = addDiskResults.volume?.deviceIndex?.toLong()
+						def allStorageVolumeTypes = context.async.storageVolume.storageVolumeType.listAll().toMap { it.id }.blockingGet()
+						// check: new code
+						def volumeType = allStorageVolumeTypes[volumeAdd.storageType?.toLong()] // check: new code
+						//def newVolume = buildStorageVolume(container.server.account, container.server, volumeUpdate.volume, newCounter)
+						def newVolume = new StorageVolume(
+								refType: 'ComputeZone',
+								refId: cloud.id,
+								regionCode: computeServer.region?.regionCode,
+								account: computeServer.account,
+								maxStorage: volumeAdd.maxStorage,
+								maxIOPS: volumeAdd.maxIops,
+								type: volumeType, // check
+								externalId: volumeAdd.externalId, //check
+								//deviceName: deviceName,
+								//deviceDisplayName: extractDiskDisplayName(deviceName),
+								name: volumeAdd.name,
+								displayOrder: newCounter,
+								status: 'provisioned',
+								unitNumber: addDiskResults.volume?.deviceIndex
+								//rootVolume: ['/dev/sda1','/dev/xvda','xvda','sda1','sda'].contains(deviceName)
+						)
+						newVolume.uniqueId = "morpheus-vol-${instance.id}-${workload.id}-${newCounter}"
+						//newVolume.save(flush:true)
+						//newVolume.maxStorage = volumeAdd.volume.size.toInteger() * ComputeUtility.ONE_GIGABYTE // check: working of this line
+						computeServer.volumes << newVolume
+						setVolumeInfo(computeServer.volumes, addDiskResults.volumes)
+
+						context.async.storageVolume.create([newVolume], computeServer).blockingGet()
+						computeServer = saveAndGet(computeServer)
+						workload.server = computeServer
+						context.async.workload.save(workload).blockingGet()
+						newCounter++
+						modified = true
+					} else {
+						log.warn("error adding disk: ${addDiskResults}")
+					}
+				}
+				// Delete any removed volumes
+				resizeRequest.volumesDelete.each { volume ->
+					log.info("resize deleting volume : ${volume.internalId}")
+					def deleteResults = XenComputeUtility.deleteVmDisk(authConfigMap, computeServer.externalId, volume.internalId)
+					if (deleteResults.success == true) {
+						log.info("resize delete complete: ${deleteResults.success}")
+						workload = context.async.workload.get(workload.id).blockingGet()
+						computeServer = workload.server
+						computeServer.volumes.remove(volume)
+						context.async.storageVolume.remove([volume], computeServer, true).blockingGet()
+						computeServer = saveAndGet(computeServer)
+						workload.server = computeServer
+						context.async.workload.save(workload).blockingGet()
+					}
+				}
+			}
+
+			//networks
+			if (opts.networkInterfaces) {
+				log.debug("build network networkSyncLists: ${opts.networkInterfaces}")
+				log.debug("container ${workload.id} network networkSyncLists:")
+				//controllers
+				resizeRequest?.interfacesUpdate?.eachWithIndex { networkUpdate, index ->
+					if (networkUpdate.existingModel) {
+						log.info("modifying network: ${networkUpdate}")
+
+					} else {
+
+					}
+				}
+
+				resizeRequest.interfacesAdd.eachWithIndex { networkAdd, index ->
+					log.info("adding network: ${networkAdd}")
+					def newIndex = workload.server.interfaces?.size()
+					def newType = new ComputeServerInterfaceType(code: 'xenNetwork')
+					def newNetwork = context.async.network.listById([networkAdd.network.id.toLong()]).firstOrError().blockingGet()
+					def networkConfig = [networkIndex: newIndex, networkUuid: newNetwork.externalId]
+					def networkResults = XenComputeUtility.addVmNetwork(authConfigMap, computeServer.externalId, networkConfig)
+					log.info("network results: ${networkResults}")
+					if (networkResults.success == true) {
+						//def newInterface = buildComputeServerInterface(instance.account, instance, container.server, networkUpdate.network, newIndex, [:])
+						def platform = computeServer.platform
+						def nicName
+						if (platform == 'windows') {
+							nicName = (index == 0) ? 'Ethernet' : 'Ethernet ' + (index + 1)
+						} else if (platform == 'linux') {
+							nicName = "eth${index}"
+						} else {
+							nicName = "eth${index}"
+						}
+						def newInterface = new ComputeServerInterface([
+								name            : nicName,
+								ipAddress       : nic?.getPrivateIpAddress(),
+								network         : newNetwork,
+								displayOrder    : newIndex,
+								primaryInterface: networkAdd?.network?.isPrimary ? true : false
+						])
+						if (networkResults.networkIndex)
+							newInterface.externalId = "${networkResults.networkIndex}"
+						if (networkResults.uuid)
+							newInterface.internalId = networkResults.uuid
+						newInterface.uniqueId = "morpheus-nic-${instance.id}-${container.id}-${newIndex}"
+						//newInterface.addresses += new NetAddress(type: NetAddress.AddressType.IPV4, address: nic?.getPrivateIpAddress()) //check: aws added code
+						newInterface = morpheusContext.async.computeServer.computeServerInterface.create(newInterface).blockingGet()
+						computeServer.interfaces << newInterface
+						computeServer = saveAndGet(computeServer)
+						workload.server = computeServer
+					}
+				}
+
+				resizeRequest?.interfacesDelete?.eachWithIndex { networkDelete, index ->
+					authConfigMap.stopped = opts.stopped
+					def deleteResults = XenComputeUtility.deleteVmNetwork(authConfigMap, computeServer.externalId, networkDelete.internalId)
+					log.debug("deleteResults: ${deleteResults}")
+					if (deleteResults.success == true) {
+						context.async.computeServer.computeServerInterface.remove([networkDelete], computeServer).blockingGet()
+						computeServer.interfaces.remove(networkDelete)
+						computeServer = saveAndGet(computeServer)
+						workload.server = computeServer
+					}
+				}
+			}
+			workload = context.async.workload.save(workload).blockingGet()
+			if (!rtn.error && maxStorage)
+				workload.maxStorage = maxStorage
+			computeServer.status = 'provisioned'
+			computeServer = saveAndGet(computeServer)
+			workload.server = computeServer
+			if (stopped == true) {
+				startWorkload(workload)
+				if (workload.status == Workload.Status.running) {
+					//def tmpInstance = Instance.get(instance.id)
+					//instanceTaskService.runStartupTasks(tmpInstance, opts.userId)
+				}
+			}
+			rtn.success = true
+		} catch (e) {
+			log.error("Unable to resize container: ${e.message}", e)
+			workload.server.status = 'provisioned'
+			workload.server = saveAndGet(workload.server)
+			rtn.errors << "${e}"
+			rtn.msg = 'Error resizing container'
+		}
+		return new ServiceResponse(success: rtn.success, data: [supported: rtn.supported])
+	}
+
+	def getDatastoreExternalId(datastoreId) {
+		if (datastoreId == 'auto' || datastoreId == 'autoCluster') {
+			return null
+		}
+		def datastore = context.async.cloud.datastore.get(datastoreId?.toLong()).blockingGet()
+		return datastore?.externalId
 	}
 }
