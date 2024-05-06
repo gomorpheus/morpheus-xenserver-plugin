@@ -7,6 +7,7 @@ import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.HostProvisionProvider
+import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.core.util.NetworkUtility
@@ -22,7 +23,7 @@ import com.xensource.xenapi.VM
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider {
+class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet {
 
 	public static final String PROVIDER_NAME = 'XenServer'
 	public static final String PROVIDER_CODE = 'xen'
@@ -692,7 +693,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	ServiceResponse<ProvisionResponse> runHost(ComputeServer server, HostRequest hostRequest, Map opts) {
 		log.debug("runHost: ${server} ${hostRequest} ${opts}")
 
-		ProvisionResponse provisionResponse = new ProvisionResponse(success: true)
+		ProvisionResponse provisionResponse = new ProvisionResponse()
 		try {
 			def layout = server?.layout
 			def typeSet = server.typeSet
@@ -707,11 +708,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def virtualImage
 			Map authConfig = plugin.getAuthConfig(cloud)
 			def rootVolume = server.volumes?.find{it.rootVolume == true}
-				def datastoreId = rootVolume.datastore?.id
+			def datastoreId = rootVolume.datastore?.id
 			def datastore = context.async.cloud.datastore.listById([datastoreId?.toLong()]).firstOrError().blockingGet()
-
 			log.debug("runHost datastore: ${datastore}")
-			if(layout && typeSet) { //check with Dustin
+
+			if(layout && typeSet) {
 				Long computeTypeSetId = server.typeSet?.id
 				if(computeTypeSetId) {
 					ComputeTypeSet computeTypeSet = morpheus.services.computeTypeSet.get(computeTypeSetId)
@@ -796,11 +797,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.networkConfig = hostRequest.networkConfiguration
 				createOpts.isSysprep = virtualImage?.isSysprep
 				createOpts.isoDatastore = findIsoDatastore(cloud.id)
-
 				createOpts.cloudConfigFile = getCloudFileDiskName(server.id)
-				server.cloudConfigUser = createOpts.cloudConfigUser
-				server.cloudConfigMeta = createOpts.cloudConfigMeta
-				server.cloudConfigNetwork = createOpts.cloudConfigNetwork
 
 				context.async.computeServer.save(server).blockingGet()
 				//create it
@@ -808,64 +805,14 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.authConfig = authConfig
 				def createResults = findOrCreateServer(createOpts)
 				if(createResults.success == true && createResults.vmId) {
-					server.externalId = createResults.vmId
-					context.async.computeServer.save(server).blockingGet()
-					def startResults = XenComputeUtility.startVm(authConfig, server.externalId)
+					def startResults = XenComputeUtility.startVm(authConfig, createResults.vmId)
+					provisionResponse.externalId = createResults.vmId
 					log.debug("start: ${startResults.success}")
 					if(startResults.success == true) {
 						if(startResults.error == true) {
 							server.statusMessage = 'Failed to start server'
 						} else {
-							def serverDetail = checkServerReady([authConfig: authConfig, externalId:server.externalId])
-							log.debug("serverDetail: ${serverDetail}")
-							if(serverDetail.success == true) {
-								def privateIp = serverDetail.ipAddress
-								def publicIp = serverDetail.ipAddress
-
-								server.sshHost = privateIp
-								server.internalIp = privateIp
-								server.externalIp = publicIp
-
-								serverDetail.ipAddresses.each { interfaceName, data ->
-									ComputeServerInterface netInterface = server.interfaces?.find{it.name == interfaceName}
-									if(netInterface) {
-										if(data.ipAddress) {
-											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-											if(!NetworkUtility.validateIpAddr(address.address)){
-												log.debug("NetAddress Errors: ${address}")
-											}
-											netInterface.addresses << address
-										}
-										if(data.ipv6Address) {
-											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-											if(!NetworkUtility.validateIpAddr(address.address)){
-												log.debug("NetAddress Errors: ${address}")
-											}
-											netInterface.addresses << address
-										}
-										netInterface.publicIpAddress = data.ipAddress
-										netInterface.publicIpv6Address = data.ipv6Address
-										context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
-									}
-								}
-								setNetworkInfo(server.interfaces, serverDetail.networks)
-								server.managed = true
-								context.async.computeServer.save(server).blockingGet()
-								// Inform Morpheus to install the agent (or not) after the server is created
-								if(server.sourceImage?.isCloudInit) {
-									// Utilize the morpheus built cloud-init methods
-									Map cloudConfigOptions = hostRequest.cloudConfigOpts
-									log.debug("cloudConfigOptions ${cloudConfigOptions}")
-
-									// Inform Morpheus to install the agent (or not) after the server is created
-									provisionResponse.installAgent = opts.installAgent && (cloudConfigOptions.installAgent != true)
-								}
-								provisionResponse.noAgent = opts.noAgent ?: false
-								provisionResponse.success = true
-
-							} else {
-								server.statusMessage = 'Failed to load server details'
-							}
+							provisionResponse.success = true
 						}
 					} else {
 						server.statusMessage = 'Failed to start server'
@@ -1012,7 +959,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		return rtn
 	}
 
-
 	def getServerDetail(opts) {
 		def getServerDetail = XenComputeUtility.getVirtualMachine(opts.authConfig, opts.externalId)
 		return getServerDetail
@@ -1047,10 +993,75 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		}
 	}
 
+	@Override
+	ServiceResponse<ProvisionResponse> waitForHost(ComputeServer server){
+		log.debug("waitForHost: ${server}")
+		def provisionResponse = new ProvisionResponse()
+		ServiceResponse<ProvisionResponse> rtn = ServiceResponse.prepare(provisionResponse)
+		try {
+			Map authConfig = plugin.getAuthConfig(server.cloud)
+			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
+			if (serverDetail.success == true) {
+				provisionResponse.privateIp = serverDetail.ipAddress
+				provisionResponse.publicIp = serverDetail.ipAddress
+				provisionResponse.externalId = server.externalId
+				def finalizeResults = finalizeHost(server)
+				if(finalizeResults.success == true) {
+					provisionResponse.success = true
+					rtn.success = true
+				}
+			}
+		} catch (e){
+			log.error("Error waitForHost: ${e}", e)
+			rtn.success = false
+			rtn.msg = "Error in waiting for Host: ${e}"
+		}
+
+		return rtn
+	}
 
 	@Override
-	ServiceResponse finalizeHost(ComputeServer computeServer) {
-		return ServiceResponse.success()
+	ServiceResponse finalizeHost(ComputeServer server) {
+		ServiceResponse rtn = ServiceResponse.prepare()
+		log.debug("finalizeHost: ${server?.id}")
+		try {
+			Map authConfig = plugin.getAuthConfig(server.cloud)
+			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
+
+			if (serverDetail.success == true){
+				serverDetail.ipAddresses.each { interfaceName, data ->
+					ComputeServerInterface netInterface = server.interfaces?.find{it.name == interfaceName}
+					if(netInterface) {
+						if(data.ipAddress) {
+							def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
+							if(!NetworkUtility.validateIpAddr(address.address)){
+								log.debug("NetAddress Errors: ${address}")
+							}
+							netInterface.addresses << address
+						}
+						if(data.ipv6Address) {
+							def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
+							if(!NetworkUtility.validateIpAddr(address.address)){
+								log.debug("NetAddress Errors: ${address}")
+							}
+							netInterface.addresses << address
+						}
+						netInterface.publicIpAddress = data.ipAddress
+						netInterface.publicIpv6Address = data.ipv6Address
+						context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
+					}
+				}
+				setNetworkInfo(server.interfaces, serverDetail.networks)
+				context.async.computeServer.save(server).blockingGet()
+				rtn.success = true
+			}
+
+		} catch (e){
+			rtn.success = false
+			rtn.msg = "Error in finalizing server: ${e.message}"
+			log.error("Error in finalizeWorkload: {}", e, e)
+		}
+		return rtn
 	}
 
 	@Override
@@ -1291,5 +1302,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	def getCloudFileDiskName (Long serverId) {
 		return 'morpheus_server_' + serverId + '.iso'
+	}
+
+	@Override
+	String[] getDiskNameList() {
+		//xvdb is skipped to make way for the cdrom
+		return ['xvda', 'xvdc', 'xvdd', 'xvde', 'xvdf', 'xvdg', 'xvdh', 'xvdi', 'xvdj', 'xvdk', 'xvdl'] as String[]
 	}
 }
