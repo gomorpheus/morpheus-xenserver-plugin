@@ -579,7 +579,26 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.info("Ray:: startServer: computeServer.id: ${computeServer?.externalId}")
+		def rtn = [success: false]
+		try {
+			if (computeServer?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
+				def startResults = XenComputeUtility.startVm(authConfigMap, computeServer.externalId)
+				log.info("Ray:: startServer: startResults: ${startResults}")
+				if (startResults.success == true) {
+					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.on).blockingGet()
+					rtn.success = true
+				}
+			} else {
+				rtn.msg = 'vm not found'
+			}
+		} catch (e) {
+			log.error("Ray::startServer error: ${e}", e)
+			rtn.msg = e.message
+		}
+		log.info("Ray:: startServer: rtn: ${rtn}")
+		return new ServiceResponse(rtn)
 	}
 
 	/**
