@@ -537,7 +537,39 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse removeWorkload(Workload workload, Map opts) {
-		return ServiceResponse.success()
+		log.info("Ray:: removeWorkload: opts: ${opts}")
+		log.info("Ray:: removeWorkload: workload.server.id: ${workload.server.id}")
+		try {
+			log.info("Ray:: removeWorkload: workload.server?.externalId: ${workload.server?.externalId}")
+			if(workload.server?.externalId) {
+				log.info("Ray:: removeWorkload: calling stopWorkload")
+				def stopResults = stopWorkload(workload)
+				log.info("Ray:: removeWorkload: stopResults: ${stopResults}")
+				def authConfigMap = plugin.getAuthConfig(workload.server.cloud)
+				log.info("Ray:: removeWorkload: authConfigMap: ${authConfigMap}")
+				log.info("Ray:: removeWorkload: opts.keepBackups: ${opts.keepBackups}")
+				if(!opts.keepBackups) {
+					log.info("Ray:: removeWorkload: workload.server?.snapshots?.size(): ${workload.server?.snapshots?.size()}")
+					workload.server.snapshots?.each { snap ->
+						log.info("Removing VM Xen Snapshot: {}", snap.externalId)
+						XenComputeUtility.destroyVm(authConfigMap, snap.externalId)
+					}
+				}
+				def removeResults = XenComputeUtility.destroyVm(authConfigMap, workload.server.externalId)
+				log.info("Ray:: removeWorkload: removeResults: ${removeResults}")
+				if(removeResults.success == true) {
+					return ServiceResponse.success()
+				} else {
+					log.info("Ray:: removeWorkload: Failed to remove vm")
+					return ServiceResponse.error('Failed to remove vm')
+				}
+			} else {
+				return ServiceResponse.error('vm not found')
+			}
+		} catch(e) {
+			log.error("Ray::removeContainer error: ${e}", e)
+			return ServiceResponse.error(e.message)
+		}
 	}
 
 	/**
@@ -580,7 +612,26 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.info("Ray:: startServer: computeServer.id: ${computeServer?.externalId}")
+		def rtn = [success: false]
+		try {
+			if (computeServer?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
+				def startResults = XenComputeUtility.startVm(authConfigMap, computeServer.externalId)
+				log.info("Ray:: startServer: startResults: ${startResults}")
+				if (startResults.success == true) {
+					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.on).blockingGet()
+					rtn.success = true
+				}
+			} else {
+				rtn.msg = 'vm not found'
+			}
+		} catch (e) {
+			log.error("Ray::startServer error: ${e}", e)
+			rtn.msg = e.message
+		}
+		log.info("Ray:: startServer: rtn: ${rtn}")
+		return new ServiceResponse(rtn)
 	}
 
 	/**

@@ -359,7 +359,7 @@ class XenComputeUtility {
     static destroyVm(opts, vmId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             def vm = VM.getByUuid(config.connection, vmId)
             def vbdList = vm.getVBDs(config.connection)
             def vdiList = []
