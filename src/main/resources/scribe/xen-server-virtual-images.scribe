@@ -1,7 +1,7 @@
 resource "virtual-image" "xenserver-image-morpheus-ubuntu-20_04" {
   code               = "xen.image.morpheus.ubuntu.20.04-v1.amd64"
   category           = "xen.image.morpheus.ubuntu"
-  sshUsername        = "null"
+  sshUsername        = null
   sshPassword        = null
   name               = "Morpheus Ubuntu 20.04 v1"
   imageType          = "vhd"
@@ -11,7 +11,6 @@ resource "virtual-image" "xenserver-image-morpheus-ubuntu-20_04" {
   installAgent       = true
   computeServerImage = true
   isCloudInit        = true
-  externalId         = "ubuntu-20-04-x64"
   osType             = "ubuntu.20.04.64"
   active             = true
   delete             = false
