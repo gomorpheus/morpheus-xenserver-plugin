@@ -1441,7 +1441,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					workload.setConfigProperty('maxCores', (requestedCores ?: 1))
 					workload.maxCores = (requestedCores ?: 1).toLong()
 					workload.plan = plan
-					workload.server.plan = plan
+					workload.server.plan = plan//.addVolumes // check........
 					workload.server.maxCores = (requestedCores ?: 1).toLong()
 					workload.server.maxMemory = requestedMemory.toLong()
 					log.info("Ray:: resizeWorkload: before saving workload")
