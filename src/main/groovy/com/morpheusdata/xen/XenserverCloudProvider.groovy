@@ -26,10 +26,10 @@ class XenserverCloudProvider implements CloudProvider {
 	protected MorpheusContext context
 	protected XenserverPlugin plugin
 
-	public XenserverCloudProvider(XenserverPlugin plugin, MorpheusContext ctx) {
+	public XenserverCloudProvider(XenserverPlugin plugin, MorpheusContext context) {
 		super()
 		this.@plugin = plugin
-		this.@context = ctx
+		this.@context = context
 	}
 
 	/**
@@ -508,7 +508,8 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse stopServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		XenserverProvisionProvider provisionProvider = new XenserverProvisionProvider(plugin, context)
+		return provisionProvider.stopServer(computeServer)
 	}
 
 	/**
@@ -524,21 +525,17 @@ class XenserverCloudProvider implements CloudProvider {
 			Cloud cloud = computeServer.cloud
 			Map authConfig = plugin.getAuthConfig(cloud)
 			def vmResults = XenComputeUtility.getVirtualMachine(authConfig, computeServer.externalId)
-			log.info("RAZI :: vmResults: ${vmResults}")
 			def stopResults = XenComputeUtility.stopVm(authConfig, computeServer.externalId)
-			log.info("RAZI :: stopResults: ${stopResults}")
 			computeServer.snapshots?.each { snap ->
 				XenComputeUtility.destroyVm(authConfig, snap.externalId)
-				log.info("RAZI :: inside computeServer.snapshots?.each")
 			}
 			def removeResults = XenComputeUtility.destroyVm(authConfig, computeServer.externalId)
-			log.info("RAZI :: removeResults: ${removeResults}")
 			if (removeResults.success == true) {
 				rtn.success = true
 			}
 		} catch (e) {
-			rtn.msg = "Error deleting server: ${e.message}"
 			log.error("deleteServer error: ${e}", e)
+			rtn.msg = e.message
 		}
 		return ServiceResponse.create(rtn)
 	}
