@@ -580,7 +580,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					rtn.success = true
 				}
 			} else {
-				rtn.msg = 'vm not found'
+				Locale locale = morpheus.services.webRequest.getLocale() // english
+				def vmNotFound = morpheus.services.webRequest.getMessage("gomorpheus.provision.xenServer.stop", null, locale)
+				rtn.msg = vmNotFound
 			}
 		} catch(e) {
 			log.error("stopServer error: ${e}", e)
