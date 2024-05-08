@@ -570,7 +570,25 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse stopServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		def rtn = [success: false, msg: null]
+		try {
+			if (computeServer?.externalId){
+				Cloud cloud = computeServer.cloud
+				def stopResults = XenComputeUtility.stopVm(plugin.getAuthConfig(cloud), computeServer.externalId)
+				if(stopResults.success == true){
+					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.off)
+					rtn.success = true
+				}
+			} else {
+				Locale locale = morpheus.services.webRequest.getLocale() // english
+				def vmNotFound = morpheus.services.webRequest.getMessage("gomorpheus.provision.xenServer.stop", null, locale)
+				rtn.msg = vmNotFound
+			}
+		} catch(e) {
+			log.error("stopServer error: ${e}", e)
+			rtn.msg = e.message
+		}
+		return new ServiceResponse(rtn)
 	}
 
 	/**

@@ -26,10 +26,10 @@ class XenserverCloudProvider implements CloudProvider {
 	protected MorpheusContext context
 	protected XenserverPlugin plugin
 
-	public XenserverCloudProvider(XenserverPlugin plugin, MorpheusContext ctx) {
+	public XenserverCloudProvider(XenserverPlugin plugin, MorpheusContext context) {
 		super()
 		this.@plugin = plugin
-		this.@context = ctx
+		this.@context = context
 	}
 
 	/**
@@ -508,7 +508,8 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse stopServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		XenserverProvisionProvider provisionProvider = new XenserverProvisionProvider(plugin, context)
+		return provisionProvider.stopServer(computeServer)
 	}
 
 	/**
