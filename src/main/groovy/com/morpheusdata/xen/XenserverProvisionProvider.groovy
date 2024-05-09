@@ -598,7 +598,30 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.info("Ray::startServer: computeServer.id: ${computeServer?.externalId}")
+		def rtn = [success: false]
+		try {
+			if (computeServer?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
+				def startResults = XenComputeUtility.startVm(authConfigMap, computeServer.externalId)
+				log.info("startServer: startResults: ${startResults}")
+				def error1 = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+				log.info("Ray:: startServer: getting error msg: ${error1}")
+				if (startResults.success == true) {
+					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.on).blockingGet()
+					rtn.success = true
+				}
+			} else {
+				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+				rtn.msg = error
+			}
+		} catch (e) {
+			log.error("Ray:: startServer error: ${e}", e)
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+			rtn.msg = error
+		}
+		log.info("Ray:: startServer: rtn: ${rtn}")
+		return new ServiceResponse(rtn)
 	}
 
 	/**
