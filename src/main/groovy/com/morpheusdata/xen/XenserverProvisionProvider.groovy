@@ -546,7 +546,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def authConfigMap = plugin.getAuthConfig(workload.server.cloud)
 				if(!opts.keepBackups) {
 					workload.server.snapshots?.each { snap ->
-						log.info("Removing VM Xen Snapshot: {}", snap.externalId)
+						log.debug("Removing VM Xen Snapshot: {}", snap.externalId)
 						XenComputeUtility.destroyVm(authConfigMap, snap.externalId)
 					}
 				}
@@ -556,14 +556,17 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					return ServiceResponse.success()
 				} else {
 					log.warn("removeWorkload: Failed to remove vm")
-					return ServiceResponse.error('Failed to remove vm')
+					def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.fail")
+					return ServiceResponse.error(error)
 				}
 			} else {
-				return ServiceResponse.error('vm not found')
+				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+				return ServiceResponse.error(error)
 			}
 		} catch(e) {
 			log.error("removeWorkload error: ${e}", e)
-			return ServiceResponse.error(e.message)
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.fail")
+			return ServiceResponse.error(error)
 		}
 	}
 
