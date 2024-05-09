@@ -576,19 +576,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			if (computeServer?.externalId){
 				Cloud cloud = computeServer.cloud
 				def stopResults = XenComputeUtility.stopVm(plugin.getAuthConfig(cloud), computeServer.externalId)
-				log.info("RAZI :: stopResults: stopServer: ${stopResults}")
 				if(stopResults.success == true){
 					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.off)
 					rtn.success = true
-					Locale locale = morpheus.services.webRequest.getLocale() // english
-					def vmNotFound = morpheus.services.webRequest.getMessage("gomorpheus.provision.xenServer.stop", null, locale)
-					log.info("RAZI :: vmNotFound: if ${vmNotFound}")
 				}
 			} else {
-				Locale locale = morpheus.services.webRequest.getLocale() // english
-				def vmNotFound = morpheus.services.webRequest.getMessage("gomorpheus.provision.xenServer.stop", null, locale)
-				log.info("RAZI :: vmNotFound: else ${vmNotFound}")
-				rtn.msg = vmNotFound
+				rtn.msg = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
 			}
 		} catch(e) {
 			log.error("stopServer error: ${e}", e)
