@@ -519,7 +519,25 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse deleteServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.debug("deleteServer: ${computeServer}")
+		def rtn = [success: false]
+		try {
+			Cloud cloud = computeServer.cloud
+			Map authConfig = plugin.getAuthConfig(cloud)
+			def vmResults = XenComputeUtility.getVirtualMachine(authConfig, computeServer.externalId)
+			def stopResults = XenComputeUtility.stopVm(authConfig, computeServer.externalId)
+			computeServer.snapshots?.each { snap ->
+				XenComputeUtility.destroyVm(authConfig, snap.externalId)
+			}
+			def removeResults = XenComputeUtility.destroyVm(authConfig, computeServer.externalId)
+			if (removeResults.success == true) {
+				rtn.success = true
+			}
+		} catch (e) {
+			log.error("deleteServer error: ${e}", e)
+			rtn.msg = e.message
+		}
+		return ServiceResponse.create(rtn)
 	}
 
 	/**
