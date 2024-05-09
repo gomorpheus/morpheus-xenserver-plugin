@@ -580,7 +580,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					rtn.success = true
 				}
 			} else {
-				rtn.msg = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+				rtn.msg = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
 			}
 		} catch(e) {
 			log.error("stopServer error: ${e}", e)
@@ -608,12 +608,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					rtn.success = true
 				}
 			} else {
-				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
 				rtn.msg = error
 			}
 		} catch (e) {
 			log.error("startServer error: ${e}", e)
-			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.startServer")
 			rtn.msg = error
 		}
 		return new ServiceResponse(rtn)
