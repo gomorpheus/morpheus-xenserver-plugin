@@ -1122,6 +1122,16 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	}
 
 	@Override
+	Boolean canAddVolumes() {
+		return true
+	}
+
+	@Override
+	Boolean canCustomizeRootVolume() {
+		return true
+	}
+
+	@Override
 	HostType getHostType() {
 		return HostType.vm
 	}
@@ -1184,6 +1194,21 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	Boolean hasSecurityGroups() {
 		return false
+	}
+
+	@Override
+	Boolean canCustomizeDataVolumes() {
+		return true
+	}
+
+	@Override
+	Boolean canResizeRootVolume() {
+		return true
+	}
+
+	@Override
+	Boolean canReconfigureNetwork() {
+		return true
 	}
 
 	@Override
