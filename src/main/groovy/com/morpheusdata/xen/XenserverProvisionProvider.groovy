@@ -555,17 +555,17 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				if(removeResults.success == true) {
 					return ServiceResponse.success()
 				} else {
-					log.warn("removeWorkload: Failed to remove vm")
-					def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.fail")
+					def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.failRemoveVm")
+					log.warn("removeWorkload: ${error}")
 					return ServiceResponse.error(error)
 				}
 			} else {
-				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
 				return ServiceResponse.error(error)
 			}
 		} catch(e) {
 			log.error("removeWorkload error: ${e}", e)
-			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.fail")
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.removeWorkload")
 			return ServiceResponse.error(error)
 		}
 	}
