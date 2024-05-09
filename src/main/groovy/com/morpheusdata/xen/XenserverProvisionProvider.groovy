@@ -537,7 +537,37 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse removeWorkload(Workload workload, Map opts) {
-		return ServiceResponse.success()
+		log.debug("removeWorkload: opts: ${opts}")
+		try {
+			if(workload.server?.externalId) {
+				log.debug("removeWorkload: calling stopWorkload")
+				def stopResults = stopWorkload(workload)
+				log.debug("removeWorkload: stopResults: ${stopResults}")
+				def authConfigMap = plugin.getAuthConfig(workload.server.cloud)
+				if(!opts.keepBackups) {
+					workload.server.snapshots?.each { snap ->
+						log.debug("Removing VM Xen Snapshot: {}", snap.externalId)
+						XenComputeUtility.destroyVm(authConfigMap, snap.externalId)
+					}
+				}
+				def removeResults = XenComputeUtility.destroyVm(authConfigMap, workload.server.externalId)
+				log.debug("removeWorkload: removeResults: ${removeResults}")
+				if(removeResults.success == true) {
+					return ServiceResponse.success()
+				} else {
+					def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.failRemoveVm")
+					log.warn("removeWorkload: ${error}")
+					return ServiceResponse.error(error)
+				}
+			} else {
+				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
+				return ServiceResponse.error(error)
+			}
+		} catch(e) {
+			log.error("removeWorkload error: ${e}", e)
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.removeWorkload")
+			return ServiceResponse.error(error)
+		}
 	}
 
 	/**
