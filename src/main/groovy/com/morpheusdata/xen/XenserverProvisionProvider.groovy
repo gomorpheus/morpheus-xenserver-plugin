@@ -537,7 +537,37 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse removeWorkload(Workload workload, Map opts) {
-		return ServiceResponse.success()
+		log.debug("removeWorkload: opts: ${opts}")
+		try {
+			if(workload.server?.externalId) {
+				log.debug("removeWorkload: calling stopWorkload")
+				def stopResults = stopWorkload(workload)
+				log.debug("removeWorkload: stopResults: ${stopResults}")
+				def authConfigMap = plugin.getAuthConfig(workload.server.cloud)
+				if(!opts.keepBackups) {
+					workload.server.snapshots?.each { snap ->
+						log.debug("Removing VM Xen Snapshot: {}", snap.externalId)
+						XenComputeUtility.destroyVm(authConfigMap, snap.externalId)
+					}
+				}
+				def removeResults = XenComputeUtility.destroyVm(authConfigMap, workload.server.externalId)
+				log.debug("removeWorkload: removeResults: ${removeResults}")
+				if(removeResults.success == true) {
+					return ServiceResponse.success()
+				} else {
+					def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.failRemoveVm")
+					log.warn("removeWorkload: ${error}")
+					return ServiceResponse.error(error)
+				}
+			} else {
+				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
+				return ServiceResponse.error(error)
+			}
+		} catch(e) {
+			log.error("removeWorkload error: ${e}", e)
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.removeWorkload")
+			return ServiceResponse.error(error)
+		}
 	}
 
 	/**
@@ -580,7 +610,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					rtn.success = true
 				}
 			} else {
-				rtn.msg = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+				rtn.msg = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
 			}
 		} catch(e) {
 			log.error("stopServer error: ${e}", e)
@@ -596,7 +626,27 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.debug("startServer: computeServer.id: ${computeServer?.externalId}")
+		def rtn = [success: false]
+		try {
+			if (computeServer?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
+				def startResults = XenComputeUtility.startVm(authConfigMap, computeServer.externalId)
+				log.debug("startServer: startResults: ${startResults}")
+				if (startResults.success == true) {
+					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.on).blockingGet()
+					rtn.success = true
+				}
+			} else {
+				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
+				rtn.msg = error
+			}
+		} catch (e) {
+			log.error("startServer error: ${e}", e)
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.startServer")
+			rtn.msg = error
+		}
+		return new ServiceResponse(rtn)
 	}
 
 	/**
