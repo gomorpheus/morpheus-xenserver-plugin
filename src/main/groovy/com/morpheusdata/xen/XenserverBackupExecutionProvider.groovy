@@ -130,6 +130,25 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 		return ServiceResponse.success()
 	}
 
+	ServiceResponse<BackupExecutionResponse> updateBackupStatus(BackupExecutionResponse backupExecutionResponse, String status) {
+		ServiceResponse<BackupExecutionResponse> rtn = ServiceResponse.prepare(backupExecutionResponse);
+
+		// Set status based on the provided string
+		if ("IN_PROGRESS".equals(status)) {
+			rtn.data.backupResult.status = BackupResult.Status.IN_PROGRESS;
+		} else if ("SUCCEEDED".equals(status)) {
+			rtn.data.backupResult.status = BackupResult.Status.SUCCEEDED;
+		} else if ("FAILED".equals(status)) {
+			rtn.data.backupResult.status = BackupResult.Status.FAILED;
+		} else {
+			throw new IllegalArgumentException("Invalid status: " + status);
+		}
+
+		rtn.data.updates = true;
+		log.info("RAZI :: updateBackupStatus : RTN: ${rtn}");
+		return rtn;
+	}
+
 	/**
 	 * Initiate the backup process on the external provider system.
 	 * @param backup the backup details associated with the backup execution.
@@ -141,14 +160,6 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 	 * @return a {@link ServiceResponse} indicating the success or failure of the backup execution. A success value
 	 * of 'false' will halt the execution process.
 	 */
-	ServiceResponse<BackupExecutionResponse> updateBackupStatus(BackupExecutionResponse backupExecutionResponse){
-		ServiceResponse<BackupExecutionResponse> rtn = ServiceResponse.prepare(backupExecutionResponse)
-		rtn.data.backupResult.status = BackupResult.Status.IN_PROGRESS
-		rtn.data.updates = true
-		log.info("RAZI :: updateBackupStatus : RTN: ${rtn}")
-		return rtn
-	}
-
 	@Override
 	ServiceResponse<BackupExecutionResponse> executeBackup(Backup backup, BackupResult backupResult, Map executionConfig, Cloud cloud, ComputeServer server, Map opts) {
 		log.debug("Executing backup {} with result {}", backup.id, backupResult.id)
@@ -181,8 +192,8 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 			log.info("RAZI :: mkdirs : SUCCESS")
 			//update status
 //			updateBackupStatus(backupResult.id, 'IN_PROGRESS', [containerConfig:container?.configMap]) // skip
-			updateBackupStatus(backupExecutionResponse)
-			log.info("RAZI :: updateBackupStatus : SUCCESS1")
+			updateBackupStatus(backupExecutionResponse, "IN_PROGRESS")
+			log.info("RAZI :: updateBackupStatus : IN_PROGRESS")
 			//remove cloud init
 			if(server.sourceImage && server.sourceImage.isCloudInit && server.serverOs?.platform != 'windows') {
 				def taskResult1 = getPlugin().morpheus.executeCommandOnServer(server, 'sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; sudo cp /etc/machine-id /tmp/machine-id-old ; sync', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
@@ -207,11 +218,16 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 				Snapshot snapshotRecord = new Snapshot(account:server.account, externalId:snapshotResults.snapshotId, name:"snapshot-${new Date().time}")
 				log.info("RAZI :: snapshotRecord: ${snapshotRecord}")
 //				morpheusContext.async.snapshot.save(snapshotRecord).blockingGet()
-				morpheusContext.services.snapshot.save(snapshotRecord)
-				log.info("RAZI :: snapshotRecord save : SUCCESS")
-				server.snapshots << snapshotRecord
-				log.info("RAZI :: server.snapshots: ${server.snapshots}")
-				morpheusContext.async.computeServer.save(server).blockingGet()
+//				morpheusContext.async.snapshot.create(snapshotRecord).blockingGet()
+//				snapshotRecord.server = server
+//				snapshotRecord.cloud = cloud
+				def snapshot = morpheusContext.services.snapshot.create(snapshotRecord)
+				morpheusContext.async.snapshot.addSnapshot(snapshot, server).blockingGet()
+				log.info("RAZI :: snapshot create : SUCCESS")
+//				server.snapshots << snapshotRecord
+//				log.info("RAZI :: server.snapshots: ${server.snapshots}")
+//				morpheusContext.async.computeServer.save(server).blockingGet()
+//				morpheusContext.services.computeServer.save(server)
 				log.info("RAZI :: backup.copyToStore: ${backup.copyToStore}")
 				if(backup.copyToStore == true) {
 					log.info("snapshot complete - saving to target storage: {}", snapshotResults)
@@ -260,7 +276,8 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 					log.debug("exportResults: {}", exportResults)
 					saveThread.join()
 					log.info("RAZI :: exportResults: ${exportResults}")
-					if(saveResults.success == true) {
+//					if(saveResults.success == true) {
+					if(saveResults.success == true && exportResults.success == true) {
 //						def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress, destinationPath:outputPath, snapshotId: snapshotResults.snapshotId,
 //										 providerType:providerInfo.providerType, targetBucket:providerInfo.bucketName, imageType:'xva',
 //										 targetDirectory:"backup.${backup.id}", backupSizeInMb:(saveResults.archiveSize ?: 1).div(ComputeUtility.ONE_MEGABYTE),
@@ -268,15 +285,17 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 //						statusMap.config = [snapshotId:snapshotResults.snapshotId, snapshotName:snapshotName, vmId:snapshotResults.externalId]
 //						updateBackupStatus(backupResult.id, null, statusMap)
 						rtn.success = true
-						updateBackupStatus(backupExecutionResponse)
+						updateBackupStatus(backupExecutionResponse, "SUCCEEDED")
+//						rtn.data.backupResult.status = BackupResult.Status.SUCCEEDED
+//						rtn.data.updates = true
 						log.info("RAZI :: updateBackupStatus : if(saveResults.success == true) : SUCCESS")
 					} else {
 //						def error = saveResults.error ?: "Failed to save backup result"
 //						def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress, destinationPath:outputPath,
 //										 snapshotExtracted:false, backupSizeInMb:0, success:false, errorOutput:error.encodeAsBase64()]
 //						updateBackupStatus(backupResult.id, null, statusMap)
-						updateBackupStatus(backupExecutionResponse)
-						log.info("RAZI :: updateBackupStatus : if(saveResults.success == true) - else : SUCCESS")
+						updateBackupStatus(backupExecutionResponse, "FAILED")
+						log.info("RAZI :: updateBackupStatus : if(saveResults.success == true) - else : FAILED")
 					}
 				} else {
 //					def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress, destinationPath:outputPath,
@@ -284,16 +303,16 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 //									 targetArchive:snapshotResults.snapshotId, backupSizeInMb:0, snapshotExtracted:false, success:true]
 //					statusMap.config = [snapshotId:snapshotResults.snapshotId, snapshotName:snapshotName, vmId:snapshotResults.externalId]
 //					updateBackupStatus(backupResult.id, null, statusMap)
-					updateBackupStatus(backupExecutionResponse)
-					log.info("RAZI :: updateBackupStatus : if(backup.copyToStore == true) - else : SUCCESS")
+					updateBackupStatus(backupExecutionResponse, "FAILED")
+					log.info("RAZI :: updateBackupStatus : if(backup.copyToStore == true) - else : FAILED")
 				}
 			} else {
 //				//error
 //				def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress, destinationPath:outputPath,
 //								 snapshotExtracted:false, backupSizeInMb:0, success:false, errorOutput:snapshotResults.error?.toString()?.encodeAsBase64()]
 //				updateBackupStatus(backupResult.id, null, statusMap)
-				updateBackupStatus(backupExecutionResponse)
-				log.info("RAZI :: updateBackupStatus : if(snapshotResults.success) - else : SUCCESS")
+				updateBackupStatus(backupExecutionResponse, "FAILED")
+				log.info("RAZI :: updateBackupStatus : if(snapshotResults.success) - else : FAILED")
 			}
 //			clearBackupProcessId(backupResult)
 			rtn.success = true
@@ -305,7 +324,7 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 //			def statusMap = [backupResultId:rtn.backupResultId, executorIP:rtn.ipAddress,
 //							 snapshotExtracted:false, backupSizeInMb:0, success:false, errorOutput:error.encodeAsBase64()]
 //			updateBackupStatus(backupResult.id, null, statusMap)
-			updateBackupStatus(backupExecutionResponse)
+			updateBackupStatus(backupExecutionResponse, "FAILED")
 		}
 
 		return rtn

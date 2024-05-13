@@ -990,6 +990,7 @@ class XenComputeUtility {
                 ZipEntry zipEntry = new ZipEntry(targetFileName)
                 targetZipStream.putNextEntry(zipEntry)
                 downloadResults = downloadImage(opts, srcUrl, targetZipStream)
+                log.info("RAZI :: downloadResults: ${downloadResults}")
             } else {
                 def targetFile = new File(targetFolder, targetFileName)
                 OutputStream outStream = targetFile.newOutputStream()
@@ -1009,6 +1010,7 @@ class XenComputeUtility {
                 targetZipStream.flush(); targetZipStream.close()
             }
         }
+        log.info("RAZI :: exportVm : RTN: ${rtn}")
         return rtn
     }
 
@@ -1384,6 +1386,7 @@ class XenComputeUtility {
                             log.error "We have an unhandled exception when attempting to connect to ${host} ignoring SSL errors", ex
                         }
                     }
+                    log.info("RAZI :: call super.connectSocket")
                     return super.connectSocket(10000, socket, host, remoteAddress, localAddress, context)
                 }
             }
@@ -1410,19 +1413,38 @@ class XenComputeUtility {
             }
             inboundClient = clientBuilder.build()
             def inboundGet = new HttpGet(srcUrl)
+            log.info("RAZI :: inboundGet: ${inboundGet}")
             def responseBody = inboundClient.execute(inboundGet)
+            log.info("RAZI :: responseBody: ${responseBody}")
+            log.info("RAZI :: responseBody.getEntity().getContent(): ${responseBody.getEntity().getContent()}")
             def vmInputStream = new BufferedInputStream(responseBody.getEntity().getContent(), 64 * 1024)
-            MorpheusUtils.writeStreamToOut(vmInputStream, targetStream)
+            log.info("RAZI :: vmInputStream: ${vmInputStream}")
+            log.info("RAZI :: targetStream: ${targetStream}")
+//            MorpheusUtils.writeStreamToOut(vmInputStream, targetStream)
+            writeStreamToOut(vmInputStream, targetStream)
+            log.info("RAZI :: writeStreamToOut(vmInputStream, targetStream) : SUCCESS")
 
             targetStream.flush()
+            log.info("RAZI :: writeStreamToOut : SUCCESS")
 
             rtn.success = true
         } catch (e) {
             log.error("downloadImage From Stream error: ${e}", e)
         } finally {
             inboundClient.close()
+            log.info("RAZI :: inboundClient.close() : SUCCESS")
         }
+        log.info("RAZI :: downloadImage : RTN: ${rtn}")
         return rtn
+    }
+
+    static void writeStreamToOut(InputStream inputStream, OutputStream out) {
+        byte[] buffer = new byte[102400]
+        int len
+        while((len = inputStream.read(buffer)) != -1) {
+            out.write(buffer, 0, len)
+        }
+        log.info("RAZI :: writeStreamToOut call : SUCCESS")
     }
 
     static archiveImage(opts, srcUrl, targetFile, fileSize = 0, progressCallback = null) {
