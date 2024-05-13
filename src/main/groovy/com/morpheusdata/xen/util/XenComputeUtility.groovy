@@ -453,7 +453,7 @@ class XenComputeUtility {
     static addVmNetwork(opts, vmId, networkConfig) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             opts.connection = config.connection
             def vm = VM.getByUuid(config.connection, vmId)
             def networkRecord = com.xensource.xenapi.Network.getByUuid(opts.connection, networkConfig.networkUuid)
@@ -495,7 +495,7 @@ class XenComputeUtility {
     static addVmDisk(opts, vmId, diskConfig) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             opts.connection = config.connection
             def vm = VM.getByUuid(config.connection, vmId)
             def dataSrRecord = SR.getByUuid(config.connection, diskConfig.datastoreId)
