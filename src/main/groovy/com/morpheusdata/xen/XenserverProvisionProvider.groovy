@@ -1405,41 +1405,24 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	@Override
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
-		log.info("Ray:: resizeWorkload: workload?.id: ${workload?.id}")
-		log.info("Ray:: resizeWorkload: resizeRequest: ${resizeRequest}")
-		log.info("Ray:: resizeWorkload: opts: ${opts}")
+		log.info("Ray:: resizeWorkload: workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
 		def rtn = [success: false, supported: true]
-		//ComputeServer computeServer = workload.server
 		ComputeServer computeServer = context.async.computeServer.get(workload.server.id).blockingGet()
-		log.info("Ray:: resizeWorkload: computeServer?.externalId: ${computeServer?.externalId}")
 		Cloud cloud = computeServer.cloud
-		log.info("Ray:: resizeWorkload: cloud?.id: ${cloud?.id}")
 		def authConfigMap = plugin.getAuthConfig(cloud)
-		log.info("Ray:: resizeWorkload: authConfigMap: ${authConfigMap}")
 		try {
-			//log.info("resizing vm: ${opts}")
-			log.info("Ray:: resizeWorkload: computeServer?.status: ${computeServer?.status}")
 			computeServer.status = 'resizing'
 			computeServer = saveAndGet(computeServer)
-			log.info("Ray:: resizeWorkload: computeServer?.status1: ${computeServer?.status}")
-			//def servicePlanOptions = opts.servicePlanOptions ?: [:]
-			log.info("Ray:: resizeWorkload: cresizeRequest.plan: ${resizeRequest.plan}")
 			ServicePlan plan = resizeRequest.plan
-			log.info("Ray:: resizeWorkload: resizeRequest.maxMemory: ${resizeRequest.maxMemory}")
-			log.info("Ray:: resizeWorkload: plan.customMaxMemory: ${plan.customMaxMemory}")
-			log.info("Ray:: resizeWorkload: plan.maxMemory: ${plan.maxMemory}")
+			log.info("Ray:: resizeWorkload: plan:: ${plan.customMaxMemory} : ${plan.maxMemory} : ${plan.customCores} : ${plan.maxCores}")
+			log.info("Ray:: resizeWorkload: resizeRequest:: ${resizeRequest.maxMemory} : ${resizeRequest?.maxCores}")
 			def requestedMemory = plan.customMaxMemory ? (resizeRequest.maxMemory ?: plan.maxMemory) : plan.maxMemory
 			log.info("Ray:: resizeWorkload: requestedMemory: ${requestedMemory}")
-			log.info("Ray:: resizeWorkload:  plan.customCores: ${ plan.customCores}")
-			log.info("Ray:: resizeWorkload: resizeRequest?.maxCores: ${resizeRequest?.maxCores}")
-			log.info("Ray:: resizeWorkload: plan.maxCores: ${plan.maxCores}")
 			def requestedCores = plan.customCores ? (resizeRequest?.maxCores ?: plan.maxCores) : plan.maxCores
 			log.info("Ray:: resizeWorkload: requestedCores: ${requestedCores}")
-			log.info("Ray:: resizeWorkload: workload.maxMemory: ${workload.maxMemory}")
-			log.info("Ray:: resizeWorkload: workload.getConfigProperty: ${workload.getConfigProperty('maxMemory')}")
+			log.info("Ray:: resizeWorkload: workload:: ${workload.maxMemory} : ${workload.getConfigProperty('maxMemory')} : ${workload.maxCores}")
 			def currentMemory = workload.maxMemory ?: workload.getConfigProperty('maxMemory')?.toLong()
 			log.info("Ray:: resizeWorkload: currentMemory: ${currentMemory}")
-			log.info("Ray:: resizeWorkload: workload.maxCores: ${workload.maxCores}")
 			def currentCores = workload.maxCores ?: 1
 			log.info("Ray:: resizeWorkload: currentCores: ${currentCores}")
 			def neededMemory = requestedMemory - currentMemory
@@ -1448,14 +1431,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			log.info("Ray:: resizeWorkload: neededCores: ${neededCores}")
 			def allocationSpecs = [externalId: computeServer.externalId, maxMemory: requestedMemory, maxCpu: requestedCores]
 			log.info("Ray:: resizeWorkload: allocationSpecs: ${allocationSpecs}")
-			log.info("Ray:: resizeWorkload: instance.containers?.size(): ${instance.containers?.size()}")
 			def multipleContainers = instance.containers?.size() > 1
 			def modified = false
 			def stopped = false
 			def stopResults
 			//check for stop - we have weird math going on
 			log.info("Ray:: resizeWorkload: computeServer.hotResize: ${computeServer.hotResize}")
-			log.info("Ray:: resizeWorkload: resizeRequest.volumesUpdate?.size(): ${resizeRequest.volumesUpdate?.size()}")
 			def doStop = computeServer.hotResize != true && (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0 || resizeRequest.volumesUpdate?.size() > 0)
 			// || volumeSyncLists?.volumeDeletes?.size() > 0)
 			log.info("Ray:: resizeWorkload: doStop: ${doStop}")
@@ -1463,8 +1444,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				log.info("Ray:: stopping vm for resize: memory ${neededMemory} cores ${neededCores}")
 				stopped = true
 				opts.stopped = stopped
-				//instanceTaskService.runShutdownTasks(instance, opts.userId)
-				//workload.server = computeServer// check: do we need this line, do we need to set server back to workload as updated earlier
 				stopResults = stopWorkload(workload)
 				log.info("Ray:: resizeWorkload: stopResults: ${stopResults}")
 			}
@@ -1473,7 +1452,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			log.info("Ray:: resizeWorkload: checkVal: ${checkVal}")
 			if (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0) {
 				log.info("resizing vm: ${allocationSpecs}")
-				log.info("Ray:: resizeWorkload: resizing vm: ${allocationSpecs}")
 				def allocationResults = XenComputeUtility.adjustVmResources(authConfigMap, computeServer.externalId, allocationSpecs)
 				log.info("Ray:: resizeWorkload: allocationResults: ${allocationResults}")
 				if (allocationResults.success) {
@@ -1486,19 +1464,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					computeServer.plan = plan//.addVolumes // check........
 					computeServer.maxCores = (requestedCores ?: 1).toLong()
 					computeServer.maxMemory = requestedMemory.toLong()
-					log.info("Ray:: resizeWorkload: before saving workload")
 					context.async.workload.save(workload).blockingGet()
-					log.info("Ray:: resizeWorkload: After saving workload")
-					//computeServer = workload.server
-					log.info("Ray:: resizeWorkload: before saving server")
 					computeServer = saveAndGet(computeServer)
-					log.info("Ray:: resizeWorkload: after saving server")
 				}
 			}
 			def maxStorage = 0
 			log.info("Ray:: resizeWorkload: opts.volumes: ${opts.volumes}")
 			if (opts.volumes) {
-				//def rootDisk = getContainerRootDisk(container)
 				def newCounter = computeServer.volumes?.size()
 				log.info("Ray:: resizeWorkload: newCounter: ${newCounter}")
 				//maxStorage = volumeSyncLists.totalStorage
