@@ -538,38 +538,36 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse removeWorkload(Workload workload, Map opts) {
-		log.info("Ray:: removeWorkload: opts: ${opts}")
-		log.info("Ray:: removeWorkload: workload.server.id: ${workload.server.id}")
+		log.debug("removeWorkload: opts: ${opts}")
 		try {
-			log.info("Ray:: removeWorkload: workload.server?.externalId: ${workload.server?.externalId}")
 			if(workload.server?.externalId) {
-				log.info("Ray:: removeWorkload: calling stopWorkload")
+				log.debug("removeWorkload: calling stopWorkload")
 				def stopResults = stopWorkload(workload)
-				log.info("Ray:: removeWorkload: stopResults: ${stopResults}")
+				log.debug("removeWorkload: stopResults: ${stopResults}")
 				def authConfigMap = plugin.getAuthConfig(workload.server.cloud)
-				log.info("Ray:: removeWorkload: authConfigMap: ${authConfigMap}")
-				log.info("Ray:: removeWorkload: opts.keepBackups: ${opts.keepBackups}")
 				if(!opts.keepBackups) {
-					log.info("Ray:: removeWorkload: workload.server?.snapshots?.size(): ${workload.server?.snapshots?.size()}")
 					workload.server.snapshots?.each { snap ->
-						log.info("Removing VM Xen Snapshot: {}", snap.externalId)
+						log.debug("Removing VM Xen Snapshot: {}", snap.externalId)
 						XenComputeUtility.destroyVm(authConfigMap, snap.externalId)
 					}
 				}
 				def removeResults = XenComputeUtility.destroyVm(authConfigMap, workload.server.externalId)
-				log.info("Ray:: removeWorkload: removeResults: ${removeResults}")
+				log.debug("removeWorkload: removeResults: ${removeResults}")
 				if(removeResults.success == true) {
 					return ServiceResponse.success()
 				} else {
-					log.info("Ray:: removeWorkload: Failed to remove vm")
-					return ServiceResponse.error('Failed to remove vm')
+					def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.failRemoveVm")
+					log.warn("removeWorkload: ${error}")
+					return ServiceResponse.error(error)
 				}
 			} else {
-				return ServiceResponse.error('vm not found')
+				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
+				return ServiceResponse.error(error)
 			}
 		} catch(e) {
-			log.error("Ray::removeContainer error: ${e}", e)
-			return ServiceResponse.error(e.message)
+			log.error("removeWorkload error: ${e}", e)
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.removeWorkload")
+			return ServiceResponse.error(error)
 		}
 	}
 
@@ -613,7 +611,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					rtn.success = true
 				}
 			} else {
-				rtn.msg = morpheus.services.localization.get("gomorpheus.provision.xenServer.stop")
+				rtn.msg = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
 			}
 		} catch(e) {
 			log.error("stopServer error: ${e}", e)
@@ -629,25 +627,26 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		log.info("Ray:: startServer: computeServer.id: ${computeServer?.externalId}")
+		log.debug("startServer: computeServer.id: ${computeServer?.externalId}")
 		def rtn = [success: false]
 		try {
 			if (computeServer?.externalId) {
 				def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
 				def startResults = XenComputeUtility.startVm(authConfigMap, computeServer.externalId)
-				log.info("Ray:: startServer: startResults: ${startResults}")
+				log.debug("startServer: startResults: ${startResults}")
 				if (startResults.success == true) {
 					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.on).blockingGet()
 					rtn.success = true
 				}
 			} else {
-				rtn.msg = 'vm not found'
+				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
+				rtn.msg = error
 			}
 		} catch (e) {
-			log.error("Ray::startServer error: ${e}", e)
-			rtn.msg = e.message
+			log.error("startServer error: ${e}", e)
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.startServer")
+			rtn.msg = error
 		}
-		log.info("Ray:: startServer: rtn: ${rtn}")
 		return new ServiceResponse(rtn)
 	}
 

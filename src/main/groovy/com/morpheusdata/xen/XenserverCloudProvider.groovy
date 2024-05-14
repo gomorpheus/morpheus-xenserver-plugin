@@ -497,7 +497,8 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		XenserverProvisionProvider provisionProvider = new XenserverProvisionProvider(plugin, context)
+		return provisionProvider.startServer(computeServer)
 	}
 
 	/**
