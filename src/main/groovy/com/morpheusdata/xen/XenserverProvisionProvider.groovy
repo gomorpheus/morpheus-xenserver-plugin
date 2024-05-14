@@ -1405,7 +1405,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	@Override
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
-		log.info("Ray:: resizeWorkload: workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
+		log.debug("resizeWorkload workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
 		def rtn = [success: false, supported: true]
 		ComputeServer computeServer = context.async.computeServer.get(workload.server.id).blockingGet()
 		Cloud cloud = computeServer.cloud
@@ -1414,46 +1414,30 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			computeServer.status = 'resizing'
 			computeServer = saveAndGet(computeServer)
 			ServicePlan plan = resizeRequest.plan
-			log.info("Ray:: resizeWorkload: plan:: ${plan.customMaxMemory} : ${plan.maxMemory} : ${plan.customCores} : ${plan.maxCores}")
-			log.info("Ray:: resizeWorkload: resizeRequest:: ${resizeRequest.maxMemory} : ${resizeRequest?.maxCores}")
 			def requestedMemory = plan.customMaxMemory ? (resizeRequest.maxMemory ?: plan.maxMemory) : plan.maxMemory
-			log.info("Ray:: resizeWorkload: requestedMemory: ${requestedMemory}")
 			def requestedCores = plan.customCores ? (resizeRequest?.maxCores ?: plan.maxCores) : plan.maxCores
-			log.info("Ray:: resizeWorkload: requestedCores: ${requestedCores}")
-			log.info("Ray:: resizeWorkload: workload:: ${workload.maxMemory} : ${workload.getConfigProperty('maxMemory')} : ${workload.maxCores}")
 			def currentMemory = workload.maxMemory ?: workload.getConfigProperty('maxMemory')?.toLong()
-			log.info("Ray:: resizeWorkload: currentMemory: ${currentMemory}")
 			def currentCores = workload.maxCores ?: 1
-			log.info("Ray:: resizeWorkload: currentCores: ${currentCores}")
 			def neededMemory = requestedMemory - currentMemory
-			log.info("Ray:: resizeWorkload: neededMemory: ${neededMemory}")
 			def neededCores = (requestedCores ?: 1) - (currentCores ?: 1)
-			log.info("Ray:: resizeWorkload: neededCores: ${neededCores}")
+
 			def allocationSpecs = [externalId: computeServer.externalId, maxMemory: requestedMemory, maxCpu: requestedCores]
-			log.info("Ray:: resizeWorkload: allocationSpecs: ${allocationSpecs}")
-			def multipleContainers = instance.containers?.size() > 1
 			def modified = false
 			def stopped = false
 			def stopResults
 			//check for stop - we have weird math going on
-			log.info("Ray:: resizeWorkload: computeServer.hotResize: ${computeServer.hotResize}")
 			def doStop = computeServer.hotResize != true && (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0 || resizeRequest.volumesUpdate?.size() > 0)
-			// || volumeSyncLists?.volumeDeletes?.size() > 0)
-			log.info("Ray:: resizeWorkload: doStop: ${doStop}")
 			if (doStop) {
-				log.info("Ray:: stopping vm for resize: memory ${neededMemory} cores ${neededCores}")
 				stopped = true
 				opts.stopped = stopped
 				stopResults = stopWorkload(workload)
-				log.info("Ray:: resizeWorkload: stopResults: ${stopResults}")
+				log.debug("stopResults ${stopResults}")
 			}
 			//adjust plan size
-			def checkVal = (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0)
-			log.info("Ray:: resizeWorkload: checkVal: ${checkVal}")
 			if (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0) {
 				log.info("resizing vm: ${allocationSpecs}")
 				def allocationResults = XenComputeUtility.adjustVmResources(authConfigMap, computeServer.externalId, allocationSpecs)
-				log.info("Ray:: resizeWorkload: allocationResults: ${allocationResults}")
+				log.debug("allocationResults ${allocationResults}")
 				if (allocationResults.success) {
 					modified = true
 					workload.setConfigProperty('maxMemory', requestedMemory)
@@ -1461,7 +1445,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					workload.setConfigProperty('maxCores', (requestedCores ?: 1))
 					workload.maxCores = (requestedCores ?: 1).toLong()
 					workload.plan = plan
-					computeServer.plan = plan//.addVolumes // check........
+					computeServer.plan = plan
 					computeServer.maxCores = (requestedCores ?: 1).toLong()
 					computeServer.maxMemory = requestedMemory.toLong()
 					context.async.workload.save(workload).blockingGet()
@@ -1469,87 +1453,52 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				}
 			}
 			def maxStorage = 0
-			log.info("Ray:: resizeWorkload: opts.volumes: ${opts.volumes}")
 			if (opts.volumes) {
 				def newCounter = computeServer.volumes?.size()
-				log.info("Ray:: resizeWorkload: newCounter: ${newCounter}")
-				//maxStorage = volumeSyncLists.totalStorage
-				//volumes
-				//log.info("volumeSyncLists?.volumeUpdates? ${volumeSyncLists?.volumeUpdates}")
-				log.info("Ray:: resizeWorkload: resizeRequest.volumesUpdate.size(): ${resizeRequest.volumesUpdate.size()}")
 				resizeRequest.volumesUpdate?.each { volumeUpdate ->
-					log.info("Ray:: resizeWorkload: volumeUpdate: ${volumeUpdate}")
-					log.info("Ray:: resizeWorkload: volumeUpdate.existingModel: ${volumeUpdate?.existingModel}")
-					log.info("Ray:: resizeWorkload: volumeUpdate.existingModel?.name: ${volumeUpdate?.existingModel?.name}")
-					log.info("Ray:: resizeWorkload: volumeUpdate.updateProps: ${volumeUpdate.updateProps}")
 					StorageVolume existing = volumeUpdate.existingModel
 					Map updateProps = volumeUpdate.updateProps
-					log.info("resizing vm storage: ${volumeUpdate}")
 					//existing disk - resize it
-					log.info("Ray:: resizeWorkload: updateProps.maxStorage: ${updateProps.maxStorage}")
-					log.info("Ray:: resizeWorkload: existing.maxStorage: ${existing.maxStorage}")
 					if (updateProps.maxStorage > existing.maxStorage) {
 						def resizeDiskConfig = [diskSize: updateProps.maxStorage, diskIndex: existing.externalId, uuid: existing.internalId]
-						log.info("Ray:: resizeWorkload: resizeDiskConfig: ${resizeDiskConfig}")
 						def resizeResults = XenComputeUtility.resizeVmDisk(authConfigMap, computeServer.externalId, resizeDiskConfig)
-						log.info("Ray:: resizeWorkload: resizeResults: ${resizeResults}")
-						def storageVolumeId = existing.id
-						log.info("Ray:: resizeWorkload: storageVolumeId: ${storageVolumeId}")
+						log.debug("resizeResults ${resizeResults}")
 						def existingVolume = context.async.storageVolume.get(existing.id).blockingGet()
-						log.info("Ray:: resizeWorkload: existingVolume?.maxStorage: ${existingVolume?.maxStorage}")
 						existingVolume.maxStorage = updateProps?.maxStorage
-						log.info("Ray:: resizeWorkload: updateProps?.maxStorage: ${updateProps?.maxStorage}")
 						context.async.storageVolume.save(existingVolume).blockingGet()
 						modified = true
 					}
 				}
-				log.info("Ray:: resizeWorkload: resizeRequest.volumesAdd?.size(): ${resizeRequest.volumesAdd?.size()}")
+				def datastoreIds = []
+				def storageVolumeTypes = [:]
+				resizeRequest.volumesAdd?.each { Map volumeAdd ->
+					def datastoreId = volumeAdd.datastoreId
+					if (!(datastoreId == 'auto' || datastoreId == 'autoCluster')) {
+						datastoreIds << datastoreId?.toLong()
+					}
+					def storageVolumeTypeId = volumeAdd.storageType.toLong()
+					if(!storageVolumeTypes[storageVolumeTypeId]) {
+						storageVolumeTypes[storageVolumeTypeId] = context.async.storageVolume.storageVolumeType.get(storageVolumeTypeId).blockingGet()
+					}
+				}
+				datastoreIds = datastoreIds.unique()
+				def datastores = context.async.cloud.datastore.listById(datastoreIds).toMap {it.id.toLong()}.blockingGet()
 				resizeRequest.volumesAdd.each { volumeAdd ->
 					//new disk add it
-					log.info("Ray:: resizeWorkload: volumeAdd: ${volumeAdd}")
-					//log.info("resizing vm adding storage: ${volumeAdd}")
 					def addDiskConfig = [diskSize: volumeAdd.maxStorage, diskName: "morpheus_data_${newCounter}", diskIndex: newCounter]
-					log.info("Ray:: resizeWorkload: addDiskConfig: ${addDiskConfig}")
-					log.info("Ray:: resizeWorkload: volumeAdd.datastoreId: ${volumeAdd.datastoreId}")
-					addDiskConfig.datastoreId = getDatastoreExternalId(volumeAdd.datastoreId)
-					log.info("Ray:: resizeWorkload: addDiskConfig.datastoreId: ${addDiskConfig.datastoreId}")
+					def datastore = datastores[volumeAdd.datastoreId.toLong()]
+					addDiskConfig.datastoreId = datastore?.externalId
 					def addDiskResults = XenComputeUtility.addVmDisk(authConfigMap, computeServer.externalId, addDiskConfig)
-					log.info("Ray:: resizeWorkload: addDiskResults: ${addDiskResults}")
-					log.info("Ray:: resizeWorkload: addDiskResults.datastore: ${addDiskResults.datastore}")
-					//log.info("addDiskResults: ${addDiskResults} - ${addDiskResults.datastore}")
+					log.debug("addDiskResults ${addDiskResults}")
 					if (addDiskResults.success == true) {
-						//volumeAdd.volume.internalId = addDiskResults.volume?.uuid
-						//volumeAdd.volume.unitNumber = addDiskResults.volume?.deviceIndex
-						//volumeAdd.volume.displayOrder = addDiskResults.volume?.deviceIndex?.toLong()
-						def allStorageVolumeTypes = context.async.storageVolume.storageVolumeType.listAll().toMap { it.id }.blockingGet()
-						log.info("Ray:: resizeWorkload: allStorageVolumeTypes: ${allStorageVolumeTypes}")
-						log.info("Ray:: resizeWorkload: volumeAdd.storageType: ${volumeAdd.storageType}")
-						// check: new code
-						def volumeType = allStorageVolumeTypes[volumeAdd.storageType?.toLong()] // check: new code
-						log.info("Ray:: resizeWorkload: volumeType: ${volumeType}")
-						//def newVolume = buildStorageVolume(container.server.account, container.server, volumeUpdate.volume, newCounter)
-						def newVolume = new StorageVolume(
-								refType		: 'ComputeZone',
-								refId		: cloud.id,
-								regionCode	: computeServer.region?.regionCode,
-								account		: computeServer.account,
-								maxStorage	: volumeAdd.maxStorage?.toLong(),
-								maxIOPS		: volumeAdd.maxIOPS?.toInteger(),
-								type		: volumeType,
-								externalId	: addDiskResults.volume?.uuid,
-								deviceName	: addDiskResults.volume?.deviceName,
-								name		: volumeAdd.name,
-								displayOrder: newCounter,
-								status		: 'provisioned',
-								unitNumber	: addDiskResults.volume?.deviceIndex?.toString()
-						)
-						log.info("Ray:: resizeWorkload: newVolume: ${newVolume}")
+						def newVolume = buildStorageVolume(computeServer, volumeAdd, addDiskResults, newCounter)
+						def volumeType = storageVolumeTypes[volumeAdd.storageType.toLong()]
+						newVolume.type = volumeType
+						newVolume.datastore = datastore
 						newVolume.uniqueId = "morpheus-vol-${instance.id}-${workload.id}-${newCounter}"
-						log.info("Ray:: resizeWorkload: newVolume.uniqueId: ${newVolume.uniqueId}")
 						//newVolume.maxStorage = volumeAdd.volume.size.toInteger() * ComputeUtility.ONE_GIGABYTE // check: working of this line
 						computeServer.volumes << newVolume
 						setVolumeInfo(computeServer.volumes, addDiskResults.volumes)
-
 						context.async.storageVolume.create([newVolume], computeServer).blockingGet()
 						computeServer = saveAndGet(computeServer)
 						workload.server = computeServer
@@ -1557,18 +1506,14 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						newCounter++
 						modified = true
 					} else {
-						log.warn("Ray:: error adding disk: ${addDiskResults}")
+						log.warn("error adding disk: ${addDiskResults}")
 					}
 				}
 				// Delete any removed volumes
-				log.info("Ray:: resizeWorkload: resizeRequest.volumesDelete?.size(): ${resizeRequest.volumesDelete?.size()}")
 				resizeRequest.volumesDelete.each { volume ->
-					log.info("Ray:: resizeWorkload: volume.internalId: ${volume.internalId}")
-					log.info("resize deleting volume : ${volume.internalId}")
 					def deleteResults = XenComputeUtility.deleteVmDisk(authConfigMap, computeServer.externalId, volume.internalId)
-					log.info("Ray:: resizeWorkload: deleteResults: ${deleteResults}")
+					log.debug("deleteResults ${deleteResults}")
 					if (deleteResults.success == true) {
-						log.info("resize delete complete: ${deleteResults.success}")
 						workload = context.async.workload.get(workload.id).blockingGet()
 						computeServer = workload.server
 						computeServer.volumes.remove(volume)
@@ -1581,99 +1526,33 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			}
 
 			//networks
-			log.info("Ray:: resizeWorkload: opts.networkInterfaces: ${opts.networkInterfaces}")
 			if (opts.networkInterfaces) {
-				log.debug("build network networkSyncLists: ${opts.networkInterfaces}")
-				log.debug("container ${workload.id} network networkSyncLists:")
-				//controllers
-				log.info("Ray:: resizeWorkload: resizeRequest?.interfacesUpdate?.size(): ${resizeRequest?.interfacesUpdate?.size()}")
 				resizeRequest?.interfacesUpdate?.eachWithIndex { networkUpdate, index ->
-					log.info("Ray:: resizeWorkload: networkUpdate.existingModel: ${networkUpdate.existingModel}")
 					if (networkUpdate.existingModel) {
 						log.info("modifying network: ${networkUpdate}")
-
-					} else {
-
 					}
 				}
-
-				log.info("Ray:: resizeWorkload: resizeRequest.interfacesAdd?.size(): ${resizeRequest.interfacesAdd?.size()}")
 				resizeRequest.interfacesAdd.eachWithIndex { networkAdd, index ->
-					//log.info("adding network: ${networkAdd}")
-					log.info("Ray:: resizeWorkload: networkAdd: ${networkAdd}")
-					log.info("Ray:: resizeWorkload: index: ${index}")
 					def newIndex = computeServer.interfaces?.size()
-					log.info("Ray:: resizeWorkload: newIndex: ${newIndex}")
 					def newType = new ComputeServerInterfaceType(code: 'xenNetwork')
-					log.info("Ray:: resizeWorkload: networkAdd.network: ${networkAdd.network}")
-					log.info("Ray:: resizeWorkload: networkAdd.network.id: ${networkAdd.network.id}")
 					def newNetwork = context.async.network.listById([networkAdd.network.id.toLong()]).firstOrError().blockingGet()
-					log.info("Ray:: resizeWorkload: newNetwork?.externalId: ${newNetwork?.externalId}")
 					def networkConfig = [networkIndex: newIndex, networkUuid: newNetwork.externalId]
-					log.info("Ray:: resizeWorkload: networkConfig: ${networkConfig}")
 					def networkResults = XenComputeUtility.addVmNetwork(authConfigMap, computeServer.externalId, networkConfig)
-					log.info("Ray:: resizeWorkload: networkResults: ${networkResults}")
-					//log.info("network results: ${networkResults}")
+					log.debug("networkResults ${networkResults}")
 					if (networkResults.success == true) {
-						log.info("Ray:: resizeWorkload: computeServer.platform: ${computeServer.platform}")
-						def platform = computeServer.platform
-						def nicName
-						if (platform == 'windows') {
-							nicName = (index == 0) ? 'Ethernet' : 'Ethernet ' + (index + 1)
-						} else if (platform == 'linux') {
-							nicName = "eth${index}"
-						} else {
-							nicName = "eth${index}"
-						}
-						log.info("Ray:: resizeWorkload: nicName: ${nicName}")
-						/*def newInterface = new ComputeServerInterface([
-								name           	: nicName,
-								//ipAddress       : nic?.getPrivateIpAddress(),
-								network         : newNetwork,
-								displayOrder    : newIndex,
-								primaryInterface: networkAdd?.network?.isPrimary ? true : false
-						])*/
-
-
-						def newInterface = new ComputeServerInterface([
-								externalId      : networkResults.uuid,
-								internalId      : networkResults.uuid,
-								uniqueId        : "morpheus-nic-${instance.id}-${workload.id}-${newIndex}",
-								name            : nicName,
-								//ipAddress       : nic?.getPrivateIpAddress(),
-								network         : newNetwork,
-								displayOrder    : newIndex
-								//primaryInterface: networkAdd?.network?.isPrimary ? true : false
-						])
+						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex, index)
+						newInterface.uniqueId = "morpheus-nic-${instance.id}-${workload.id}-${newIndex}"
 						//newInterface.addresses += new NetAddress(type: NetAddress.AddressType.IPV4, address: nic?.getPrivateIpAddress())
-
-						log.info("Ray:: resizeWorkload: newInterface: ${newInterface}")
-						/*if (networkResults.networkIndex)
-							newInterface.externalId = "${networkResults.networkIndex}"
-						if (networkResults.uuid)
-							newInterface.internalId = networkResults.uuid
-						newInterface.uniqueId = "morpheus-nic-${instance.id}-${workload.id}-${newIndex}"*/
-						//newInterface.addresses += new NetAddress(type: NetAddress.AddressType.IPV4, address: nic?.getPrivateIpAddress()) //check: aws added code
-						log.info("Ray:: resizeWorkload: newInterface1: ${newInterface}")
-						log.info("Ray:: resizeWorkload: newInterface111: ${computeServer.interfaces.size()}")
 						computeServer.interfaces << newInterface
-						log.info("Ray:: resizeWorkload: newInterface222: ${computeServer.interfaces.size()}")
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
-						//computeServer.interfaces << newInterface
-
 						computeServer = saveAndGet(computeServer)
-						def customIndex = computeServer.interfaces.size()
-						log.info("Ray:: resizeWorkload: customIndex: ${customIndex}")
 						workload.server = computeServer
 					}
 				}
-
-				log.info("Ray:: resizeWorkload: resizeRequest?.interfacesDelete?.size(): ${resizeRequest?.interfacesDelete?.size()}")
 				resizeRequest?.interfacesDelete?.eachWithIndex { networkDelete, index ->
 					authConfigMap.stopped = opts.stopped
 					def deleteResults = XenComputeUtility.deleteVmNetwork(authConfigMap, computeServer.externalId, networkDelete.internalId)
-					log.info("Ray:: resizeWorkload: deleteResults: ${deleteResults}")
-					log.debug("deleteResults: ${deleteResults}")
+					log.debug("netdeleteResults: ${deleteResults}")
 					if (deleteResults.success == true) {
 						context.async.computeServer.computeServerInterface.remove([networkDelete], computeServer).blockingGet()
 						computeServer.interfaces.remove(networkDelete)
@@ -1697,22 +1576,55 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			}
 			rtn.success = true
 		} catch (e) {
-			log.error("Ray:: Unable to resize container: ${e.message}", e)
+			log.error("Unable to resize workload: ${e.message}", e)
 			workload.server.status = 'provisioned'
 			workload.server = saveAndGet(workload.server)
 			rtn.error = "${e}"
-			rtn.msg = 'Error resizing container'
+			rtn.msg = 'Error resizing workload'
 		}
-		log.info("Ray:: resizeWorkload: rtn: ${rtn}")
-
 		return new ServiceResponse(success: rtn.success, data: [supported: rtn.supported])
 	}
 
-	def getDatastoreExternalId(datastoreId) {
-		if (datastoreId == 'auto' || datastoreId == 'autoCluster') {
-			return null
+	def getInterfaceName(platform, index) {
+		def nicName
+		if (platform == 'windows') {
+			nicName = (index == 0) ? 'Ethernet' : 'Ethernet ' + (index + 1)
+		} else if (platform == 'linux') {
+			nicName = "eth${index}"
+		} else {
+			nicName = "eth${index}"
 		}
-		def datastore = context.async.cloud.datastore.get(datastoreId?.toLong()).blockingGet()
-		return datastore?.externalId
+		return nicName
+	}
+
+	def buildStorageVolume(computeServer, volumeAdd, addDiskResults, newCounter) {
+		def newVolume = new StorageVolume(
+				refType		: 'ComputeZone',
+				refId		: computeServer.cloud.id,
+				regionCode	: computeServer.region?.regionCode,
+				account		: computeServer.account,
+				maxStorage	: volumeAdd.maxStorage?.toLong(),
+				maxIOPS		: volumeAdd.maxIOPS?.toInteger(),
+				externalId	: addDiskResults.volume?.uuid,
+				deviceName	: addDiskResults.volume?.deviceName,
+				name		: volumeAdd.name,
+				displayOrder: newCounter,
+				status		: 'provisioned',
+				unitNumber	: addDiskResults.volume?.deviceIndex?.toString()
+		)
+		return newVolume
+	}
+
+	def buildNetworkInterface(server, networkResults, newNetwork, newIndex, index) {
+		def newInterface = new ComputeServerInterface([
+				name        : getInterfaceName(server.platform, index),
+				externalId  : networkResults.uuid,
+				internalId  : networkResults.uuid,
+				//ipAddress : nic?.getPrivateIpAddress(),
+				network     : newNetwork,
+				displayOrder: newIndex
+				//primaryInterface: networkAdd?.network?.isPrimary ? true : false
+		])
+		return newInterface
 	}
 }
