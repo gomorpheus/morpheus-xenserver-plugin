@@ -978,10 +978,8 @@ class XenComputeUtility {
             def config = getXenConnectionSession(opts.authConfig)
             def vm = VM.getByUuid(config.connection, vmId)
             def vmName = vm.getNameLabel(config.connection)
-//            def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
             def creds = opts.authConfig.username + ':' + opts.authConfig.password
             def insertOpts = [zone: opts.zone]
-//            insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
             insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
             def srcUrl = getXenApiUrl(opts.zone, true, creds) + '/export?uuid=' + vmId
             def targetFileName = (opts.vmName ?: "${vmName}.${System.currentTimeMillis()}") + '.xva'
@@ -992,12 +990,10 @@ class XenComputeUtility {
                 ZipEntry zipEntry = new ZipEntry(targetFileName)
                 targetZipStream.putNextEntry(zipEntry)
                 downloadResults = downloadImage(opts, srcUrl, targetZipStream)
-                log.info("RAZI :: downloadResults: ${downloadResults}")
             } else {
                 def targetFile = new File(targetFolder, targetFileName)
                 OutputStream outStream = targetFile.newOutputStream()
                 downloadResults = downloadImage(opts, srcUrl, outStream)
-				log.info("RAZI :: downloadResults2: ${downloadResults}")
 			}
 
             if (downloadResults.success == true) {
@@ -1013,7 +1009,6 @@ class XenComputeUtility {
                 targetZipStream.flush(); targetZipStream.close()
             }
         }
-        log.info("RAZI :: exportVm : RTN: ${rtn}")
         return rtn
     }
 
@@ -1374,7 +1369,6 @@ class XenComputeUtility {
 			def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getContent(), 64 * 1024), rtn.contentLength, null, null)
             writeStreamToOut(vmInputStream, targetStream)
             targetStream.flush()
-            log.info("RAZI :: writeStreamToOut : SUCCESS")
 
             rtn.success = true
         } catch (e) {
@@ -1383,16 +1377,9 @@ class XenComputeUtility {
 			try {
 				httpResponse?.close()
 			} catch (Exception ex3) {
-				log.info("RAZI :: targetStream.close() : ERROR, {}", ex3)
+				log.error("downloadImage target Stream close error, {}", ex3)
 			}
-            log.info("RAZI :: inboundClient.close() : SUCCESS")
         }
-		try {
-
-			log.info("RAZI :: downloadImage : RTN: ${rtn}")
-		} catch (Exception e) {
-			log.error("RAZI :: downloadImage : ERROR, {}", e)
-		}
         return rtn
     }
 
@@ -1402,7 +1389,6 @@ class XenComputeUtility {
         while((len = inputStream.read(buffer)) != -1) {
             out.write(buffer, 0, len)
         }
-        log.info("RAZI :: writeStreamToOut call : SUCCESS")
     }
 
     static archiveImage(opts, srcUrl, targetFile, fileSize = 0, progressCallback = null) {
