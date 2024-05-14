@@ -1405,7 +1405,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
 		log.debug("resizeWorkload workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
-		def rtn = [success: false, supported: true]
+		ServiceResponse rtn = ServiceResponse.success()
 		ComputeServer computeServer = context.async.computeServer.get(workload.server.id).blockingGet()
 		Cloud cloud = computeServer.cloud
 		def authConfigMap = plugin.getAuthConfig(cloud)
@@ -1528,7 +1528,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			if (opts.networkInterfaces) {
 				resizeRequest?.interfacesUpdate?.eachWithIndex { networkUpdate, index ->
 					if (networkUpdate.existingModel) {
-						log.info("modifying network: ${networkUpdate}")
+						log.debug("modifying network: ${networkUpdate}")
 					}
 				}
 				resizeRequest.interfacesAdd.eachWithIndex { networkAdd, index ->
@@ -1578,10 +1578,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			log.error("Unable to resize workload: ${e.message}", e)
 			workload.server.status = 'provisioned'
 			workload.server = saveAndGet(workload.server)
-			rtn.error = "${e}"
-			rtn.msg = 'Error resizing workload'
+			rtn.success = false
+			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.resizeWorkload")
+			rtn.setError(error)
 		}
-		return new ServiceResponse(success: rtn.success, data: [supported: rtn.supported])
+		return rtn
 	}
 
 	def getInterfaceName(platform, index) {
