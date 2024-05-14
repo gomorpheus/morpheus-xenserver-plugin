@@ -224,7 +224,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			if (containerConfig.imageId || containerConfig.template || server.sourceImage?.id) {
 				def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: server.sourceImage.id)
 				virtualImage = context.async.virtualImage.get(virtualImageId).blockingGet()
-				imageId = virtualImage?.externalId
+				imageId = virtualImage.locations.find { it.refType == "ComputeZone" && it.refId == cloud.id }?.externalId
 				log.info("runworkload imageId1: ${imageId}")
 				if (!imageId) { //If its userUploaded and still needs uploaded
 					//TODO: We need to upload ovg/vmdk stuff here
@@ -465,28 +465,24 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse stopWorkload(Workload workload) {
-		def rtn = [success: false, msg: null]
+		def rtn = ServiceResponse.prepare()
 		try {
 			if(workload.server?.externalId) {
-				workload.userStatus = Workload.Status.stopped
-				workload = context.async.workload.create(workload).blockingGet()
 				Cloud cloud = workload.server.cloud
 				def stopResults = XenComputeUtility.stopVm(plugin.getAuthConfig(cloud), workload.server.externalId)
 				if(stopResults.success == true) {
-					workload.status = Workload.Status.stopped
-					workload = context.async.workload.create(workload).blockingGet()
-					//stopContainerUsage(container, false)
+					context.async.computeServer.updatePowerState(workload.server.id, ComputeServer.PowerState.off).blockingGet()
 					rtn.success = true
 				}
 			} else {
 				rtn.success = true
-				rtn.msg = 'vm not found'
+				rtn.msg = context.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
 			}
 		} catch (e) {
 			log.error("stopContainer error: ${e}", e)
-			rtn.msg = e.message
+			rtn.msg = context.services.localization.get("gomorpheus.provision.xenServer.error.stopWorkload")
 		}
-		return new ServiceResponse(rtn.success, rtn.msg, null, null)
+		return rtn
 	}
 
 	/**
@@ -497,6 +493,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse startWorkload(Workload workload) {
 		log.debug("startWorkload: ${workload.id}")
+		def rtn = ServiceResponse.prepare()
 		try {
 			if(workload.server?.externalId) {
 				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
@@ -504,17 +501,19 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				log.debug("startWorkload: startResults: ${startResults}")
 				if(startResults.success == true) {
 					context.async.computeServer.updatePowerState(workload.server.id, ComputeServer.PowerState.on).blockingGet()
-					return ServiceResponse.success()
+					rtn.success = true
 				} else {
-					return ServiceResponse.error("${startResults.msg}" ?: 'Failed to start vm')
+					rtn.msg = "${startResults.msg}" ?: 'Failed to start vm'
 				}
 			} else {
-				return ServiceResponse.error('vm not found')
+				rtn.error = context.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
 			}
 		} catch(e) {
 			log.error("startContainer error: ${e}", e)
-			return ServiceResponse.error(e.message)
+			rtn.error = context.services.localization.get("gomorpheus.provision.xenServer.error.startWorkload")
 		}
+
+		return rtn
 	}
 
 	/**
@@ -970,7 +969,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			}
 			//add cloud init iso
 			def cdResults = opts.cloudConfigFile ? XenComputeUtility.insertCloudInitDisk(opts, getCloudIsoOutputStream(opts)) : [success: false]
-			log.debug("runworkload: createProvisionServer: cdResults: ${cdResults}")
 			def rootVolume = opts.server.volumes?.find{it.rootVolume == true}
 			if (rootVolume) {
 				rootVolume.unitNumber = "0"
