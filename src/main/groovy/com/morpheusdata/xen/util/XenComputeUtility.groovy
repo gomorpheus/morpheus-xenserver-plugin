@@ -2,6 +2,7 @@ package com.morpheusdata.xen.util
 
 import com.bertramlabs.plugins.karman.CloudFile
 import com.bertramlabs.plugins.karman.StorageProvider
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.MorpheusUtils
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
@@ -14,6 +15,7 @@ import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZUtils
 import org.apache.http.HttpHost
 import org.apache.http.auth.AuthScope
+import org.apache.http.client.methods.CloseableHttpResponse
 import org.apache.http.client.methods.HttpGet
 import org.apache.http.client.methods.HttpPut
 import org.apache.http.conn.ConnectTimeoutException
@@ -995,7 +997,8 @@ class XenComputeUtility {
                 def targetFile = new File(targetFolder, targetFileName)
                 OutputStream outStream = targetFile.newOutputStream()
                 downloadResults = downloadImage(opts, srcUrl, outStream)
-            }
+				log.info("RAZI :: downloadResults2: ${downloadResults}")
+			}
 
             if (downloadResults.success == true) {
                 rtn.success = true
@@ -1357,73 +1360,19 @@ class XenComputeUtility {
 
     static downloadImage(opts, srcUrl, targetStream) {
         log.info("downloadImage")
-        def inboundClient
+		CloseableHttpResponse httpResponse
         def rtn = [success: false, ovfFiles: []]
         try {
-
-            SSLContextBuilder inboundSslBuilder = new SSLContextBuilder()
-            inboundSslBuilder.loadTrustMaterial(null, new TrustStrategy() {
-                @Override
-                boolean isTrusted(X509Certificate[] chain, String authType) throws java.security.cert.CertificateException {
-                    return true
-                }
-            })
-            SSLContext sslContext = inboundSslBuilder.build()
-            def inboundSocketFactory = new SSLConnectionSocketFactory(sslContext, SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER) {
-                @Override
-                Socket connectSocket(int connectTimeout, Socket socket, HttpHost host, InetSocketAddress remoteAddress, InetSocketAddress localAddress, HttpContext context) throws IOException, ConnectTimeoutException {
-                    if (socket instanceof SSLSocket) {
-                        try {
-                            socket.setEnabledProtocols(['SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2'] as String[])
-                            PropertyUtils.setProperty(socket, "host", host.getHostName())
-                        } catch (NoSuchMethodException ex) {
-                        }
-                        catch (IllegalAccessException ex) {
-                        }
-                        catch (InvocationTargetException ex) {
-                        }
-                        catch (Exception ex) {
-                            log.error "We have an unhandled exception when attempting to connect to ${host} ignoring SSL errors", ex
-                        }
-                    }
-                    log.info("RAZI :: call super.connectSocket")
-                    return super.connectSocket(10000, socket, host, remoteAddress, localAddress, context)
-                }
-            }
-
-            def clientBuilder = HttpClients.custom().setSSLSocketFactory(inboundSocketFactory)
-            clientBuilder.setHostnameVerifier(new X509HostnameVerifier() {
-                boolean verify(String host, SSLSession sess) { return true }
-
-                void verify(String host, SSLSocket ssl) {}
-
-                void verify(String host, String[] cns, String[] subjectAlts) {}
-
-                void verify(String host, X509Certificate cert) {}
-            })
-            clientBuilder.disableAutomaticRetries()
-            clientBuilder.disableRedirectHandling()
-            if (opts.authCreds) {
-                def srcUri = new URI(srcUrl)
-                def authScope = new AuthScope(srcUri.getHost(), srcUri.getPort())
-                def credsProvider = new BasicCredentialsProvider()
-                credsProvider.setCredentials(authScope, opts.authCreds)
-                clientBuilder.addInterceptorFirst(new PreemptiveAuthInterceptor())
-                clientBuilder.setDefaultCredentialsProvider(credsProvider)
-            }
-            inboundClient = clientBuilder.build()
-            def inboundGet = new HttpGet(srcUrl)
-            log.info("RAZI :: inboundGet: ${inboundGet}")
-            def responseBody = inboundClient.execute(inboundGet)
-            log.info("RAZI :: responseBody: ${responseBody}")
-            log.info("RAZI :: responseBody.getEntity().getContent(): ${responseBody.getEntity().getContent()}")
-            def vmInputStream = new BufferedInputStream(responseBody.getEntity().getContent(), 64 * 1024)
-            log.info("RAZI :: vmInputStream: ${vmInputStream}")
-            log.info("RAZI :: targetStream: ${targetStream}")
-//            MorpheusUtils.writeStreamToOut(vmInputStream, targetStream)
+			def httpClient = new HttpApiClient()
+			def requetOptions = new HttpApiClient.RequestOptions()
+			def response = httpClient.callStreamApi(srcUrl, null, opts.authConfig.username, opts.authConfig.password, requetOptions, "GET")
+			httpResponse = response.data
+            def responseBody = httpResponse.getEntity()
+			rtn.contentLength = responseBody.getContentLength()
+			if (rtn.contentLength < 0)
+				rtn.contentLength = 0
+			def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getContent(), 64 * 1024), rtn.contentLength, null, null)
             writeStreamToOut(vmInputStream, targetStream)
-            log.info("RAZI :: writeStreamToOut(vmInputStream, targetStream) : SUCCESS")
-
             targetStream.flush()
             log.info("RAZI :: writeStreamToOut : SUCCESS")
 
@@ -1431,10 +1380,19 @@ class XenComputeUtility {
         } catch (e) {
             log.error("downloadImage From Stream error: ${e}", e)
         } finally {
-            inboundClient.close()
+			try {
+				httpResponse?.close()
+			} catch (Exception ex3) {
+				log.info("RAZI :: targetStream.close() : ERROR, {}", ex3)
+			}
             log.info("RAZI :: inboundClient.close() : SUCCESS")
         }
-        log.info("RAZI :: downloadImage : RTN: ${rtn}")
+		try {
+
+			log.info("RAZI :: downloadImage : RTN: ${rtn}")
+		} catch (Exception e) {
+			log.error("RAZI :: downloadImage : ERROR, {}", e)
+		}
         return rtn
     }
 
@@ -1449,65 +1407,19 @@ class XenComputeUtility {
 
     static archiveImage(opts, srcUrl, targetFile, fileSize = 0, progressCallback = null) {
         log.info("downloadImage: src: ${srcUrl}")
-        def inboundClient
+		CloseableHttpResponse httpResponse
         def rtn = [success: false, ovfFiles: []]
         try {
-            SSLContextBuilder inboundSslBuilder = new SSLContextBuilder()
-            inboundSslBuilder.loadTrustMaterial(null, new TrustStrategy() {
-                @Override
-                boolean isTrusted(X509Certificate[] chain, String authType) throws java.security.cert.CertificateException {
-                    return true
-                }
-            })
-            SSLContext sslContext = inboundSslBuilder.build()
-            def inboundSocketFactory = new SSLConnectionSocketFactory(sslContext, SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER) {
-                @Override
-                Socket connectSocket(int connectTimeout, Socket socket, HttpHost host, InetSocketAddress remoteAddress, InetSocketAddress localAddress, HttpContext context) throws IOException, ConnectTimeoutException {
-                    if (socket instanceof SSLSocket) {
-                        try {
-                            socket.setEnabledProtocols(['SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2'] as String[])
-                            PropertyUtils.setProperty(socket, "host", host.getHostName())
-                        } catch (NoSuchMethodException ex) {
-                        }
-                        catch (IllegalAccessException ex) {
-                        }
-                        catch (InvocationTargetException ex) {
-                        }
-                        catch (Exception ex) {
-                            log.error "We have an unhandled exception when attempting to connect to ${host} ignoring SSL errors", ex
-                        }
-                    }
-                    return super.connectSocket(10000, socket, host, remoteAddress, localAddress, context)
-                }
-            }
-            def clientBuilder = HttpClients.custom().setSSLSocketFactory(inboundSocketFactory)
-            clientBuilder.setHostnameVerifier(new X509HostnameVerifier() {
-                boolean verify(String host, SSLSession sess) { return true }
-
-                void verify(String host, SSLSocket ssl) {}
-
-                void verify(String host, String[] cns, String[] subjectAlts) {}
-
-                void verify(String host, X509Certificate cert) {}
-            })
-            clientBuilder.disableAutomaticRetries()
-            clientBuilder.disableRedirectHandling()
-            if (opts.authCreds) {
-                def srcUri = new URI(srcUrl)
-                def authScope = new AuthScope(srcUri.getHost(), srcUri.getPort())
-                def credsProvider = new BasicCredentialsProvider()
-                credsProvider.setCredentials(authScope, opts.authCreds)
-                clientBuilder.addInterceptorFirst(new PreemptiveAuthInterceptor())
-                clientBuilder.setDefaultCredentialsProvider(credsProvider)
-            }
-            inboundClient = clientBuilder.build()
-            def inboundGet = new HttpGet(srcUrl)
-            def responseBody = inboundClient.execute(inboundGet)
-            rtn.contentLength = responseBody.getEntity().getContentLength()
+			def httpClient = new HttpApiClient()
+			def requetOptions = new HttpApiClient.RequestOptions()
+			def response = httpClient.callStreamApi(srcUrl, null, opts.authConfig.username, opts.authConfig.password, requetOptions, "GET")
+			httpResponse = response.data
+			def responseBody = httpResponse.getEntity()
+			rtn.contentLength = responseBody.getContentLength()
             if (rtn.contentLength < 0 && fileSize > 0)
                 rtn.contentLength = fileSize
             log.info("download image contentLength: ${rtn.contentLength}")
-            def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getEntity().getContent(), 1200), rtn.contentLength)
+            def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getEntity().getContent(), 1200), rtn.contentLength, null, null)
             vmInputStream.progressCallback = progressCallback
             targetFile.setContentLength(rtn.contentLength)
             targetFile.setInputStream(vmInputStream)
@@ -1516,7 +1428,7 @@ class XenComputeUtility {
         } catch (e) {
             log.error("downloadImage From Stream error: ${e}", e)
         } finally {
-            inboundClient.close()
+			httpResponse.close()
         }
         return rtn
     }

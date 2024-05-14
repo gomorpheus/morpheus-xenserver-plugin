@@ -191,9 +191,8 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 			outputFile.mkdirs()
 			log.info("RAZI :: mkdirs : SUCCESS")
 			//update status
-//			updateBackupStatus(backupResult.id, 'IN_PROGRESS', [containerConfig:container?.configMap]) // skip
-			updateBackupStatus(backupExecutionResponse, "IN_PROGRESS")
-			log.info("RAZI :: updateBackupStatus : IN_PROGRESS")
+			backupResult.status = BackupResult.Status.IN_PROGRESS
+			morpheusContext.async.backup.backupResult.save(backupResult).subscribe().dispose()
 			//remove cloud init
 			if(server.sourceImage && server.sourceImage.isCloudInit && server.serverOs?.platform != 'windows') {
 				def taskResult1 = getPlugin().morpheus.executeCommandOnServer(server, 'sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; sudo cp /etc/machine-id /tmp/machine-id-old ; sync', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
@@ -249,17 +248,14 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 					def saveResults = [success:false]
 					def saveThread = Thread.start {
 						try {
-							log.info("RAZI :: inside Thread.start")
 							zipFile.setInputStream(istream)
 							zipFile.save()
 							saveResults.archiveSize = zipFile.getContentLength()
 							saveResults.success = true
-							log.info("RAZI :: saveResults: ${saveResults}")
 						} catch(ex) {
 							log.error("Error Saving Backup File! ${ex.message}",ex)
 							try {
 								zipStream.close()
-								log.info("RAZI :: zipStream : CLOSED")
 							} catch(ex2) {
 								//dont care about exception on this but we need to close it on save failure thread in the event we need to cutoff the stream
 							}
