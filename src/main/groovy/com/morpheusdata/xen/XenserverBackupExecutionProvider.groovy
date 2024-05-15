@@ -18,7 +18,6 @@ import java.util.zip.ZipOutputStream
 @Slf4j
 class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 
-//	Plugin plugin
 	XenserverPlugin plugin
 	MorpheusContext morpheusContext
 

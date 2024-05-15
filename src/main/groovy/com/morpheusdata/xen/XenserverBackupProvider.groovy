@@ -15,8 +15,6 @@ import groovy.util.logging.Slf4j
 @Slf4j
 class XenserverBackupProvider extends MorpheusBackupProvider {
 
-//	BackupJobProvider backupJobProvider;
-
 	XenserverBackupProvider(Plugin plugin, MorpheusContext morpheusContext) {
 		super(plugin, morpheusContext)
 
