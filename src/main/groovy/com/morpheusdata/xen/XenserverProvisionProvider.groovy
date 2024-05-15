@@ -1422,7 +1422,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def modified = false
 			def stopped = false
 			def stopResults
-			//check for stop - we have weird math going on
 			def doStop = computeServer.hotResize != true && (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0 || resizeRequest.volumesUpdate?.size() > 0)
 			if (doStop) {
 				stopped = true
@@ -1430,7 +1429,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				stopResults = stopWorkload(workload)
 				log.debug("stopResults ${stopResults}")
 			}
-			//adjust plan size
 			if (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0) {
 				log.info("resizing vm: ${allocationSpecs}")
 				def allocationResults = XenComputeUtility.adjustVmResources(authConfigMap, computeServer.externalId, allocationSpecs)
@@ -1455,7 +1453,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				resizeRequest.volumesUpdate?.each { volumeUpdate ->
 					StorageVolume existing = volumeUpdate.existingModel
 					Map updateProps = volumeUpdate.updateProps
-					//existing disk - resize it
 					if (updateProps.maxStorage > existing.maxStorage) {
 						def resizeDiskConfig = [diskSize: updateProps.maxStorage, diskIndex: existing.externalId, uuid: existing.internalId]
 						def resizeResults = XenComputeUtility.resizeVmDisk(authConfigMap, computeServer.externalId, resizeDiskConfig)
@@ -1493,7 +1490,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						newVolume.type = volumeType
 						newVolume.datastore = datastore
 						newVolume.uniqueId = "morpheus-vol-${instance.id}-${workload.id}-${newCounter}"
-						//newVolume.maxStorage = volumeAdd.volume.size.toInteger() * ComputeUtility.ONE_GIGABYTE // check: working of this line
 						computeServer.volumes << newVolume
 						setVolumeInfo(computeServer.volumes, addDiskResults.volumes)
 						context.async.storageVolume.create([newVolume], computeServer).blockingGet()
@@ -1506,7 +1502,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						log.warn("error adding disk: ${addDiskResults}")
 					}
 				}
-				// Delete any removed volumes
 				resizeRequest.volumesDelete.each { volume ->
 					def deleteResults = XenComputeUtility.deleteVmDisk(authConfigMap, computeServer.externalId, volume.internalId)
 					log.debug("deleteResults ${deleteResults}")
@@ -1521,7 +1516,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 			}
-
 			//networks
 			if (opts.networkInterfaces) {
 				resizeRequest?.interfacesUpdate?.eachWithIndex { networkUpdate, index ->
@@ -1539,7 +1533,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					if (networkResults.success == true) {
 						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex, index)
 						newInterface.uniqueId = "morpheus-nic-${instance.id}-${workload.id}-${newIndex}"
-						//newInterface.addresses += new NetAddress(type: NetAddress.AddressType.IPV4, address: nic?.getPrivateIpAddress())
 						computeServer.interfaces << newInterface
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
 						computeServer = saveAndGet(computeServer)
@@ -1567,8 +1560,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			if (stopped == true) {
 				startWorkload(workload)
 				if (workload.status == Workload.Status.running) {
-					//def tmpInstance = Instance.get(instance.id)
-					//instanceTaskService.runStartupTasks(tmpInstance, opts.userId)
 				}
 			}
 			rtn.success = true
@@ -1618,10 +1609,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				name        : getInterfaceName(server.platform, index),
 				externalId  : networkResults.uuid,
 				internalId  : networkResults.uuid,
-				//ipAddress : nic?.getPrivateIpAddress(),
 				network     : newNetwork,
 				displayOrder: newIndex
-				//primaryInterface: networkAdd?.network?.isPrimary ? true : false
 		])
 		return newInterface
 	}
