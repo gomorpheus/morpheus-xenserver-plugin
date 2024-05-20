@@ -33,7 +33,8 @@ class XenserverBackupTypeProvider extends AbstractBackupTypeProvider {
 	 */
 	@Override
 	String getCode() {
-		return "xenserverBackupTypeProvider"
+//		return "xenserverBackupTypeProvider"
+		return 'xenSnapshot'
 	}
 
 	/**
@@ -62,7 +63,7 @@ class XenserverBackupTypeProvider extends AbstractBackupTypeProvider {
 	 */
 	@Override
 	Boolean getCopyToStore() {
-		return false
+		return true
 	}
 
 	/**
@@ -71,7 +72,7 @@ class XenserverBackupTypeProvider extends AbstractBackupTypeProvider {
 	 */
 	@Override
 	Boolean getDownloadEnabled() {
-		return false
+		return true
 	}
 
 	/**
@@ -98,7 +99,7 @@ class XenserverBackupTypeProvider extends AbstractBackupTypeProvider {
 	 */
 	@Override
 	String getRestoreType() {
-		return "online"
+		return "offline"
 	}
 
 	/**
@@ -133,7 +134,7 @@ class XenserverBackupTypeProvider extends AbstractBackupTypeProvider {
 	 */
 	@Override
 	Boolean getHasCopyToStore() {
-		return false
+		return true
 	}
 
 	/**
@@ -152,7 +153,7 @@ class XenserverBackupTypeProvider extends AbstractBackupTypeProvider {
 	@Override
 	XenserverBackupExecutionProvider getExecutionProvider() {
 		if(!this.executionProvider) {
-			this.executionProvider = new XenserverBackupExecutionProvider(getPlugin())
+			this.executionProvider = new XenserverBackupExecutionProvider(getPlugin(), getMorpheus())
 		}
 		return this.executionProvider
 	}
@@ -164,7 +165,7 @@ class XenserverBackupTypeProvider extends AbstractBackupTypeProvider {
 	@Override
 	XenserverBackupRestoreProvider getRestoreProvider() {
 		if(!this.restoreProvider) {
-		this.restoreProvider = new XenserverBackupRestoreProvider(getPlugin())
+		this.restoreProvider = new XenserverBackupRestoreProvider(getPlugin(), getMorpheus())
 		}
 		return this.restoreProvider
 	}
