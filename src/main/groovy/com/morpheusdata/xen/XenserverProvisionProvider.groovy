@@ -1404,22 +1404,20 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
 		log.debug("resizeWorkload workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
 		ServiceResponse rtn = ServiceResponse.success()
+
 		ComputeServer computeServer = context.async.computeServer.get(workload.server.id).blockingGet()
-		Cloud cloud = computeServer.cloud
-		def authConfigMap = plugin.getAuthConfig(cloud)
+		def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
 		try {
 			computeServer.status = 'resizing'
 			computeServer = saveAndGet(computeServer)
-			ServicePlan plan = resizeRequest.plan
-			def requestedMemory = plan.customMaxMemory ? (resizeRequest.maxMemory ?: plan.maxMemory) : plan.maxMemory
-			def requestedCores = plan.customCores ? (resizeRequest?.maxCores ?: plan.maxCores) : plan.maxCores
+			def requestedMemory = resizeRequest.maxMemory
+			def requestedCores = resizeRequest?.maxCores
 			def currentMemory = workload.maxMemory ?: workload.getConfigProperty('maxMemory')?.toLong()
 			def currentCores = workload.maxCores ?: 1
 			def neededMemory = requestedMemory - currentMemory
 			def neededCores = (requestedCores ?: 1) - (currentCores ?: 1)
 
 			def allocationSpecs = [externalId: computeServer.externalId, maxMemory: requestedMemory, maxCpu: requestedCores]
-			def modified = false
 			def stopped = false
 			def stopResults
 			def doStop = computeServer.hotResize != true && (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0 || resizeRequest.volumesUpdate?.size() > 0)
@@ -1427,27 +1425,18 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				stopped = true
 				opts.stopped = stopped
 				stopResults = stopWorkload(workload)
-				log.debug("stopResults ${stopResults}")
+				log.info("stopResults ${stopResults}")
 			}
 			if (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0) {
-				log.info("resizing vm: ${allocationSpecs}")
+				log.debug("resizing vm: ${allocationSpecs}")
 				def allocationResults = XenComputeUtility.adjustVmResources(authConfigMap, computeServer.externalId, allocationSpecs)
 				log.debug("allocationResults ${allocationResults}")
-				if (allocationResults.success) {
-					modified = true
-					workload.setConfigProperty('maxMemory', requestedMemory)
-					workload.maxMemory = requestedMemory.toLong()
-					workload.setConfigProperty('maxCores', (requestedCores ?: 1))
-					workload.maxCores = (requestedCores ?: 1).toLong()
-					workload.plan = plan
-					computeServer.plan = plan
-					computeServer.maxCores = (requestedCores ?: 1).toLong()
-					computeServer.maxMemory = requestedMemory.toLong()
-					context.async.workload.save(workload).blockingGet()
-					computeServer = saveAndGet(computeServer)
+				if (allocationResults.success == false) {
+					rtn.success = false
+					rtn.error = context.services.localization.get("gormorpheus.provision.xenServer.resize.adjustVm")
+					return rtn
 				}
 			}
-			def maxStorage = 0
 			if (opts.volumes) {
 				def newCounter = computeServer.volumes?.size()
 				resizeRequest.volumesUpdate?.each { volumeUpdate ->
@@ -1460,12 +1449,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						def existingVolume = context.async.storageVolume.get(existing.id).blockingGet()
 						existingVolume.maxStorage = updateProps?.maxStorage
 						context.async.storageVolume.save(existingVolume).blockingGet()
-						modified = true
 					}
 				}
 				def datastoreIds = []
 				def storageVolumeTypes = [:]
 				resizeRequest.volumesAdd?.each { Map volumeAdd ->
+					log.debug("volumeAdd: ${volumeAdd}")
 					def datastoreId = volumeAdd.datastoreId
 					if (!(datastoreId == 'auto' || datastoreId == 'autoCluster')) {
 						datastoreIds << datastoreId?.toLong()
@@ -1490,14 +1479,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						newVolume.type = volumeType
 						newVolume.datastore = datastore
 						newVolume.uniqueId = "morpheus-vol-${instance.id}-${workload.id}-${newCounter}"
-						computeServer.volumes << newVolume
 						setVolumeInfo(computeServer.volumes, addDiskResults.volumes)
 						context.async.storageVolume.create([newVolume], computeServer).blockingGet()
-						computeServer = saveAndGet(computeServer)
+						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 						workload.server = computeServer
-						context.async.workload.save(workload).blockingGet()
 						newCounter++
-						modified = true
 					} else {
 						log.warn("error adding disk: ${addDiskResults}")
 					}
@@ -1506,13 +1492,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					def deleteResults = XenComputeUtility.deleteVmDisk(authConfigMap, computeServer.externalId, volume.internalId)
 					log.debug("deleteResults ${deleteResults}")
 					if (deleteResults.success == true) {
-						workload = context.async.workload.get(workload.id).blockingGet()
-						computeServer = workload.server
-						computeServer.volumes.remove(volume)
 						context.async.storageVolume.remove([volume], computeServer, true).blockingGet()
-						computeServer = saveAndGet(computeServer)
-						workload.server = computeServer
-						context.async.workload.save(workload).blockingGet()
+						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
 				}
 			}
@@ -1525,7 +1506,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				}
 				resizeRequest.interfacesAdd.eachWithIndex { networkAdd, index ->
 					def newIndex = computeServer.interfaces?.size()
-					def newType = new ComputeServerInterfaceType(code: 'xenNetwork')
 					def newNetwork = context.async.network.listById([networkAdd.network.id.toLong()]).firstOrError().blockingGet()
 					def networkConfig = [networkIndex: newIndex, networkUuid: newNetwork.externalId]
 					def networkResults = XenComputeUtility.addVmNetwork(authConfigMap, computeServer.externalId, networkConfig)
@@ -1533,10 +1513,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					if (networkResults.success == true) {
 						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex, index)
 						newInterface.uniqueId = "morpheus-nic-${instance.id}-${workload.id}-${newIndex}"
-						computeServer.interfaces << newInterface
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
-						computeServer = saveAndGet(computeServer)
-						workload.server = computeServer
+						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
 				}
 				resizeRequest?.interfacesDelete?.eachWithIndex { networkDelete, index ->
@@ -1545,28 +1523,20 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					log.debug("netdeleteResults: ${deleteResults}")
 					if (deleteResults.success == true) {
 						context.async.computeServer.computeServerInterface.remove([networkDelete], computeServer).blockingGet()
-						computeServer.interfaces.remove(networkDelete)
-						computeServer = saveAndGet(computeServer)
-						workload.server = computeServer
+						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
 				}
 			}
-			workload = context.async.workload.save(workload).blockingGet()
-			if (!rtn.error && maxStorage)
-				workload.maxStorage = maxStorage
 			computeServer.status = 'provisioned'
 			computeServer = saveAndGet(computeServer)
-			workload.server = computeServer
 			if (stopped == true) {
 				startWorkload(workload)
-				if (workload.status == Workload.Status.running) {
-				}
 			}
 			rtn.success = true
 		} catch (e) {
 			log.error("Unable to resize workload: ${e.message}", e)
-			workload.server.status = 'provisioned'
-			workload.server = saveAndGet(workload.server)
+			computeServer.status = 'provisioned'
+			computeServer = saveAndGet(computeServer)
 			rtn.success = false
 			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.resizeWorkload")
 			rtn.setError(error)
@@ -1595,6 +1565,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				maxStorage	: volumeAdd.maxStorage?.toLong(),
 				maxIOPS		: volumeAdd.maxIOPS?.toInteger(),
 				externalId	: addDiskResults.volume?.uuid,
+				internalId 	: addDiskResults.volume?.uuid, // This is used in embedded
 				deviceName	: addDiskResults.volume?.deviceName,
 				name		: volumeAdd.name,
 				displayOrder: newCounter,
