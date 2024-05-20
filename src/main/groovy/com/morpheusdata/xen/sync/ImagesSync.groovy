@@ -83,20 +83,20 @@ class ImagesSync {
 
             def uniqueIds = [] as Set
             Observable domainRecords = morpheusContext.async.virtualImage.listIdentityProjections(
-                    new DataQuery().withFilters(
-                            new DataOrFilter(
-                                    new DataAndFilter(
-                                            new DataFilter('refType', 'ComputeZone'),
-                                            new DataFilter('refId', cloud.id)
-                                    ),
-                                    new DataAndFilter(
-                                            new DataFilter('accounts.id', cloud.account.id),
-                                            new DataFilter('category', "xenserver.image.${cloud.id}"),
-                                            new DataFilter('uniqueId', 'in', objListIds)
-                                    )
-                            )
-                    )
-                ).filter { VirtualImageIdentityProjection proj ->
+				new DataQuery().withFilters(
+						new DataOrFilter(
+								new DataAndFilter(
+										new DataFilter('refType', 'ComputeZone'),
+										new DataFilter('refId', cloud.id)
+								),
+								new DataAndFilter(
+										new DataFilter('accounts.id', cloud.account.id),
+										new DataFilter('category', "xenserver.image.${cloud.id}"),
+										new DataFilter('uniqueId', 'in', objListIds)
+								)
+						)
+				)
+			).filter { VirtualImageIdentityProjection proj ->
                 if(objListIds.contains(proj.externalId)){
                     return true
                 }

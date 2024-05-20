@@ -384,12 +384,9 @@ class XenserverCloudProvider implements CloudProvider {
 				new PoolSync(cloudInfo, plugin).execute()
 				log.info("${cloudInfo.name}: PoolSync in ${new Date().time - now}ms")
 
-				def doInventory = cloudInfo.getConfigProperty('importExisting')
-				if (doInventory == 'on' || doInventory == 'true' || doInventory == true) {
-					now = new Date().time
-					new VirtualMachineSync(cloudInfo, plugin, this).execute()
-					log.info("${cloudInfo.name}: VirtualMachineSync in ${new Date().time - now}ms")
-				}
+				now = new Date().time
+				new VirtualMachineSync(cloudInfo, plugin, this).execute()
+				log.info("${cloudInfo.name}: VirtualMachineSync in ${new Date().time - now}ms")
 
 				rtn = ServiceResponse.success()
 			} else {
@@ -398,7 +395,7 @@ class XenserverCloudProvider implements CloudProvider {
 		} catch(e) {
 			log.error("refresh cloud error: ${e}", e)
 		}
-		rtn
+		return rtn
 	}
 
 	/**
@@ -409,6 +406,28 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	void refreshDaily(Cloud cloudInfo) {
+		log.info("refreshDaily for xen cloud ${cloudInfo.code}")
+		def doSave = false
+		try {
+			def testResults = XenComputeUtility.testConnection(plugin.getAuthConfig(cloudInfo))
+			if(testResults.success) {
+				cloudInfo.status = Cloud.Status.ok
+				doSave = true
+			} else {
+				log.debug("Error connecting to cloud: ${testResults}")
+				cloudInfo.status = Cloud.Status.offline
+				doSave = true
+			}
+		} catch(Exception e) {
+			log.error("refresh daily error: ${e}", e)
+			cloudInfo.status = Cloud.Status.error
+			cloudInfo.statusMessage = "Error connecting to cloud."
+			doSave = true
+		}
+
+		if(doSave) {
+			context.async.cloud.save(cloudInfo).subscribe().dispose()
+		}
 	}
 
 	/**

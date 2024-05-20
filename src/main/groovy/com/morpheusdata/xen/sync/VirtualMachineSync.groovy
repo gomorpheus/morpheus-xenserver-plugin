@@ -83,33 +83,35 @@ class VirtualMachineSync {
         }
     }
 
-    def addMissingVirtualMachines(List addList,Map usageLists, Collection<ServicePlan> availablePlans,
-                                  Collection<ResourcePermission> availablePlanPermissions) {
-        log.debug("addMissingVirtualMachines ${cloud} ${addList?.size()} ${usageLists}")
-        ServicePlan servicePlan = morpheusContext.services.servicePlan.find(new DataQuery().withFilter("code","internal-custom-xen"))
+    def addMissingVirtualMachines(List addList,Map usageLists, Collection<ServicePlan> availablePlans, Collection<ResourcePermission> availablePlanPermissions) {
+		def doInventory = cloud.getConfigProperty('importExisting')
+		if (doInventory == 'on' || doInventory == 'true' || doInventory == true) {
+			log.debug("addMissingVirtualMachines ${cloud} ${addList?.size()} ${usageLists}")
+			ServicePlan servicePlan = morpheusContext.services.servicePlan.find(new DataQuery().withFilter("code", "internal-custom-xen"))
 
-        for (cloudItem in addList) {
-            try {
-                    def vmConfig = buildVmConfig(cloudItem, servicePlan, availablePlans, availablePlanPermissions)
-                    ComputeServer add = new ComputeServer(vmConfig)
-                    if (servicePlan) {
-                        applyServicePlan(add, servicePlan)
-                    }
-                    ComputeServer savedServer = morpheusContext.async.computeServer.create(add).blockingGet()
-                    if (!savedServer) {
-                        log.error "Error in creating server ${add}"
-                    } else {
-                        performPostSaveSync(savedServer)
-                    }
-                    if (vmConfig.powerState == ComputeServer.PowerState.on) {
-                        usageLists.startUsageIds << savedServer.id
-                    } else {
-                        usageLists.stopUsageIds << savedServer.id
-                    }
-            } catch (Exception ex) {
-                log.error("Error in adding VM: {}", ex)
-            }
-        }
+			for(cloudItem in addList) {
+				try {
+					def vmConfig = buildVmConfig(cloudItem, servicePlan, availablePlans, availablePlanPermissions)
+					ComputeServer add = new ComputeServer(vmConfig)
+					if(servicePlan) {
+						applyServicePlan(add, servicePlan)
+					}
+					ComputeServer savedServer = morpheusContext.async.computeServer.create(add).blockingGet()
+					if(!savedServer) {
+						log.error "Error in creating server ${add}"
+					} else {
+						performPostSaveSync(savedServer)
+					}
+					if(vmConfig.powerState == ComputeServer.PowerState.on) {
+						usageLists.startUsageIds << savedServer.id
+					} else {
+						usageLists.stopUsageIds << savedServer.id
+					}
+				} catch(Exception ex) {
+					log.error("Error in adding VM: {}", ex)
+				}
+			}
+		}
     }
 
     private buildVmConfig(Map cloudItem, ServicePlan servicePlan, Collection<ServicePlan> availablePlans, Collection<ResourcePermission> availablePlanPermissions) {

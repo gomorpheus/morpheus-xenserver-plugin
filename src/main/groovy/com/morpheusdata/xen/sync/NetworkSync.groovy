@@ -100,6 +100,14 @@ class NetworkSync {
                         network.dhcpServer = true
                         save = true
                     }
+					if(network.name != update.masterItem.nameLabel) {
+						network.name = update.masterItem.nameLabel
+						save = true
+					}
+					if(network.description != update.masterItem.nameDescription) {
+						network.description = update.masterItem.nameDescription
+						save = true
+					}
                     if (save) {
                         itemsToUpdate << network
                     }
