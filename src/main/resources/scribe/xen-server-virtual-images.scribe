@@ -9,9 +9,11 @@ resource "virtual-image" "xenserver-image-morpheus-ubuntu-20_04" {
   imagePath          = "xen/ubuntu/ubuntu-20_04-v1-amd64"
   systemImage        = true
   installAgent       = true
-  computeServerImage = true
+  computeServerImage = false
   isCloudInit        = true
+  externalId         = null
   osType             = "ubuntu.20.04.64"
   active             = true
   delete             = false
+  zoneType           = "xen"
 }
