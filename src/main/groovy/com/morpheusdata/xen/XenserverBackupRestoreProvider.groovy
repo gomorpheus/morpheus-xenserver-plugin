@@ -3,20 +3,28 @@ package com.morpheusdata.xen
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupRestoreProvider
+import com.morpheusdata.core.backup.response.BackupRestoreResponse
+import com.morpheusdata.core.backup.util.BackupStatusUtility
+import com.morpheusdata.core.util.HttpApiClient
+import com.morpheusdata.model.Cloud
+import com.morpheusdata.model.ComputeServer
+import com.morpheusdata.model.Workload
 import com.morpheusdata.response.ServiceResponse;
 import com.morpheusdata.model.BackupRestore;
 import com.morpheusdata.model.BackupResult;
 import com.morpheusdata.model.Backup;
 import com.morpheusdata.model.Instance
+import com.morpheusdata.xen.util.XenComputeUtility
 import groovy.util.logging.Slf4j
 
 @Slf4j
 class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 
-	Plugin plugin
+//	Plugin plugin
+	XenserverPlugin plugin
 	MorpheusContext morpheusContext
 
-	XenserverBackupRestoreProvider(Plugin plugin, MorpheusContext morpheusContext) {
+	XenserverBackupRestoreProvider(XenserverPlugin plugin, MorpheusContext morpheusContext) {
 		this.plugin = plugin
 		this.morpheusContext = morpheusContext
 	}
@@ -112,7 +120,58 @@ class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 	 */
 	@Override
 	ServiceResponse restoreBackup(BackupRestore backupRestore, BackupResult backupResult, Backup backup, Map opts) {
-		return ServiceResponse.success()
+//		return ServiceResponse.success()
+		log.info("restoreBackup {}", backupResult)
+//		def rtn = [success:true]
+		ServiceResponse rtn = ServiceResponse.prepare(new BackupRestoreResponse(backupRestore))
+		try{
+			def config = backupResult.getConfigMap()
+			log.info("RAZI :: config: ${config}")
+			def snapshotId = backupResult.externalId ?: config.snapshotId
+			log.info("RAZI :: snapshotId: ${snapshotId}")
+//			def vmId = backupResult.externalId
+//			log.info("RAZI :: vmId: ${vmId}")
+			if(snapshotId) {
+				def sourceWorkload = plugin.morpheus.async.workload.get(opts?.containerId ?: backupResult.containerId).blockingGet()
+				log.info("RAZI :: sourceWorkload: ${sourceWorkload}")
+				ComputeServer computeServer = sourceWorkload.server
+				log.info("RAZI :: computeServer: ${computeServer}")
+				Cloud cloud = computeServer.cloud
+				log.info("RAZI :: cloud: ${cloud}")
+				Map authConfig = plugin.getAuthConfig(cloud)
+				log.info("RAZI :: authConfig: ${authConfig}")
+				//execute restore
+//				def restoreResults = XenComputeUtility.restoreServer(restoreOpts, snapshotId)
+				def restoreResults = XenComputeUtility.restoreServer(authConfig, snapshotId)
+//				log.info("restore results: {}", restoreResults)
+				log.info("RAZI :: restore results: {}", restoreResults)
+//				def taskId = restoreResults?.data?.task_uuid
+//				log.info("RAZI :: taskId: ${taskId}")
+				log.info("RAZI :: computeServer.externalId: ${computeServer.externalId}")
+				if(restoreResults.success){
+					rtn.data.backupRestore.status = BackupResult.Status.SUCCEEDED
+//					rtn.data.backupRestore.externalId = computeServer.externalId
+//					rtn.data.backupRestore.externalStatusRef = taskId
+					rtn.data.updates = true
+					rtn.success = true
+
+					//restore stops the vm, so need to restart it
+                    //Dustin will check and let us know
+					def startVm = XenComputeUtility.startVm(authConfig, snapshotId)
+//					log.info("RAZI :: startVm: ${startVm}")
+				} else {
+					rtn.data.backupRestore.status = BackupResult.Status.FAILED
+					rtn.data.updates = true
+				}
+                log.info("RAZI :: rtn.data.backupRestore.status: ${rtn.data.backupRestore.status}")
+			}
+		} catch(e) {
+			log.error("restoreBackup: ${e}", e)
+			rtn.msg = e.getMessage()
+			rtn.success = false
+		}
+		log.info("RAZI :: final RTN: ${rtn}")
+		return rtn
 	}
 
 	/**
