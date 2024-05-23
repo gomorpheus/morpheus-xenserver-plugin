@@ -472,7 +472,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				Cloud cloud = workload.server.cloud
 				def stopResults = XenComputeUtility.stopVm(plugin.getAuthConfig(cloud), workload.server.externalId)
 				if(stopResults.success == true) {
-					context.async.computeServer.updatePowerState(workload.server.id, ComputeServer.PowerState.off).blockingGet()
 					rtn.success = true
 				}
 			} else {
@@ -501,7 +500,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def startResults = XenComputeUtility.startVm(authConfigMap, workload.server.externalId)
 				log.debug("startWorkload: startResults: ${startResults}")
 				if(startResults.success == true) {
-					context.async.computeServer.updatePowerState(workload.server.id, ComputeServer.PowerState.on).blockingGet()
 					rtn.success = true
 				} else {
 					rtn.msg = "${startResults.msg}" ?: 'Failed to start vm'
@@ -607,7 +605,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				Cloud cloud = computeServer.cloud
 				def stopResults = XenComputeUtility.stopVm(plugin.getAuthConfig(cloud), computeServer.externalId)
 				if(stopResults.success == true){
-					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.off)
 					rtn.success = true
 				}
 			} else {
@@ -635,7 +632,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def startResults = XenComputeUtility.startVm(authConfigMap, computeServer.externalId)
 				log.debug("startServer: startResults: ${startResults}")
 				if (startResults.success == true) {
-					context.async.computeServer.updatePowerState(computeServer.id, ComputeServer.PowerState.on).blockingGet()
 					rtn.success = true
 				}
 			} else {
@@ -1462,20 +1458,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			log.info("Ray:: resizeWorkloadAndHost: neededMemory: ${neededMemory}")
 
 			def allocationSpecs = [externalId: computeServer.externalId, maxMemory: requestedMemory, maxCpu: requestedCores]
-			log.info("Ray:: resizeWorkloadAndHost: allocationSpecs: ${allocationSpecs}")
-			def stopped = false
-			def stopResults
-			def doStop = computeServer.hotResize != true && (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0 || resizeRequest.volumesUpdate?.size() > 0)
-			log.info("Ray:: resizeWorkloadAndHost: doStop: ${doStop}")
-			if (doStop) {
-				stopped = true
-				opts.stopped = stopped
-				stopResults = isWorkload ? stopWorkload(workload) : stopServer(computeServer)
-				log.info("Ray:: resizeWorkloadAndHost: stopResults: ${stopResults}")
-				//log.info("stopResults ${stopResults}")
-			}
-			def checkVal = (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0)
-			log.info("Ray:: resizeWorkloadAndHost: checkVal: ${checkVal}")
 			if (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0) {
 				log.debug("resizing vm: ${allocationSpecs}")
 				def allocationResults = XenComputeUtility.adjustVmResources(authConfigMap, computeServer.externalId, allocationSpecs)
@@ -1628,10 +1610,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			log.info("Ray:: compute server status: ${computeServer.status}")
 			computeServer.status = 'provisioned'
 			computeServer = saveAndGet(computeServer)
-			log.info("Ray:: resizeWorkloadAndHost: stopped1: ${stopped}")
-			if (stopped == true) {
-				isWorkload ? startWorkload(workload) : startServer(computeServer)
-			}
 			rtn.success = true
 			log.info("Ray:: rtn.success: ${rtn.success}")
 		} catch (e) {

@@ -43,7 +43,11 @@ class XenserverPlugin extends Plugin {
      */
     @Override
     void onDestroy() {
-        //nothing to do for now
+		List<String> seedsToRun = [
+			"application.ZonesTypeXenSeed",
+			"application.ProvisionTypeXenSeed",
+		]
+		morpheusContext.services.seed.reinstallSeedData(seedsToRun) // needs to be synchronous to prevent seeds from running during plugin install
     }
 
     MorpheusContext getMorpheusContext() {
