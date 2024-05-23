@@ -120,57 +120,36 @@ class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 	 */
 	@Override
 	ServiceResponse restoreBackup(BackupRestore backupRestore, BackupResult backupResult, Backup backup, Map opts) {
-//		return ServiceResponse.success()
-		log.info("restoreBackup {}", backupResult)
-//		def rtn = [success:true]
+		log.debug("restoreBackup {}", backupResult)
 		ServiceResponse rtn = ServiceResponse.prepare(new BackupRestoreResponse(backupRestore))
 		try{
-			def config = backupResult.getConfigMap()
-			log.info("RAZI :: config: ${config}")
-			def snapshotId = backupResult.externalId ?: config.snapshotId
-			log.info("RAZI :: snapshotId: ${snapshotId}")
-//			def vmId = backupResult.externalId
-//			log.info("RAZI :: vmId: ${vmId}")
+			def snapshotId = backupResult.snapshotId
+			def vmId = backupResult.getConfigProperty("vmId")
 			if(snapshotId) {
 				def sourceWorkload = plugin.morpheus.async.workload.get(opts?.containerId ?: backupResult.containerId).blockingGet()
-				log.info("RAZI :: sourceWorkload: ${sourceWorkload}")
 				ComputeServer computeServer = sourceWorkload.server
-				log.info("RAZI :: computeServer: ${computeServer}")
 				Cloud cloud = computeServer.cloud
-				log.info("RAZI :: cloud: ${cloud}")
 				Map authConfig = plugin.getAuthConfig(cloud)
-				log.info("RAZI :: authConfig: ${authConfig}")
 				//execute restore
-//				def restoreResults = XenComputeUtility.restoreServer(restoreOpts, snapshotId)
 				def restoreResults = XenComputeUtility.restoreServer(authConfig, snapshotId)
-//				log.info("restore results: {}", restoreResults)
-				log.info("RAZI :: restore results: {}", restoreResults)
-//				def taskId = restoreResults?.data?.task_uuid
-//				log.info("RAZI :: taskId: ${taskId}")
-				log.info("RAZI :: computeServer.externalId: ${computeServer.externalId}")
+				log.debug("restore results: {}", restoreResults)
 				if(restoreResults.success){
 					rtn.data.backupRestore.status = BackupResult.Status.SUCCEEDED
-//					rtn.data.backupRestore.externalId = computeServer.externalId
-//					rtn.data.backupRestore.externalStatusRef = taskId
 					rtn.data.updates = true
 					rtn.success = true
 
 					//restore stops the vm, so need to restart it
-                    //Dustin will check and let us know
-					def startVm = XenComputeUtility.startVm(authConfig, snapshotId)
-//					log.info("RAZI :: startVm: ${startVm}")
+					def startVm = XenComputeUtility.startVm(authConfig, vmId)
 				} else {
 					rtn.data.backupRestore.status = BackupResult.Status.FAILED
 					rtn.data.updates = true
 				}
-                log.info("RAZI :: rtn.data.backupRestore.status: ${rtn.data.backupRestore.status}")
 			}
 		} catch(e) {
 			log.error("restoreBackup: ${e}", e)
 			rtn.msg = e.getMessage()
 			rtn.success = false
 		}
-		log.info("RAZI :: final RTN: ${rtn}")
 		return rtn
 	}
 
