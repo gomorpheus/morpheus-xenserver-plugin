@@ -1597,12 +1597,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					if (deleteResults.success == true) {
 						log.info("Ray:: resizeWorkloadAndHost: netdeleteResults1: ${deleteResults}")
 						log.info("Ray:: calling before network delete: ${computeServer.interfaces.size()}")
-						context.async.computeServer.computeServerInterface.bulkRemove([networkDelete]).blockingGet()// remove([networkDelete], computeServer).blockingGet()
-						//context.services.computeServer.computeServerInterface.remove(networkDelete)
+
+						context.async.computeServer.computeServerInterface.remove([networkDelete], computeServer).blockingGet()
 						log.info("Ray:: calling after network delete: ${computeServer.interfaces.size()}")
-						computeServer = saveAndGet(computeServer);
-						computeServer.interfaces.remove(networkDelete)
-						//computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
+
+						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 						log.info("Ray:: calling after relode server delete: ${computeServer.interfaces.size()}")
 					}
 				}
