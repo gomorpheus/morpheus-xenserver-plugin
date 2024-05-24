@@ -1412,7 +1412,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	}
 
 	private ServiceResponse resizeWorkloadAndHost (Long instanceId, Workload workload, ComputeServer server, ResizeRequest resizeRequest, Map opts, Boolean isWorkload) {
-		log.debug("resizeWorkload workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
+		log.debug("resizeWorkload ${workload ? "workload" : "server"}.id: ${workload?.id ?: server?.id} - opts: ${opts}")
 		log.info("Ray:: resizeWorkloadAndHost: instanceId: ${instanceId}")
 		log.info("Ray:: resizeWorkloadAndHost: workload: ${workload}")
 		log.info("Ray:: resizeWorkloadAndHost: server?.id: ${server?.id}")
@@ -1597,10 +1597,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					if (deleteResults.success == true) {
 						log.info("Ray:: resizeWorkloadAndHost: netdeleteResults1: ${deleteResults}")
 						log.info("Ray:: calling before network delete: ${computeServer.interfaces.size()}")
-
-						context.async.computeServer.computeServerInterface.remove([networkDelete], computeServer).blockingGet()
+						computeServer.interfaces = computeServer.interfaces.findAll { it.id != networkDelete.id }
+						context.async.computeServer.save(computeServer).blockingGet()
+						log.info("Ray:: calling after inteface removed from computeServer: ${computeServer.interfaces.size()}")
+						context.async.computeServer.computeServerInterface.remove(networkDelete).blockingGet()
 						log.info("Ray:: calling after network delete: ${computeServer.interfaces.size()}")
-
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 						log.info("Ray:: calling after relode server delete: ${computeServer.interfaces.size()}")
 					}
