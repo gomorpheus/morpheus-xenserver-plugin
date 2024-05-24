@@ -220,6 +220,9 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 					saveThread.join()
 					if(saveResults.success == true && exportResults.success == true) {
 						rtn.success = true
+						rtn.data.backupResult.snapshotId = snapshotResults.snapshotId
+						rtn.data.backupResult.externalId = snapshotResults.snapshotId
+						rtn.data.backupResult.setConfigProperty("vmId", snapshotResults.externalId)
 						rtn.data.backupResult.status = BackupResult.Status.SUCCEEDED
 						rtn.data.updates = true
 					} else {

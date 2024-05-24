@@ -125,7 +125,7 @@ class XenserverBackupTypeProvider extends AbstractBackupTypeProvider {
 	 */
 	@Override
 	String getRestoreNewMode() {
-		return "VM_RESTORE"
+		return null
 	}
 	
 	/**

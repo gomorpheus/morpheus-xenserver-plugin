@@ -868,6 +868,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.authConfig = authConfig
 				def createResults = findOrCreateServer(createOpts)
 				if(createResults.success == true && createResults.vmId) {
+					setVolumeInfo(server.volumes, createResults.volumes)
 					def startResults = XenComputeUtility.startVm(authConfig, createResults.vmId)
 					provisionResponse.externalId = createResults.vmId
 					log.debug("start: ${startResults.success}")
