@@ -308,7 +308,7 @@ class XenComputeUtility {
         def rtn = [success: false]
         log.debug "restoreServer: ${opts}"
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             opts.connection = config.connection
             def snapshot = VM.getByUuid(config.connection, snapshotId)
 
