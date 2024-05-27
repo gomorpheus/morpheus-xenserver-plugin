@@ -1,6 +1,5 @@
 package com.morpheusdata.xen
 
-
 import com.morpheusdata.PrepareHostResponse
 import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
@@ -10,7 +9,6 @@ import com.morpheusdata.core.providers.HostProvisionProvider
 import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
-import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.model.*
 import com.morpheusdata.model.provisioning.HostRequest
@@ -1402,104 +1400,72 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
 		log.debug("resizeWorkload workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
-		log.info("Ray:: resizeWorkload: Started")
+		log.info("resizeWorkload calling resizeWorkloadAndHost")
 		return resizeWorkloadAndHost(instance?.id, workload, workload.server, resizeRequest, opts, true)
 	}
 
 	@Override
 	ServiceResponse resizeServer(ComputeServer server, ResizeRequest resizeRequest, Map opts) {
-		log.info("Ray:: resizeServer: Started")
+		log.info("resizeServer calling resizeWorkloadAndHost")
 		return resizeWorkloadAndHost(null, null, server, resizeRequest, opts, false)
 	}
 
 	private ServiceResponse resizeWorkloadAndHost (Long instanceId, Workload workload, ComputeServer server, ResizeRequest resizeRequest, Map opts, Boolean isWorkload) {
 		log.debug("resizeWorkload ${workload ? "workload" : "server"}.id: ${workload?.id ?: server?.id} - opts: ${opts}")
-		log.info("Ray:: resizeWorkloadAndHost: instanceId: ${instanceId}")
-		log.info("Ray:: resizeWorkloadAndHost: workload: ${workload}")
-		log.info("Ray:: resizeWorkloadAndHost: server?.id: ${server?.id}")
-		log.info("Ray:: resizeWorkloadAndHost: resizeRequest: ${resizeRequest}")
-		log.info("Ray:: resizeWorkloadAndHost: opts: ${opts}")
-		log.info("Ray:: resizeWorkloadAndHost: isWorkload: ${isWorkload}")
-		def msg = isWorkload ? "Getting call from resizeWorkload" : "Getting call from resizeServer"
-		log.info("Ray:: resizeWorkloadAndHost: msg: ${msg}")
-		ServiceResponse rtn = ServiceResponse.success()
 
+		ServiceResponse rtn = ServiceResponse.success()
 		ComputeServer computeServer = context.async.computeServer.get(server.id).blockingGet()
 		def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
-		log.info("Ray:: resizeWorkloadAndHost: authConfigMap: ${authConfigMap}")
 		try {
 			computeServer.status = 'resizing'
 			computeServer = saveAndGet(computeServer)
-			log.info("Ray:: resizeWorkloadAndHost: resizeRequest.maxMemory: ${resizeRequest.maxMemory}")
-			log.info("Ray:: resizeWorkloadAndHost: resizeRequest.maxMemory: ${resizeRequest.maxMemory}")
+
+
 			def requestedMemory = resizeRequest.maxMemory
 			def requestedCores = resizeRequest?.maxCores
-			log.info("Ray:: resizeWorkloadAndHost: requestedMemory: ${requestedMemory}")
-			log.info("Ray:: resizeWorkloadAndHost: requestedCores: ${requestedCores}")
+
+
 			def currentMemory
 			def currentCores
 			if (isWorkload) {
-				log.info("Ray:: resizeWorkloadAndHost: workload.maxMemory: ${workload.maxMemory}")
-				log.info("Ray:: resizeWorkloadAndHost: workload.getConfigProperty: ${workload.getConfigProperty('maxMemory')}")
-				log.info("Ray:: resizeWorkloadAndHost: workload.maxCores: ${workload.maxCores}")
 				currentMemory = workload.maxMemory ?: workload.getConfigProperty('maxMemory')?.toLong()
 				currentCores = workload.maxCores ?: 1
 			} else {
-				log.info("Ray:: resizeWorkloadAndHost: computeServer.maxMemory: ${computeServer.maxMemory}")
-				log.info("Ray:: resizeWorkloadAndHost: computeServer.getConfigProperty: ${computeServer.getConfigProperty('maxMemory')}")
-				log.info("Ray:: resizeWorkloadAndHost: server.maxCores: ${server.maxCores}")
 				currentMemory = computeServer.maxMemory ?: computeServer.getConfigProperty('maxMemory')?.toLong()
 				currentCores = server.maxCores ?: 1
 			}
-			log.info("Ray:: resizeWorkloadAndHost: currentMemory: ${currentMemory}")
-			log.info("Ray:: resizeWorkloadAndHost: currentCores: ${currentCores}")
 			def neededMemory = requestedMemory - currentMemory
-			log.info("Ray:: resizeWorkloadAndHost: neededMemory: ${neededMemory}")
 			def neededCores = (requestedCores ?: 1) - (currentCores ?: 1)
-			log.info("Ray:: resizeWorkloadAndHost: neededMemory: ${neededMemory}")
-
 			def allocationSpecs = [externalId: computeServer.externalId, maxMemory: requestedMemory, maxCpu: requestedCores]
 			if (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0) {
 				log.debug("resizing vm: ${allocationSpecs}")
 				def allocationResults = XenComputeUtility.adjustVmResources(authConfigMap, computeServer.externalId, allocationSpecs)
-				log.info("Ray:: resizeWorkloadAndHost: allocationResults: ${allocationResults}")
 				log.debug("allocationResults ${allocationResults}")
 				if (allocationResults.success == false) {
 					rtn.success = false
 					rtn.error = context.services.localization.get("gormorpheus.provision.xenServer.resize.adjustVm")
-					log.info("Ray:: resizeWorkloadAndHost: rtn.error: ${rtn.error}")
+					log.warn("${rtn.error}")
 					return rtn
 				}
 			}
-			log.info("Ray:: resizeWorkloadAndHost: opts.volumes: ${opts.volumes}")
 			if (opts.volumes) {
 				def newCounter = computeServer.volumes?.size()
-				log.info("Ray:: resizeWorkloadAndHost: newCounter: ${newCounter}")
 				resizeRequest.volumesUpdate?.each { volumeUpdate ->
-					log.info("Ray:: resizeWorkloadAndHost: volumeUpdate: ${volumeUpdate}")
 					StorageVolume existing = volumeUpdate.existingModel
-					log.info("Ray:: resizeWorkloadAndHost: existing.maxStorage: ${existing.maxStorage}")
 					Map updateProps = volumeUpdate.updateProps
-					log.info("Ray:: resizeWorkloadAndHost: updateProps: ${updateProps}")
-					log.info("Ray:: resizeWorkloadAndHost: updateProps.maxStorage: ${updateProps.maxStorage}")
 					if (updateProps.maxStorage > existing.maxStorage) {
 						def resizeDiskConfig = [diskSize: updateProps.maxStorage, diskIndex: existing.externalId, uuid: existing.internalId]
-						log.info("Ray:: resizeWorkloadAndHost: resizeDiskConfig: ${resizeDiskConfig}")
-						log.info("Ray:: resizeWorkloadAndHost: computeServer.externalId: ${computeServer.externalId}")
 						def resizeResults = XenComputeUtility.resizeVmDisk(authConfigMap, computeServer.externalId, resizeDiskConfig)
-						log.info("Ray:: resizeWorkloadAndHost: resizeResults: ${resizeResults}")
 						log.debug("resizeResults ${resizeResults}")
 						def existingVolume = context.async.storageVolume.get(existing.id).blockingGet()
-						log.info("Ray:: resizeWorkloadAndHost: existingVolume?.maxStorage: ${existingVolume?.maxStorage}")
 						existingVolume.maxStorage = updateProps?.maxStorage
-						log.info("Ray:: resizeWorkloadAndHost: existingVolume?.maxStorage1: ${existingVolume?.maxStorage}")
 						context.async.storageVolume.save(existingVolume).blockingGet()
 					}
 				}
 				def datastoreIds = []
 				def storageVolumeTypes = [:]
 				resizeRequest.volumesAdd?.each { Map volumeAdd ->
-					log.info("volumeAdd: ${volumeAdd}")
+					log.debug("volumeAdd: ${volumeAdd}")
 					def datastoreId = volumeAdd.datastoreId
 					if (!(datastoreId == 'auto' || datastoreId == 'autoCluster')) {
 						datastoreIds << datastoreId?.toLong()
@@ -1510,30 +1476,20 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 				datastoreIds = datastoreIds.unique()
-				log.info("Ray:: resizeWorkloadAndHost: datastoreIds: ${datastoreIds}")
 				def datastores = context.async.cloud.datastore.listById(datastoreIds).toMap {it.id.toLong()}.blockingGet()
-				log.info("Ray:: resizeWorkloadAndHost: datastores: ${datastores}")
 				resizeRequest.volumesAdd.each { volumeAdd ->
 					//new disk add it
-					log.info("Ray:: resizeWorkloadAndHost: volumeAdd: ${volumeAdd}")
 					def addDiskConfig = [diskSize: volumeAdd.maxStorage, diskName: "morpheus_data_${newCounter}", diskIndex: newCounter]
-					log.info("Ray:: resizeWorkloadAndHost: addDiskConfig: ${addDiskConfig}")
 					def datastore = datastores[volumeAdd.datastoreId.toLong()]
-					log.info("Ray:: resizeWorkloadAndHost: datastore?.externalId: ${datastore?.externalId}")
 					addDiskConfig.datastoreId = datastore?.externalId
-					log.info("Ray:: resizeWorkloadAndHost: addDiskConfig.datastoreId: ${addDiskConfig.datastoreId}")
 					def addDiskResults = XenComputeUtility.addVmDisk(authConfigMap, computeServer.externalId, addDiskConfig)
-					log.info("Ray:: resizeWorkloadAndHost: addDiskResults: ${addDiskResults}")
 					log.debug("addDiskResults ${addDiskResults}")
 					if (addDiskResults.success == true) {
 						def newVolume = buildStorageVolume(computeServer, volumeAdd, addDiskResults, newCounter)
-						log.info("Ray:: resizeWorkloadAndHost: newVolume: ${newVolume}")
 						def volumeType = storageVolumeTypes[volumeAdd.storageType.toLong()]
-						log.info("Ray:: resizeWorkloadAndHost: volumeType: ${volumeType}")
 						newVolume.type = volumeType
 						newVolume.datastore = datastore
 						def uniqueId = isWorkload ? "morpheus-vol-${instanceId}-${workload.id}-${newCounter}" : "morpheus-vol-${server.id}-${newCounter}"
-						log.info("Ray:: resizeWorkloadAndHost: uniqueId: ${uniqueId}")
 						newVolume.uniqueId = uniqueId
 						setVolumeInfo(computeServer.volumes, addDiskResults.volumes)
 						context.async.storageVolume.create([newVolume], computeServer).blockingGet()
@@ -1547,10 +1503,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 				resizeRequest.volumesDelete.each { volume ->
-					log.info("Ray:: resizeWorkloadAndHost: volumesDelete: ${volume}")
-					log.info("Ray:: resizeWorkloadAndHost: volumesDelete:volume.internalId: ${volume.internalId}")
 					def deleteResults = XenComputeUtility.deleteVmDisk(authConfigMap, computeServer.externalId, volume.internalId)
-					log.info("Ray:: resizeWorkloadAndHost: deleteResults: ${deleteResults}")
 					log.debug("deleteResults ${deleteResults}")
 					if (deleteResults.success == true) {
 						context.async.storageVolume.remove([volume], computeServer, true).blockingGet()
@@ -1559,75 +1512,52 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				}
 			}
 			//networks
-			log.info("Ray:: resizeWorkloadAndHost: opts.networkInterfaces: ${opts.networkInterfaces}")
 			if (opts.networkInterfaces) {
 				resizeRequest?.interfacesUpdate?.eachWithIndex { networkUpdate, index ->
-					log.info("Ray:: resizeWorkloadAndHost: networkUpdate: ${networkUpdate}")
-					log.info("Ray:: resizeWorkloadAndHost: networkUpdate.existingModel: ${networkUpdate.existingModel}")
 					if (networkUpdate.existingModel) {
 						log.debug("modifying network: ${networkUpdate}")
 					}
 				}
 				resizeRequest.interfacesAdd.eachWithIndex { networkAdd, index ->
-					log.info("Ray:: resizeWorkloadAndHost: networkAdd: ${networkAdd}")
 					def newIndex = computeServer.interfaces?.size()
-					log.info("Ray:: resizeWorkloadAndHost: newIndex: ${newIndex}")
 					def newNetwork = context.async.network.listById([networkAdd.network.id.toLong()]).firstOrError().blockingGet()
-					log.info("Ray:: resizeWorkloadAndHost: newNetwork.externalId: ${newNetwork.externalId}")
 					def networkConfig = [networkIndex: newIndex, networkUuid: newNetwork.externalId]
-					log.info("Ray:: resizeWorkloadAndHost: networkConfig: ${networkConfig}")
 					def networkResults = XenComputeUtility.addVmNetwork(authConfigMap, computeServer.externalId, networkConfig)
-					log.info("Ray:: resizeWorkloadAndHost: networkResults: ${networkResults}")
 					log.debug("networkResults ${networkResults}")
 					if (networkResults.success == true) {
 						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex, index)
-						log.info("Ray:: resizeWorkloadAndHost: newInterface: ${newInterface}")
 						newInterface.uniqueId = isWorkload ? "morpheus-nic-${instanceId}-${workload.id}-${newIndex}" : "morpheus-nic-${server.id}-${newIndex}"
-						log.info("Ray:: resizeWorkloadAndHost: newInterface.uniqueId: ${newInterface.uniqueId}")
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
 				}
 				resizeRequest?.interfacesDelete?.eachWithIndex { networkDelete, index ->
-					log.info("Ray:: resizeWorkloadAndHost: interfacesDelete:opts.stopped: ${opts.stopped}")
-					log.info("Ray:: resizeWorkloadAndHost: networkDelete.internalId: ${networkDelete.internalId}")
 					authConfigMap.stopped = opts.stopped
 					def deleteResults = XenComputeUtility.deleteVmNetwork(authConfigMap, computeServer.externalId, networkDelete.internalId)
-					log.info("Ray:: resizeWorkloadAndHost: netdeleteResults: ${deleteResults}")
 					log.debug("netdeleteResults: ${deleteResults}")
 					if (deleteResults.success == true) {
-						log.info("Ray:: resizeWorkloadAndHost: netdeleteResults1: ${deleteResults}")
-						log.info("Ray:: calling before network delete: ${computeServer.interfaces.size()}")
 						computeServer.interfaces = computeServer.interfaces.findAll { it.id != networkDelete.id }
 						context.async.computeServer.save(computeServer).blockingGet()
-						log.info("Ray:: calling after inteface removed from computeServer: ${computeServer.interfaces.size()}")
 						context.async.computeServer.computeServerInterface.remove(networkDelete).blockingGet()
-						log.info("Ray:: calling after network delete: ${computeServer.interfaces.size()}")
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
-						log.info("Ray:: calling after relode server delete: ${computeServer.interfaces.size()}")
 					}
 				}
 			}
-			log.info("Ray:: compute server status: ${computeServer.status}")
 			computeServer.status = 'provisioned'
 			computeServer = saveAndGet(computeServer)
 			rtn.success = true
-			log.info("Ray:: rtn.success: ${rtn.success}")
 		} catch (e) {
-			log.error("Ray:: Unable to resize workload: ${e.message}", e)
+			log.error("Unable to resize workload: ${e.message}", e)
 			computeServer.status = 'provisioned'
 			if (!isWorkload)
 				computeServer.statusMessage = "Unable to resize server: ${e.message}"
 			computeServer = saveAndGet(computeServer)
 			rtn.success = false
 			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.resizeWorkload")
-			log.info("Ray:: resizeWorkloadAndHost: error1: ${error}")
 			rtn.setError(error)
 		}
 		return rtn
 	}
-
-
 
 	def getInterfaceName(platform, index) {
 		def nicName
