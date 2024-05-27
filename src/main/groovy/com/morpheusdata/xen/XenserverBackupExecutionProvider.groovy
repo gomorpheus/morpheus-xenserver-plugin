@@ -124,7 +124,6 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 					rtn.success = false
 				} else {
 					def snapshotRecord = computeServer?.snapshots?.find{it.externalId == snapshotId}
-					log.info("RAZI :: snapshotRecord: ${snapshotRecord}")
 					if(snapshotRecord) {
 						computeServer.snapshots.remove(snapshotRecord)
 						morpheusContext.async.computeServer.save(computeServer).blockingGet()
