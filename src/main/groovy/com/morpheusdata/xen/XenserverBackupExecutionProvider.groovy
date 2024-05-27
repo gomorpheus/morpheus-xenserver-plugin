@@ -101,7 +101,38 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 	 */
 	@Override
 	ServiceResponse deleteBackupResult(BackupResult backupResult, Map opts) {
-		return ServiceResponse.success()
+		log.debug("Delete backup result {}", backupResult.id)
+		ServiceResponse rtn = ServiceResponse.prepare()
+		try{
+			def snapshotId = backupResult.snapshotId
+			def sourceWorkload = plugin.morpheus.async.workload.get(opts?.containerId ?: backupResult.containerId).blockingGet()
+			ComputeServer computeServer = sourceWorkload.server
+			Cloud cloud = computeServer.cloud
+			//TODO: below lines of code needs core support
+//			if(backup.copyToStore) {
+//				super.cleanBackupResult(backupResult)
+//			}
+			if(cloud) {
+				Map authConfig = plugin.getAuthConfig(cloud)
+				def result = XenComputeUtility.destroyVm(authConfig, snapshotId)
+				log.debug("delete xen snapshot result: {}", result)
+				if(!result?.success) {
+					rtn.success = false
+				} else {
+					def snapshotRecord = computeServer?.snapshots?.find{it.externalId == snapshotId}
+					if(snapshotRecord) {
+						computeServer.snapshots.remove(snapshotRecord)
+						morpheusContext.async.computeServer.save(computeServer).blockingGet()
+						morpheusContext.async.snapshot.remove(snapshotRecord).blockingGet()
+					}
+					rtn.success = true
+				}
+			}
+		} catch(e) {
+			log.error("error in deleteBackupResult: ${e.message}",e)
+			rtn.success = false
+		}
+		return rtn
 	}
 
 	/**
@@ -220,6 +251,9 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 					saveThread.join()
 					if(saveResults.success == true && exportResults.success == true) {
 						rtn.success = true
+						rtn.data.backupResult.snapshotId = snapshotResults.snapshotId
+						rtn.data.backupResult.externalId = snapshotResults.snapshotId
+						rtn.data.backupResult.setConfigProperty("vmId", snapshotResults.externalId)
 						rtn.data.backupResult.status = BackupResult.Status.SUCCEEDED
 						rtn.data.updates = true
 					} else {
