@@ -177,8 +177,26 @@ class XenserverCloudProvider implements CloudProvider {
 	@Override
 	Collection<NetworkType> getNetworkTypes() {
 
-		Collection<NetworkType> networks = context.services.network.list(new DataQuery().withFilter(
-				'code','in', ['dockerBridge', 'host', 'overlay']))
+//		Collection<NetworkType> networks = context.services.network.list(new DataQuery().withFilter(
+//				'code','in', ['dockerBridge', 'host', 'overlay']))
+		def networks = []
+		networks << new NetworkType([
+				code				: 'xenNetwork',
+				name				: 'Xen Network',
+				description			: '',
+				overlay				: false,
+				externalType		: 'External',
+				creatable			: false,
+				cidrEditable		: true,
+				dhcpServerEditable	: true,
+				dnsEditable			: true,
+				gatewayEditable		: true,
+				cidrRequired		: false,
+				vlanIdEditable		: true,
+				canAssignPool		: true,
+				hasNetworkServer	: false,
+				hasCidr				: true
+		])
 
 		return networks
 	}
