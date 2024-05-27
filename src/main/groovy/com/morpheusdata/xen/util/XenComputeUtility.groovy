@@ -881,7 +881,7 @@ class XenComputeUtility {
     static getConsoles(opts, externalId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             opts.connection = config.connection
             def vmRecord = VM.getByUuid(config.connection, externalId)
             rtn.vmId = externalId
