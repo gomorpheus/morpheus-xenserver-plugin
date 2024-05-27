@@ -153,11 +153,51 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 * On-Prem clouds that may wish to have some precanned plans provided for it.
 	 * @return Collection of ServicePlan sizes that can be seeded in at plugin startup.
 	 */
+//	@Override
+//	Collection<ServicePlan> getServicePlans() {
+//		Collection<ServicePlan> plans = []
+//		// TODO: create some service plans (sizing like cpus, memory, etc) and add to collection
+//		return plans
+//	}
 	@Override
 	Collection<ServicePlan> getServicePlans() {
-		Collection<ServicePlan> plans = []
-		// TODO: create some service plans (sizing like cpus, memory, etc) and add to collection
-		return plans
+		def servicePlans = []
+		servicePlans << new ServicePlan([code:'xen-vm-512', editable:true, name:'new 512MB Memory', description:'512MB Memory', sortOrder:0, maxCores:1,
+										 maxStorage:10l * 1024l * 1024l * 1024l, maxMemory: 1l * 512l * 1024l * 1024l, maxCpu:1, provisionType:[domainClass:'provisionType', code:'xen'],
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-1024', editable:true, name:'new 1GB Memory', description:'1GB Memory', sortOrder:1, maxCores:1,
+										 maxStorage: 10l * 1024l * 1024l * 1024l, maxMemory: 1l * 1024l * 1024l * 1024l, maxCpu:1, provisionType:[domainClass:'provisionType', code:'xen'],
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-2048', editable:true, name:'new 2GB Memory', description:'2GB Memory', sortOrder:2, maxCores:1,
+										 maxStorage: 20l * 1024l * 1024l * 1024l, maxMemory: 2l * 1024l * 1024l * 1024l, maxCpu:1, provisionType:[domainClass:'provisionType', code:'xen'],
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-4096', editable:true, name:'new 4GB Memory', description:'4GB Memory', sortOrder:3, maxCores:1,
+										 maxStorage: 40l * 1024l * 1024l * 1024l, maxMemory: 4l * 1024l * 1024l * 1024l, maxCpu:1, provisionType:[domainClass:'provisionType', code:'xen'],
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-8192', editable:true, name:'new 8GB Memory', description:'8GB Memory', sortOrder:4, maxCores:2,
+										 maxStorage: 80l * 1024l * 1024l * 1024l, maxMemory: 8l * 1024l * 1024l * 1024l, maxCpu:2, provisionType:[domainClass:'provisionType', code:'xen'],
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-16384', editable:true, name:'new 16GB Memory', description:'16GB Memory', sortOrder:5, maxCores:2,
+										 maxStorage: 160l * 1024l * 1024l * 1024l, maxMemory: 16l * 1024l * 1024l * 1024l, maxCpu:2, provisionType:[domainClass:'provisionType', code:'xen'],
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-24576', editable:true, name:'new 24GB Memory', description:'24GB Memory', sortOrder:6, maxCores:4,
+										 maxStorage: 240l * 1024l * 1024l * 1024l, maxMemory: 24l * 1024l * 1024l * 1024l, maxCpu:4, provisionType:[domainClass:'provisionType', code:'xen'],
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-32768', editable:true, name:'new 32GB Memory', description:'32GB Memory', sortOrder:7, maxCores:4,
+										 maxStorage: 320l * 1024l * 1024l * 1024l, maxMemory: 32l * 1024l * 1024l * 1024l, maxCpu:4, provisionType:[domainClass:'provisionType', code:'xen'],
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'internal-custom-xen', editable:false, name:'new Xen Custom', description:'Xen Custom', sortOrder:0,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true, customCpu: true, customCores: true, customMaxMemory: true, deletable: false, provisionable: false,
+										 maxStorage:0l, maxMemory: 0l,  maxCpu:0, provisionType: [domainClass:'provisionType', code:'xen']])
+		servicePlans
 	}
 
 	/**
