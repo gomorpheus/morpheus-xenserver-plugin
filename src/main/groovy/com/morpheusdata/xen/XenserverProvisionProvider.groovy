@@ -25,7 +25,7 @@ import com.xensource.xenapi.VM
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet {
+class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, ProvisionProvider.HypervisorConsoleFacet {
 
 	public static final String PROVIDER_NAME = 'XenServer'
 	public static final String PROVIDER_CODE = 'xen'
@@ -145,6 +145,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	Collection<StorageVolumeType> getDataVolumeStorageTypes() {
 		context.async.storageVolume.storageVolumeType.list(
 				new DataQuery().withFilter("code", "standard")).toList().blockingGet()
+	}
+
+	//TODO: This method is available in embedded code, here it needs core support.
+	// It is Stubbed out because core support doesn't exist at time of implementation.
+//	@Override
+	def importContainer(Container container, Map opts = [:]) {
+		// Method stub: No implementation yet
 	}
 
 	/**
@@ -1604,5 +1611,16 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				displayOrder: newIndex
 		])
 		return newInterface
+	}
+
+	@Override
+	ServiceResponse getXvpVNCConsoleUrl(ComputeServer server) {
+		def authConfigMap = plugin.getAuthConfig(server.cloud)
+		def consoleInfo = XenComputeUtility.getConsoles(authConfigMap, server.externalId)
+		if(consoleInfo.success) {
+			return ServiceResponse.success([url: consoleInfo.consoles?.first(), headers: [[name: 'Cookie', value: "session_id=${consoleInfo.sessionId}".toString()]], httpVersion: 'HTTP/1.0'])
+		}
+		return ServiceResponse.error();
+
 	}
 }
