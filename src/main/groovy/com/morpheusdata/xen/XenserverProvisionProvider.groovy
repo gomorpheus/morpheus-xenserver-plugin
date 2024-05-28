@@ -147,6 +147,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				new DataQuery().withFilter("code", "standard")).toList().blockingGet()
 	}
 
+	//TODO: This method is available in embedded code, here it needs core support.
+	// It is Stubbed out because core support doesn't exist at time of implementation.
+//	@Override
+	def importContainer(Container container, Map opts = [:]) {
+		// Method stub: No implementation yet
+	}
+
 	/**
 	 * Provides a Collection of ${@link ServicePlan} related to this ProvisionProvider that can be seeded in.
 	 * Some clouds do not use this as they may be synced in from the public cloud. This is more of a factor for
