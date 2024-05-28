@@ -99,10 +99,6 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 	 * A ServiceResponse object with a success value of 'false' will halt the deletion process and the local refernce
 	 * will be retained.
 	 */
-//	@Override
-//	ServiceResponse deleteBackupResult(BackupResult backupResult, Map opts) {
-//		return ServiceResponse.success()
-//	}
 	@Override
 	ServiceResponse deleteBackupResult(BackupResult backupResult, Map opts) {
 		log.debug("Delete backup result {}", backupResult.id)
