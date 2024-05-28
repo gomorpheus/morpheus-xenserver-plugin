@@ -1,6 +1,5 @@
 package com.morpheusdata.xen
 
-
 import com.morpheusdata.PrepareHostResponse
 import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
@@ -10,7 +9,6 @@ import com.morpheusdata.core.providers.HostProvisionProvider
 import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
-import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.model.*
 import com.morpheusdata.model.provisioning.HostRequest
@@ -211,13 +209,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		def sourceVmId
 		def virtualImage
 		def imageFormat = 'vhd'
-		log.info("Ray: server.interfaces?.size()123: ${server.interfaces?.size()}")
-		def sizeNet = server.interfaces?.size()
-		if (sizeNet) {
-			server.interfaces.each {it ->
-				log.info("Ray:: printing my server: ${it.id}, ${it.name}, ${it.externalId}, ${it.internalId}")
-			}
-		}
 		try {
 			def containerConfig = workload.getConfigMap()
 			def rootVolume = server.volumes?.find { it.rootVolume == true }
@@ -233,7 +224,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: server.sourceImage.id)
 				virtualImage = context.async.virtualImage.get(virtualImageId).blockingGet()
 				imageId = virtualImage.locations.find { it.refType == "ComputeZone" && it.refId == cloud.id }?.externalId
-				log.info("runworkload imageId1: ${imageId}")
 				if (!imageId) { //If its userUploaded and still needs uploaded
 					//TODO: We need to upload ovg/vmdk stuff here
 					def primaryNetwork = server.interfaces?.find { it.network }?.network
@@ -269,9 +259,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 			}
-			log.info("Ray: server.interfaces?.size()456: ${server.interfaces?.size()}")
 			if (opts.backupSetId) { //TODO: first create backup then only we can test it...test it later...
-				log.info("Ray:: opts.backupSetId: ${opts.backupSetId}")
 				//if this is a clone or restore, use the snapshot id as the image
 				def snapshots = context.services.backup.backupResult.list(
 						new DataQuery().withFilter("backupSetId", opts.backupSetId.toLong())
@@ -290,13 +278,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						containerConfig.each {
 							it -> workload.setConfigProperty(it.key, it.value)
 						}
-						workload = context.async.workload.save(workload)
+						workload = context.async.workload.save(workload).blockingGet()
 						network = context.async.network.get(networkId).blockingGet()
 					}
 				}
 			}
-			log.info("runworkload imageId2: ${imageId}")
-			log.info("Ray: server.interfaces?.size()678: ${server.interfaces?.size()}")
 			if (imageId) {
 				def userGroups = workload.instance.userGroups?.toList() ?: []
 				if (workload.instance.userGroup && userGroups.contains(workload.instance.userGroup) == false) {
@@ -314,8 +300,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def maxCores = workload.maxCores ?: workload.instance.plan.maxCores
 				def maxStorage = this.getRootSize(workload)
 				def dataDisks = server?.volumes?.findAll { it.rootVolume == false }?.sort { it.id }
-				log.info("Ray:: printing network: ${network}")
-				log.info("Ray:: printing network?.id: ${network?.id}")
 				def createOpts =
 						[
 								account    : server.account,
@@ -356,7 +340,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				log.debug("Creating VM on Xen Server Additional Details: ${createOpts}")
 				server = saveAndGet(server)
 				createOpts.server = server
-				log.info("Ray: server.interfaces?.size()890: ${server.interfaces?.size()}")
 				def createResults
 				if (sourceVmId) {
 					createOpts.sourceVmId = sourceVmId
@@ -367,15 +350,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					createResults = createProvisionServer(createOpts)
 				}
 				log.debug("Create XenServer VM Results: ${createResults}")
-				log.info("Ray: server.interfaces?.size()1010: ${server.interfaces?.size()}")
 				if (createResults.success == true && createResults.vmId) {
 					server.externalId = createResults.vmId
 					provisionResponse.externalId = server.externalId
-					server = saveAndGet(server)
 					setVolumeInfo(server.volumes, createResults.volumes)
 					server = saveAndGet(server)
 					def startResults = XenComputeUtility.startVm(authConfigMap, server.externalId)
-					log.info("Ray: server.interfaces?.size()2020: ${server.interfaces?.size()}")
 					log.debug("start: ${startResults.success}")
 					if (startResults.success == true) {
 						if (startResults.error == true) {
@@ -385,93 +365,54 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							//good to go
 							def serverDetail = checkServerReady([authConfig: authConfigMap, externalId: server.externalId])
 							log.debug("serverDetail: ${serverDetail}")
-							log.info("Ray: netDefect: serverDetail: ${serverDetail}")
 							if (serverDetail.success == true) {
-								def privateIp = serverDetail.ipAddress
-								def publicIp = serverDetail.ipAddress
-								log.info("Ray: netDefect: privateIp: ${privateIp}")
-								log.info("Ray: netDefect: publicIp: ${publicIp}")
-								log.info("Ray: netDefect: serverDetail.ipAddresses: ${serverDetail.ipAddresses}")
-								server.interfaces.each {it ->
-									log.info("Ray:: before data: ${it.id}, ${it.name}, ${it.externalId}, ${it.internalId}")
-								}
 								serverDetail.ipAddresses.each { interfaceName, data ->
-									log.info("Ray: netDefect: interfaceName: ${interfaceName}")
-									log.info("Ray: netDefect: data: ${data}")
 									ComputeServerInterface netInterface = server.interfaces.find { it.name == interfaceName }
-									log.info("Ray: netDefect: netInterface: ${netInterface}")
-									log.info("Ray: netDefect: netInterface?.name: ${netInterface?.name}")
 									if (netInterface) {
-										log.info("Ray: netDefect: data.ipAddress: ${data.ipAddress}")
 										if (data.ipAddress) {
 											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-											log.info("Ray: netDefect: address: ${address}")
-											if (!NetworkUtility.validateIpAddr(address.address)) {
-												log.info("NetAddress Errors: ${address}")
-											}
 											netInterface.addresses << address
+											netInterface.publicIpAddress = data.ipAddress
 										}
-										log.info("Ray: netDefect: data.ipv6Address: ${data.ipv6Address}")
-										if (data.ipv6Address) {
+										// validate the ipv6 address is an ipv6 address. There is no separate validation for ipv6 addresses, so validate that its not an ipv4 address and it is a valid ip address
+										boolean validIpV6 = NetworkUtility.validateIpAddr(data.ipv6Address, false) == false && NetworkUtility.validateIpAddr(data.ipv6Address, true) == true
+										if (data.ipv6Address && validIpV6) {
 											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-											log.info("Ray: netDefect: address1: ${address}")
-											if (!NetworkUtility.validateIpAddr(address.address)) {
-												log.info("NetAddress Errors1: ${address}")
-											}
 											netInterface.addresses << address
+											netInterface.publicIpv6Address = data.ipv6Address
 										}
-										netInterface.publicIpAddress = data.ipAddress
-										netInterface.publicIpv6Address = data.ipv6Address
-										log.info("Ray: netDefect: netInterface.publicIpAddress: ${netInterface.publicIpAddress}")
-										context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
-										log.info("Ray:: netDefect: netInterface.publicIpv6Address: ${netInterface.publicIpv6Address}")
+										context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
+										// reload the server to pickup interface changes
+										server = context.async.computeServer.get(server.id).blockingGet()
 									}
 								}
-								log.info("Ray: netDefect: privateIp: ${privateIp}")
+								def privateIp = serverDetail.ipAddress
+								def publicIp = serverDetail.ipAddress
 								if (privateIp) {
 									def newInterface = false
 									server.internalIp = privateIp
 									server.externalIp = publicIp
 									server.sshHost = privateIp
+									server = saveAndGet(server)
 								}
 								//update external info
-								server = saveAndGet(server)
-								server.interfaces.each {it ->
-									log.info("Ray:: after data: ${it.id}, ${it.name}, ${it.externalId}, ${it.internalId}")
-								}
-								log.info("Ray: netDefect: server.interfaces?.size(): ${server.interfaces?.size()}")
-								log.info("Ray: netDefect: serverDetail.networks: ${serverDetail.networks}")
-								server.interfaces.each {it ->
-									log.info("Ray:: before set data: ${it.id}, ${it.name}, ${it.externalId}, ${it.internalId}")
-								}
-
 								setNetworkInfo(server.interfaces, serverDetail.networks)
-								server.interfaces.each {it ->
-									log.info("Ray:: inside setInfo111 set data: ${it.id}, ${it.name}, ${it.externalId}, ${it.internalId}")
-								}
+								// reload the server after setNetworkInfo made changes to interfaces
 								server = context.async.computeServer.get(server.id).blockingGet()
-								log.info("Ray: netDefect: server.interfaces?.size()111: ${server.interfaces?.size()}")
-								server.interfaces.each {it ->
-									log.info("Ray:: interfaces data111: ${it.id}, ${it.name}, ${it.externalId}, ${it.internalId}")
-								}
-								log.info("Ray: netDefect: network info saved")
 								server.osDevice = '/dev/vda'
 								server.dataDevice = '/dev/vda'
 								server.lvmEnabled = false
 								server.sshHost = privateIp ?: publicIp
 								server.managed = true
-								server = saveAndGet(server)
 								server.capacityInfo = new ComputeCapacityInfo(
 										maxCores: 1,
 										maxMemory: workload.getConfigProperty('maxMemory').toLong(),
 										maxStorage: workload.getConfigProperty('maxStorage').toLong()
 								)
 								server.status = 'provisioned'
-								saveAndGet(server)
-								context.async.instance.save(workload.instance).blockingGet()
+								context.async.computeServer.save(server).blockingGet()
+								// context.async.instance.save(workload.instance).blockingGet()
 								provisionResponse.success = true
-								server = context.async.computeServer.get(server.id).blockingGet()
-								log.info("Ray: netDefect: server.interfaces?.size()last: ${server.interfaces?.size()}")
 							} else {
 								server.statusMessage = 'Failed to load server details'
 								context.async.computeServer.save(server).blockingGet()
@@ -1081,50 +1022,25 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	}
 
 	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
-		log.info("Ray: setNetworkInfo: serverInterfaces: ${serverInterfaces}, externalNetworks: ${externalNetworks}, newInterface: ${newInterface}")
 		log.info("serverInterfaces: ${serverInterfaces}, externalNetworks: ${externalNetworks}")
-		serverInterfaces.each {it ->
-			log.info("Ray:: inside setInfo set data: ${it.id}, ${it.name}, ${it.externalId}, ${it.internalId}")
-		}
 		try {
-			log.info("Ray: setNetworkInfo: externalNetworks?.size(): ${externalNetworks?.size()}")
 			if(externalNetworks?.size() > 0) {
 				serverInterfaces?.eachWithIndex { networkInterface, index ->
-					log.info("Ray: setNetworkInfo: networkInterface: ${networkInterface}")
-					log.info("Ray: setNetworkInfo: networkInterface.externalId: ${networkInterface.externalId}")
-					log.info("Ray: setNetworkInfo: networkInterface?.id: ${networkInterface?.id}")
 					if(networkInterface.externalId) {
 						//check for changes?
 					} else {
-						log.info("Ray: setNetworkInfo: networkInterface.internalId: ${networkInterface.internalId}")
 						def matchNetwork = externalNetworks.find{networkInterface.internalId == it.uuid}
-						log.info("Ray: setNetworkInfo: networkInterface.displayOrder: ${networkInterface.displayOrder}")
 						if(!matchNetwork) {
-							log.info("Ray: setNetworkInfo: matchNetwork: ${matchNetwork}")
 							def displayOrder = "${networkInterface.displayOrder}"
-							log.info("Ray: setNetworkInfo: displayOrder: ${displayOrder}")
 							matchNetwork = externalNetworks.find{displayOrder == it.deviceIndex}
-							log.info("Ray: setNetworkInfo: matchNetwork1: ${matchNetwork}")
 						}
-						log.info("Ray: setNetworkInfo: matchNetwork2: ${matchNetwork}")
 						if(matchNetwork) {
-							log.info("Ray: setNetworkInfo: matchNetwork.deviceIndex: ${matchNetwork.deviceIndex}")
-							log.info("Ray: setNetworkInfo: matchNetwork.uuid: ${matchNetwork.uuid}}")
 							networkInterface.externalId = "${matchNetwork.deviceIndex}"
 							networkInterface.internalId = "${matchNetwork.uuid}"
-							log.info("Ray: setNetworkInfo: type: ${networkInterface.type}}")
 							if(networkInterface.type == null) {
 								networkInterface.type = new ComputeServerInterfaceType(code: 'xenNetwork')
 							}
-							log.info("Ray: setNetworkInfo: matchNetwork.uuid}: ${networkInterface.type}}")
-							log.info("Ray: setNetworkInfo: saving computer server interface")
-							serverInterfaces.each {it ->
-								log.info("Ray:: inside setInfo1 set data: ${it.id}, ${it.name}, ${it.externalId}, ${it.internalId}")
-							}
-							context.async.computeServer.computeServerInterface.save(networkInterface).blockingGet()
-							serverInterfaces.each {it ->
-								log.info("Ray:: inside setInfo2 set data: ${it.id}, ${it.name}, ${it.externalId}, ${it.internalId}")
-							}
+							context.async.computeServer.computeServerInterface.save([networkInterface]).blockingGet()
 						}
 					}
 				}
@@ -1189,7 +1105,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						}
 						netInterface.publicIpAddress = data.ipAddress
 						netInterface.publicIpv6Address = data.ipv6Address
-						context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
+						context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
 					}
 				}
 				setNetworkInfo(server.interfaces, serverDetail.networks)
