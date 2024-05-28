@@ -23,7 +23,7 @@ import com.xensource.xenapi.VM
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet {
+class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, ProvisionProvider.HypervisorConsoleFacet {
 
 	public static final String PROVIDER_NAME = 'XenServer'
 	public static final String PROVIDER_CODE = 'xen'
@@ -145,6 +145,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				new DataQuery().withFilter("code", "standard")).toList().blockingGet()
 	}
 
+	//TODO: This method is available in embedded code, here it needs core support.
+	// It is Stubbed out because core support doesn't exist at time of implementation.
+//	@Override
+	def importContainer(Container container, Map opts = [:]) {
+		// Method stub: No implementation yet
+	}
+
 	/**
 	 * Provides a Collection of ${@link ServicePlan} related to this ProvisionProvider that can be seeded in.
 	 * Some clouds do not use this as they may be synced in from the public cloud. This is more of a factor for
@@ -153,9 +160,43 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	Collection<ServicePlan> getServicePlans() {
-		Collection<ServicePlan> plans = []
-		// TODO: create some service plans (sizing like cpus, memory, etc) and add to collection
-		return plans
+		def servicePlans = []
+		servicePlans << new ServicePlan([code:'xen-vm-512', editable:true, name:'512MB Memory', description:'512MB Memory', sortOrder:0, maxCores:1,
+										 maxStorage:10l * 1024l * 1024l * 1024l, maxMemory: 1l * 512l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-1024', editable:true, name:'1GB Memory', description:'1GB Memory', sortOrder:1, maxCores:1,
+										 maxStorage: 10l * 1024l * 1024l * 1024l, maxMemory: 1l * 1024l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-2048', editable:true, name:'2GB Memory', description:'2GB Memory', sortOrder:2, maxCores:1,
+										 maxStorage: 20l * 1024l * 1024l * 1024l, maxMemory: 2l * 1024l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-4096', editable:true, name:'4GB Memory', description:'4GB Memory', sortOrder:3, maxCores:1,
+										 maxStorage: 40l * 1024l * 1024l * 1024l, maxMemory: 4l * 1024l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-8192', editable:true, name:'8GB Memory', description:'8GB Memory', sortOrder:4, maxCores:2,
+										 maxStorage: 80l * 1024l * 1024l * 1024l, maxMemory: 8l * 1024l * 1024l * 1024l, maxCpu:2,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-16384', editable:true, name:'16GB Memory', description:'16GB Memory', sortOrder:5, maxCores:2,
+										 maxStorage: 160l * 1024l * 1024l * 1024l, maxMemory: 16l * 1024l * 1024l * 1024l, maxCpu:2,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-24576', editable:true, name:'24GB Memory', description:'24GB Memory', sortOrder:6, maxCores:4,
+										 maxStorage: 240l * 1024l * 1024l * 1024l, maxMemory: 24l * 1024l * 1024l * 1024l, maxCpu:4,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-32768', editable:true, name:'32GB Memory', description:'32GB Memory', sortOrder:7, maxCores:4,
+										 maxStorage: 320l * 1024l * 1024l * 1024l, maxMemory: 32l * 1024l * 1024l * 1024l, maxCpu:4,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'internal-custom-xen', editable:false, name:'Xen Custom', description:'Xen Custom', sortOrder:0,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true, customCpu: true, customCores: true, customMaxMemory: true, deletable: false, provisionable: false,
+										 maxStorage:0l, maxMemory: 0l,  maxCpu:0,])
+		servicePlans
 	}
 
 	/**
@@ -1599,5 +1640,16 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				displayOrder: newIndex
 		])
 		return newInterface
+	}
+
+	@Override
+	ServiceResponse getXvpVNCConsoleUrl(ComputeServer server) {
+		def authConfigMap = plugin.getAuthConfig(server.cloud)
+		def consoleInfo = XenComputeUtility.getConsoles(authConfigMap, server.externalId)
+		if(consoleInfo.success) {
+			return ServiceResponse.success([url: consoleInfo.consoles?.first(), headers: [[name: 'Cookie', value: "session_id=${consoleInfo.sessionId}".toString()]], httpVersion: 'HTTP/1.0'])
+		}
+		return ServiceResponse.error();
+
 	}
 }
