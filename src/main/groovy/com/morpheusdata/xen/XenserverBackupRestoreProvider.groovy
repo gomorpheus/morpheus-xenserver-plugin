@@ -16,7 +16,6 @@ import groovy.util.logging.Slf4j
 @Slf4j
 class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 
-//	Plugin plugin
 	XenserverPlugin plugin
 	MorpheusContext morpheusContext
 
