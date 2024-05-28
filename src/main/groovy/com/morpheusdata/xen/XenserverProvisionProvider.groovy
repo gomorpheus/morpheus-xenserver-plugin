@@ -374,9 +374,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 											netInterface.addresses << address
 											netInterface.publicIpAddress = data.ipAddress
 										}
-										// validate the ipv6 address is an ipv6 address. There is no separate validation for ipv6 addresses, so validate that its not an ipv4 address and it is a valid ip address
-										boolean validIpV6 = NetworkUtility.validateIpAddr(data.ipv6Address, false) == false && NetworkUtility.validateIpAddr(data.ipv6Address, true) == true
-										if (data.ipv6Address && validIpV6) {
+										if (data.ipv6Address6 && XenComputeUtility.isValidIpv6Address(data.ipv6Address)) {
 											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
 											netInterface.addresses << address
 											netInterface.publicIpv6Address = data.ipv6Address
@@ -1095,16 +1093,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								log.debug("NetAddress Errors: ${address}")
 							}
 							netInterface.addresses << address
+							netInterface.publicIpAddress = data.ipAddress
 						}
-						if(data.ipv6Address) {
+						if(data.ipv6Address && XenComputeUtility.isValidIpv6Address(data.ipv6Address)) {
 							def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-							if(!NetworkUtility.validateIpAddr(address.address)){
-								log.debug("NetAddress Errors: ${address}")
-							}
 							netInterface.addresses << address
+							netInterface.publicIpv6Address = data.ipv6Address
 						}
-						netInterface.publicIpAddress = data.ipAddress
-						netInterface.publicIpv6Address = data.ipv6Address
 						context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
 					}
 				}
@@ -1112,7 +1107,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				context.async.computeServer.save(server).blockingGet()
 				rtn.success = true
 			}
-
 		} catch (e){
 			rtn.success = false
 			rtn.msg = "Error in finalizing server: ${e.message}"
