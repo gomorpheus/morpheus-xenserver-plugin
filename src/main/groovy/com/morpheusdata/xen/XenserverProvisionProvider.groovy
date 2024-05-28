@@ -1400,17 +1400,17 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
 		log.debug("resizeWorkload workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
-		log.info("resizeWorkload calling resizeWorkloadAndHost")
-		return resizeWorkloadAndHost(instance?.id, workload, workload.server, resizeRequest, opts, true)
+		log.info("resizeWorkload calling resizeWorkloadAndServer")
+		return resizeWorkloadAndServer(instance?.id, workload, workload.server, resizeRequest, opts, true)
 	}
 
 	@Override
 	ServiceResponse resizeServer(ComputeServer server, ResizeRequest resizeRequest, Map opts) {
-		log.info("resizeServer calling resizeWorkloadAndHost")
-		return resizeWorkloadAndHost(null, null, server, resizeRequest, opts, false)
+		log.info("resizeServer calling resizeWorkloadAndServer")
+		return resizeWorkloadAndServer(null, null, server, resizeRequest, opts, false)
 	}
 
-	private ServiceResponse resizeWorkloadAndHost (Long instanceId, Workload workload, ComputeServer server, ResizeRequest resizeRequest, Map opts, Boolean isWorkload) {
+	private ServiceResponse resizeWorkloadAndServer (Long instanceId, Workload workload, ComputeServer server, ResizeRequest resizeRequest, Map opts, Boolean isWorkload) {
 		log.debug("resizeWorkload ${workload ? "workload" : "server"}.id: ${workload?.id ?: server?.id} - opts: ${opts}")
 
 		ServiceResponse rtn = ServiceResponse.success()
@@ -1600,8 +1600,4 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		])
 		return newInterface
 	}
-
-
-
-
 }
