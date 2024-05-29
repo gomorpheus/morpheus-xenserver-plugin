@@ -449,7 +449,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								)
 								server.status = 'provisioned'
 								context.async.computeServer.save(server).blockingGet()
-								// context.async.instance.save(workload.instance).blockingGet()
 								provisionResponse.success = true
 							} else {
 								server.statusMessage = 'Failed to load server details'
