@@ -23,9 +23,9 @@ import com.xensource.xenapi.VM
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, ProvisionProvider.HypervisorConsoleFacet {
+class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet, ProvisionProvider.HypervisorConsoleFacet {
 
-	public static final String PROVIDER_NAME = 'XenServer'
+	public static final String PROVIDER_NAME = 'XCP-ng'
 	public static final String PROVIDER_CODE = 'xen'
 	public static final String PROVISION_TYPE_CODE = 'xen'
 
@@ -78,8 +78,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	Icon getCircularIcon() {
-		// TODO: change icon paths to correct filenames once added to your project
-		return new Icon(path:'provision-circular.svg', darkPath:'provision-circular-dark.svg')
+		return new Icon(path:'xcpng-circular-light.svg', darkPath:'xcpng-circular-dark.svg')
 	}
 
 	/**
