@@ -4,6 +4,7 @@ import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupExecutionProvider
 import com.morpheusdata.core.backup.response.BackupExecutionResponse
+import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.model.Backup
 import com.morpheusdata.model.BackupResult
 import com.morpheusdata.model.Cloud
@@ -254,6 +255,7 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 						rtn.data.backupResult.snapshotId = snapshotResults.snapshotId
 						rtn.data.backupResult.externalId = snapshotResults.snapshotId
 						rtn.data.backupResult.setConfigProperty("vmId", snapshotResults.externalId)
+						rtn.data.backupResult.sizeInMb = (saveResults.archiveSize ?: 1) / ComputeUtility.ONE_MEGABYTE
 						rtn.data.backupResult.status = BackupResult.Status.SUCCEEDED
 						rtn.data.updates = true
 					} else {
