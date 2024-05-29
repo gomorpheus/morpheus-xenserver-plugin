@@ -479,14 +479,19 @@ class XenComputeUtility {
             opts.connection = config.connection
             def vm = VM.getByUuid(opts.connection, vmId)
             def vmVif = findVif(opts, vm, networkUuid)
-            try {
-                if (opts.stopped != true)
-                    vmVif.unplug(opts.connection)
-            } catch (e2) {
-                log.warn("failed to unplug the nic")
-            }
-            vmVif.destroy(opts.connection)
-            rtn.success = true
+			if(vmVif) {
+				try {
+					if (opts.stopped != true)
+						vmVif.unplug(opts.connection)
+				} catch (e2) {
+					log.warn("failed to unplug the nic")
+				}
+				vmVif.destroy(opts.connection)
+				rtn.success = true
+			} else {
+				// vmVif not found, consider it a success
+				rtn.success = true
+			}
         } catch (e) {
             log.error("deleteVmNetwork error: ${e}", e)
             println("error: ${e.dump()}")
@@ -882,7 +887,7 @@ class XenComputeUtility {
     static getConsoles(opts, externalId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             opts.connection = config.connection
             def vmRecord = VM.getByUuid(config.connection, externalId)
             rtn.vmId = externalId

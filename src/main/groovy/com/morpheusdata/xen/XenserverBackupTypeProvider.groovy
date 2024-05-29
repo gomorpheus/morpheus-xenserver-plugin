@@ -45,7 +45,7 @@ class XenserverBackupTypeProvider extends AbstractBackupTypeProvider {
 	 */
 	@Override
 	String getName() {
-		return "Xen VM Snapshot"
+		return "XCP-ng VM Snapshot"
 	}
 	
 	/**

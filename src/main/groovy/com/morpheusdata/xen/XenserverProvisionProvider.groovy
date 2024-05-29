@@ -23,9 +23,9 @@ import com.xensource.xenapi.VM
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet {
+class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet, ProvisionProvider.HypervisorConsoleFacet {
 
-	public static final String PROVIDER_NAME = 'XenServer'
+	public static final String PROVIDER_NAME = 'XCP-ng'
 	public static final String PROVIDER_CODE = 'xen'
 	public static final String PROVISION_TYPE_CODE = 'xen'
 
@@ -78,8 +78,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	Icon getCircularIcon() {
-		// TODO: change icon paths to correct filenames once added to your project
-		return new Icon(path:'provision-circular.svg', darkPath:'provision-circular-dark.svg')
+		return new Icon(path:'xcpng-circular-light.svg', darkPath:'xcpng-circular-dark.svg')
 	}
 
 	/**
@@ -145,6 +144,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				new DataQuery().withFilter("code", "standard")).toList().blockingGet()
 	}
 
+	//TODO: This method is available in embedded code, here it needs core support.
+	// It is Stubbed out because core support doesn't exist at time of implementation.
+//	@Override
+	def importContainer(Container container, Map opts = [:]) {
+		// Method stub: No implementation yet
+	}
+
 	/**
 	 * Provides a Collection of ${@link ServicePlan} related to this ProvisionProvider that can be seeded in.
 	 * Some clouds do not use this as they may be synced in from the public cloud. This is more of a factor for
@@ -153,9 +159,43 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	Collection<ServicePlan> getServicePlans() {
-		Collection<ServicePlan> plans = []
-		// TODO: create some service plans (sizing like cpus, memory, etc) and add to collection
-		return plans
+		def servicePlans = []
+		servicePlans << new ServicePlan([code:'xen-vm-512', editable:true, name:'512MB Memory', description:'512MB Memory', sortOrder:0, maxCores:1,
+										 maxStorage:10l * 1024l * 1024l * 1024l, maxMemory: 1l * 512l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-1024', editable:true, name:'1GB Memory', description:'1GB Memory', sortOrder:1, maxCores:1,
+										 maxStorage: 10l * 1024l * 1024l * 1024l, maxMemory: 1l * 1024l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-2048', editable:true, name:'2GB Memory', description:'2GB Memory', sortOrder:2, maxCores:1,
+										 maxStorage: 20l * 1024l * 1024l * 1024l, maxMemory: 2l * 1024l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-4096', editable:true, name:'4GB Memory', description:'4GB Memory', sortOrder:3, maxCores:1,
+										 maxStorage: 40l * 1024l * 1024l * 1024l, maxMemory: 4l * 1024l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-8192', editable:true, name:'8GB Memory', description:'8GB Memory', sortOrder:4, maxCores:2,
+										 maxStorage: 80l * 1024l * 1024l * 1024l, maxMemory: 8l * 1024l * 1024l * 1024l, maxCpu:2,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-16384', editable:true, name:'16GB Memory', description:'16GB Memory', sortOrder:5, maxCores:2,
+										 maxStorage: 160l * 1024l * 1024l * 1024l, maxMemory: 16l * 1024l * 1024l * 1024l, maxCpu:2,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-24576', editable:true, name:'24GB Memory', description:'24GB Memory', sortOrder:6, maxCores:4,
+										 maxStorage: 240l * 1024l * 1024l * 1024l, maxMemory: 24l * 1024l * 1024l * 1024l, maxCpu:4,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-32768', editable:true, name:'32GB Memory', description:'32GB Memory', sortOrder:7, maxCores:4,
+										 maxStorage: 320l * 1024l * 1024l * 1024l, maxMemory: 32l * 1024l * 1024l * 1024l, maxCpu:4,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'internal-custom-xen', editable:false, name:'Xen Custom', description:'Xen Custom', sortOrder:0,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true, customCpu: true, customCores: true, customMaxMemory: true, deletable: false, provisionable: false,
+										 maxStorage:0l, maxMemory: 0l,  maxCpu:0,])
+		servicePlans
 	}
 
 	/**
@@ -863,6 +903,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					setVolumeInfo(server.volumes, createResults.volumes)
 					def startResults = XenComputeUtility.startVm(authConfig, createResults.vmId)
 					provisionResponse.externalId = createResults.vmId
+					setVolumeInfo(server.volumes, createResults.volumes)
 					log.debug("start: ${startResults.success}")
 					if(startResults.success == true) {
 						if(startResults.error == true) {
@@ -1389,20 +1430,42 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
 		log.debug("resizeWorkload workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
-		ServiceResponse rtn = ServiceResponse.success()
+		log.info("resizeWorkload calling resizeWorkloadAndServer")
+		return resizeWorkloadAndServer(instance?.id, workload, workload.server, resizeRequest, opts, true)
+	}
 
-		ComputeServer computeServer = context.async.computeServer.get(workload.server.id).blockingGet()
+	@Override
+	ServiceResponse resizeServer(ComputeServer server, ResizeRequest resizeRequest, Map opts) {
+		log.info("resizeServer calling resizeWorkloadAndServer")
+		return resizeWorkloadAndServer(null, null, server, resizeRequest, opts, false)
+	}
+
+	private ServiceResponse resizeWorkloadAndServer (Long instanceId, Workload workload, ComputeServer server, ResizeRequest resizeRequest, Map opts, Boolean isWorkload) {
+		log.debug("resizeWorkload ${workload ? "workload" : "server"}.id: ${workload?.id ?: server?.id} - opts: ${opts}")
+
+		ServiceResponse rtn = ServiceResponse.success()
+		ComputeServer computeServer = context.async.computeServer.get(server.id).blockingGet()
 		def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
 		try {
 			computeServer.status = 'resizing'
 			computeServer = saveAndGet(computeServer)
+
+
 			def requestedMemory = resizeRequest.maxMemory
 			def requestedCores = resizeRequest?.maxCores
-			def currentMemory = workload.maxMemory ?: workload.getConfigProperty('maxMemory')?.toLong()
-			def currentCores = workload.maxCores ?: 1
+
+
+			def currentMemory
+			def currentCores
+			if (isWorkload) {
+				currentMemory = workload.maxMemory ?: workload.getConfigProperty('maxMemory')?.toLong()
+				currentCores = workload.maxCores ?: 1
+			} else {
+				currentMemory = computeServer.maxMemory ?: computeServer.getConfigProperty('maxMemory')?.toLong()
+				currentCores = server.maxCores ?: 1
+			}
 			def neededMemory = requestedMemory - currentMemory
 			def neededCores = (requestedCores ?: 1) - (currentCores ?: 1)
-
 			def allocationSpecs = [externalId: computeServer.externalId, maxMemory: requestedMemory, maxCpu: requestedCores]
 			if (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0) {
 				log.debug("resizing vm: ${allocationSpecs}")
@@ -1411,6 +1474,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				if (allocationResults.success == false) {
 					rtn.success = false
 					rtn.error = context.services.localization.get("gormorpheus.provision.xenServer.resize.adjustVm")
+					log.warn("${rtn.error}")
 					return rtn
 				}
 			}
@@ -1455,11 +1519,14 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						def volumeType = storageVolumeTypes[volumeAdd.storageType.toLong()]
 						newVolume.type = volumeType
 						newVolume.datastore = datastore
-						newVolume.uniqueId = "morpheus-vol-${instance.id}-${workload.id}-${newCounter}"
+						def uniqueId = isWorkload ? "morpheus-vol-${instanceId}-${workload.id}-${newCounter}" : "morpheus-vol-${server.id}-${newCounter}"
+						newVolume.uniqueId = uniqueId
 						setVolumeInfo(computeServer.volumes, addDiskResults.volumes)
 						context.async.storageVolume.create([newVolume], computeServer).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
-						workload.server = computeServer
+						if (isWorkload) {
+							workload.server = computeServer
+						}
 						newCounter++
 					} else {
 						log.warn("error adding disk: ${addDiskResults}")
@@ -1489,7 +1556,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					log.debug("networkResults ${networkResults}")
 					if (networkResults.success == true) {
 						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex, index)
-						newInterface.uniqueId = "morpheus-nic-${instance.id}-${workload.id}-${newIndex}"
+						newInterface.uniqueId = isWorkload ? "morpheus-nic-${instanceId}-${workload.id}-${newIndex}" : "morpheus-nic-${server.id}-${newIndex}"
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
@@ -1499,7 +1566,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					def deleteResults = XenComputeUtility.deleteVmNetwork(authConfigMap, computeServer.externalId, networkDelete.internalId)
 					log.debug("netdeleteResults: ${deleteResults}")
 					if (deleteResults.success == true) {
-						context.async.computeServer.computeServerInterface.remove([networkDelete], computeServer).blockingGet()
+						computeServer.interfaces = computeServer.interfaces.findAll { it.id != networkDelete.id }
+						context.async.computeServer.save(computeServer).blockingGet()
+						context.async.computeServer.computeServerInterface.remove(networkDelete).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
 				}
@@ -1510,6 +1579,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		} catch (e) {
 			log.error("Unable to resize workload: ${e.message}", e)
 			computeServer.status = 'provisioned'
+			if (!isWorkload)
+				computeServer.statusMessage = "Unable to resize server: ${e.message}"
 			computeServer = saveAndGet(computeServer)
 			rtn.success = false
 			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.resizeWorkload")
@@ -1552,11 +1623,22 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	def buildNetworkInterface(server, networkResults, newNetwork, newIndex, index) {
 		def newInterface = new ComputeServerInterface([
 				name        : getInterfaceName(server.platform, index),
-				externalId  : networkResults.uuid,
+				externalId  : "${networkResults.networkIndex}",//networkResults.uuid, // check: from resize server
 				internalId  : networkResults.uuid,
 				network     : newNetwork,
 				displayOrder: newIndex
 		])
 		return newInterface
+	}
+
+	@Override
+	ServiceResponse getXvpVNCConsoleUrl(ComputeServer server) {
+		def authConfigMap = plugin.getAuthConfig(server.cloud)
+		def consoleInfo = XenComputeUtility.getConsoles(authConfigMap, server.externalId)
+		if(consoleInfo.success) {
+			return ServiceResponse.success([url: consoleInfo.consoles?.first(), headers: [[name: 'Cookie', value: "session_id=${consoleInfo.sessionId}".toString()]], httpVersion: 'HTTP/1.0'])
+		}
+		return ServiceResponse.error();
+
 	}
 }
