@@ -97,7 +97,6 @@ class VirtualMachineSync {
 						applyServicePlan(add, servicePlan)
 					}
 					ComputeServer savedServer = morpheusContext.async.computeServer.create(add).blockingGet()
-                    log.info("Ray:: vmSync:savedServer?.interfaces.size() ${savedServer?.interfaces.size()}")
 					if(!savedServer) {
 						log.error "Error in creating server ${add}"
 					} else {
@@ -142,12 +141,8 @@ class VirtualMachineSync {
                 plan:  SyncUtils.findServicePlanBySizing(availablePlans, cloudItem.vm.memoryTarget, cloudItem.vm.VCPUsMax, null, servicePlan, null, cloud.account, availablePlanPermissions)
         ]
 
-        log.info("Ray:: VMSync: cloudItem.guestMetrics: ${cloudItem?.guestMetrics}")
         def vmNetworks = cloudItem.guestMetrics ? cloudItem.guestMetrics['networks'] : [:]
-        log.info("Ray:: VMSync: vmNetworks: ${vmNetworks}")
         def vmIp = vmNetworks['0/ip']
-        log.info("Ray:: VMSync: vmIp: ${vmIp}")
-        log.info("Ray:: VMSync: vmConfig: ${vmConfig}")
         if(vmIp) {
             vmConfig << [
                     externalIp : vmIp,
@@ -155,7 +150,6 @@ class VirtualMachineSync {
                     internalIp : vmIp
             ]
         }
-        log.info("Ray:: VMSync: vmConfig1: ${vmConfig}")
         vmConfig
     }
 
