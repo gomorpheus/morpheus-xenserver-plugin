@@ -4,6 +4,7 @@ import com.bertramlabs.plugins.karman.CloudFile
 import com.bertramlabs.plugins.karman.StorageProvider
 import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.MorpheusUtils
+import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.Datastore
@@ -1504,4 +1505,9 @@ class XenComputeUtility {
     static osTypeTemplates = [
             'ubuntu.14.04.64': 'Ubuntu Trusty Tahr 14.04'
     ]
+
+	static isValidIpv6Address(String address) {
+		// validate the ipv6 address is an ipv6 address. There is no separate validation for ipv6 addresses, so validate that its not an ipv4 address and it is a valid ip address
+		return address && NetworkUtility.validateIpAddr(address, false) == false && NetworkUtility.validateIpAddr(address, true) == true
+	}
 }

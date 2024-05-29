@@ -264,7 +264,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: server.sourceImage.id)
 				virtualImage = context.async.virtualImage.get(virtualImageId).blockingGet()
 				imageId = virtualImage.locations.find { it.refType == "ComputeZone" && it.refId == cloud.id }?.externalId
-				log.info("runworkload imageId1: ${imageId}")
 				if (!imageId) { //If its userUploaded and still needs uploaded
 					//TODO: We need to upload ovg/vmdk stuff here
 					def primaryNetwork = server.interfaces?.find { it.network }?.network
@@ -319,12 +318,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						containerConfig.each {
 							it -> workload.setConfigProperty(it.key, it.value)
 						}
-						workload = context.async.workload.save(workload)
+						workload = context.async.workload.save(workload).blockingGet()
 						network = context.async.network.get(networkId).blockingGet()
 					}
 				}
 			}
-			log.info("runworkload imageId2: ${imageId}")
 			if (imageId) {
 				def userGroups = workload.instance.userGroups?.toList() ?: []
 				if (workload.instance.userGroup && userGroups.contains(workload.instance.userGroup) == false) {
@@ -395,7 +393,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				if (createResults.success == true && createResults.vmId) {
 					server.externalId = createResults.vmId
 					provisionResponse.externalId = server.externalId
-					server = saveAndGet(server)
 					setVolumeInfo(server.volumes, createResults.volumes)
 					server = saveAndGet(server)
 					def startResults = XenComputeUtility.startVm(authConfigMap, server.externalId)
@@ -409,53 +406,49 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							def serverDetail = checkServerReady([authConfig: authConfigMap, externalId: server.externalId])
 							log.debug("serverDetail: ${serverDetail}")
 							if (serverDetail.success == true) {
-								def privateIp = serverDetail.ipAddress
-								def publicIp = serverDetail.ipAddress
 								serverDetail.ipAddresses.each { interfaceName, data ->
 									ComputeServerInterface netInterface = server.interfaces.find { it.name == interfaceName }
 									if (netInterface) {
 										if (data.ipAddress) {
 											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-											if (!NetworkUtility.validateIpAddr(address.address)) {
-												log.debug("NetAddress Errors: ${address}")
-											}
 											netInterface.addresses << address
+											netInterface.publicIpAddress = data.ipAddress
 										}
-										if (data.ipv6Address) {
+										if (data.ipv6Address6 && XenComputeUtility.isValidIpv6Address(data.ipv6Address)) {
 											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-											if (!NetworkUtility.validateIpAddr(address.address)) {
-												log.debug("NetAddress Errors: ${address}")
-											}
 											netInterface.addresses << address
+											netInterface.publicIpv6Address = data.ipv6Address
 										}
-										netInterface.publicIpAddress = data.ipAddress
-										netInterface.publicIpv6Address = data.ipv6Address
-										context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
+										context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
+										// reload the server to pickup interface changes
+										server = context.async.computeServer.get(server.id).blockingGet()
 									}
 								}
+								def privateIp = serverDetail.ipAddress
+								def publicIp = serverDetail.ipAddress
 								if (privateIp) {
 									def newInterface = false
 									server.internalIp = privateIp
 									server.externalIp = publicIp
 									server.sshHost = privateIp
+									server = saveAndGet(server)
 								}
 								//update external info
-								server = saveAndGet(server)
 								setNetworkInfo(server.interfaces, serverDetail.networks)
+								// reload the server after setNetworkInfo made changes to interfaces
+								server = context.async.computeServer.get(server.id).blockingGet()
 								server.osDevice = '/dev/vda'
 								server.dataDevice = '/dev/vda'
 								server.lvmEnabled = false
 								server.sshHost = privateIp ?: publicIp
 								server.managed = true
-								server = saveAndGet(server)
 								server.capacityInfo = new ComputeCapacityInfo(
 										maxCores: 1,
 										maxMemory: workload.getConfigProperty('maxMemory').toLong(),
 										maxStorage: workload.getConfigProperty('maxStorage').toLong()
 								)
 								server.status = 'provisioned'
-								saveAndGet(server)
-								context.async.instance.save(workload.instance).blockingGet()
+								context.async.computeServer.save(server).blockingGet()
 								provisionResponse.success = true
 							} else {
 								server.statusMessage = 'Failed to load server details'
@@ -1085,7 +1078,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							if(networkInterface.type == null) {
 								networkInterface.type = new ComputeServerInterfaceType(code: 'xenNetwork')
 							}
-							context.async.computeServer.computeServerInterface.save(networkInterface).blockingGet()
+							context.async.computeServer.computeServerInterface.save([networkInterface]).blockingGet()
 						}
 					}
 				}
@@ -1140,24 +1133,20 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								log.debug("NetAddress Errors: ${address}")
 							}
 							netInterface.addresses << address
+							netInterface.publicIpAddress = data.ipAddress
 						}
-						if(data.ipv6Address) {
+						if(data.ipv6Address && XenComputeUtility.isValidIpv6Address(data.ipv6Address)) {
 							def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-							if(!NetworkUtility.validateIpAddr(address.address)){
-								log.debug("NetAddress Errors: ${address}")
-							}
 							netInterface.addresses << address
+							netInterface.publicIpv6Address = data.ipv6Address
 						}
-						netInterface.publicIpAddress = data.ipAddress
-						netInterface.publicIpv6Address = data.ipv6Address
-						context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
+						context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
 					}
 				}
 				setNetworkInfo(server.interfaces, serverDetail.networks)
 				context.async.computeServer.save(server).blockingGet()
 				rtn.success = true
 			}
-
 		} catch (e){
 			rtn.success = false
 			rtn.msg = "Error in finalizing server: ${e.message}"
