@@ -102,8 +102,8 @@ jar {
 				'Morpheus-Organization': 'morpheus',
 				'Morpheus-Code': 'xenserver',
 				'Morpheus-Description': 'Plugin for XCP-ng',
-				'Morpheus-Logo': 'assets/morpheus.svg',
-				'Morpheus-Logo-Dark': 'assets/morpheus.svg',
+				'Morpheus-Logo': 'assets/xcpng-light.svg',
+				'Morpheus-Logo-Dark': 'assets/xcpng-dark.svg',
 				'Morpheus-Labels': 'Plugin, Cloud',
 				'Morpheus-Repo': 'https://github.com/gomorpheus/morpheus-xenserver-plugin',
 				'Morpheus-Min-Appliance-Version': "6.3.0"
