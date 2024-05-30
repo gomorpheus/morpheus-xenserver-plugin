@@ -76,6 +76,7 @@ class XenserverCloudProvider implements CloudProvider {
 				displayOrder: displayOrder,
 				fieldCode: 'gomorpheus.optiontype.ApiUrl',
 				fieldLabel:'API URL',
+				placeHolderText: 'xenserver.domain.com',
 				required: true,
 				inputType: OptionType.InputType.TEXT,
 		)
@@ -86,7 +87,7 @@ class XenserverCloudProvider implements CloudProvider {
 				displayOrder: displayOrder += 10,
 				fieldCode: 'gomorpheus.optiontype.CustomPort',
 				fieldLabel:'Custom Port',
-				required: true,
+				required: false,
 				inputType: OptionType.InputType.TEXT,
 				fieldContext: 'config',
 		)
@@ -140,7 +141,7 @@ class XenserverCloudProvider implements CloudProvider {
 		options << new OptionType(
 				name: 'Enable Hypervisor Console',
 				code: 'xenServer-enable-hypervisor',
-				fieldName: 'enableHypervisor',
+				fieldName: 'enableVnc',
 				displayOrder: displayOrder += 10,
 				fieldLabel: 'Enable Hypervisor Console',
 				required: false,
