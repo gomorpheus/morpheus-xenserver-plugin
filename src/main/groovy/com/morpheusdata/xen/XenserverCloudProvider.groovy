@@ -76,6 +76,7 @@ class XenserverCloudProvider implements CloudProvider {
 				displayOrder: displayOrder,
 				fieldCode: 'gomorpheus.optiontype.ApiUrl',
 				fieldLabel:'API URL',
+				placeHolderText: 'xenserver.domain.com',
 				required: true,
 				inputType: OptionType.InputType.TEXT,
 		)
@@ -86,7 +87,7 @@ class XenserverCloudProvider implements CloudProvider {
 				displayOrder: displayOrder += 10,
 				fieldCode: 'gomorpheus.optiontype.CustomPort',
 				fieldLabel:'Custom Port',
-				required: true,
+				required: false,
 				inputType: OptionType.InputType.TEXT,
 				fieldContext: 'config',
 		)
@@ -129,7 +130,7 @@ class XenserverCloudProvider implements CloudProvider {
 		)
 		options << new OptionType(
 				name: 'Inventory Existing Instances',
-				code: 'xenServer-import-existing',
+				code: 'zoneType.xen.importExisting',
 				fieldName: 'importExisting',
 				displayOrder: displayOrder += 10,
 				fieldLabel: 'Inventory Existing Instances',
@@ -139,8 +140,8 @@ class XenserverCloudProvider implements CloudProvider {
 		)
 		options << new OptionType(
 				name: 'Enable Hypervisor Console',
-				code: 'xenServer-enable-hypervisor',
-				fieldName: 'enableHypervisor',
+				code: 'zoneType.xen.enableHypervisor',
+				fieldName: 'enableVnc',
 				displayOrder: displayOrder += 10,
 				fieldLabel: 'Enable Hypervisor Console',
 				required: false,
@@ -523,7 +524,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean supportsDistributedWorker() {
-		return false
+		return true
 	}
 
 	/**
@@ -596,7 +597,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getDefaultProvisionTypeCode() {
-		return XenserverProvisionProvider.PROVISION_PROVIDER_CODE
+		return XenserverProvisionProvider.PROVIDER_CODE
 	}
 
 	/**
