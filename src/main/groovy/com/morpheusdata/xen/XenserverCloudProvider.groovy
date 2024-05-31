@@ -130,7 +130,7 @@ class XenserverCloudProvider implements CloudProvider {
 		)
 		options << new OptionType(
 				name: 'Inventory Existing Instances',
-				code: 'xenServer-import-existing',
+				code: 'zoneType.xen.importExisting',
 				fieldName: 'importExisting',
 				displayOrder: displayOrder += 10,
 				fieldLabel: 'Inventory Existing Instances',
@@ -140,7 +140,7 @@ class XenserverCloudProvider implements CloudProvider {
 		)
 		options << new OptionType(
 				name: 'Enable Hypervisor Console',
-				code: 'xenServer-enable-hypervisor',
+				code: 'zoneType.xen.enableHypervisor',
 				fieldName: 'enableVnc',
 				displayOrder: displayOrder += 10,
 				fieldLabel: 'Enable Hypervisor Console',
@@ -524,7 +524,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean supportsDistributedWorker() {
-		return false
+		return true
 	}
 
 	/**
@@ -597,7 +597,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getDefaultProvisionTypeCode() {
-		return XenserverProvisionProvider.PROVISION_PROVIDER_CODE
+		return XenserverProvisionProvider.PROVIDER_CODE
 	}
 
 	/**
