@@ -448,6 +448,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 										maxStorage: workload.getConfigProperty('maxStorage').toLong()
 								)
 								server.status = 'provisioned'
+								server.powerState = ComputeServer.PowerState.on
 								context.async.computeServer.save(server).blockingGet()
 								provisionResponse.success = true
 							} else {
