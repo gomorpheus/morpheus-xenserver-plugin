@@ -121,6 +121,171 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	Collection<OptionType> getNodeOptionTypes() {
 		Collection<OptionType> nodeOptions = []
+
+		nodeOptions << new OptionType(
+				name: 'image',
+				category:'provisionType.xen.custom',
+				code: 'provisionType.xen.custom.containerType.virtualImageId',
+				fieldContext: 'domain',
+				fieldName: 'virtualImage.id',
+				fieldCode: 'gomorpheus.label.vmImage',
+				fieldLabel: 'VM Image',
+				fieldGroup: null,
+				inputType: OptionType.InputType.SELECT,
+				displayOrder: 10,
+				required: false,
+				noSelection: 'Select',
+				optionSource: 'xenVirtualImages'
+		)
+		nodeOptions << new OptionType(
+				name: 'mount logs',
+				category: "provisionType.xen.custom",
+				code: 'provisionType.xen.custom.containerType.mountLogs',
+				fieldContext: 'domain',
+				fieldName: 'mountLogs',
+				fieldCode: 'gomorpheus.optiontype.LogFolder',
+				fieldLabel: 'Log Folder',
+				fieldGroup: null,
+				inputType: OptionType.InputType.TEXT,
+				displayOrder: 20,
+				required: false,
+				editable: false
+		)
+		nodeOptions << new OptionType(
+				name: 'mount config',
+				category: "provisionType.xen.custom",
+				code: 'provisionType.xen.custom.containerType.mountConfig',
+				fieldContext: 'domain',
+				fieldName: 'mountConfig',
+				fieldCode: 'gomorpheus.optiontype.ConfigFolder',
+				fieldLabel: 'Config Folder',
+				fieldGroup: null,
+				inputType: OptionType.InputType.TEXT,
+				displayOrder: 30,
+				required: false,
+				editable: false
+		)
+		nodeOptions << new OptionType(
+				name: 'mount data',
+				category: "provisionType.xen.custom",
+				code: 'provisionType.xen.custom.containerType.mountData',
+				fieldContext: 'domain',
+				fieldName: 'mountData',
+				fieldCode: 'gomorpheus.optiontype.DeployFolder',
+				fieldLabel: 'Deploy Folder',
+				fieldGroup: null,
+				inputType: OptionType.InputType.TEXT,
+				displayOrder: 40,
+				required: false,
+				editable: false,
+				helpTextI18nCode: "gomorpheus.help.deployFolder"
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.instanceType.backupType',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'backup type',
+				category:'provisionType.xen.custom',
+				fieldName:'backupType',
+				fieldCode: 'gomorpheus.optiontype.BackupType',
+				fieldLabel:'Backup Type',
+				fieldContext:'instanceType',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'xenSnapshot',
+				custom:false,
+				displayOrder:100,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.containerType.statTypeCode',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'stat type code',
+				category:'provisionType.xen.custom',
+				fieldName:'statTypeCode',
+				fieldCode: 'gomorpheus.optiontype.StatTypeCode',
+				fieldLabel:'Stat Type Code',
+				fieldContext:'containerType',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'xen',
+				custom:false,
+				displayOrder:101,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.containerType.logTypeCode',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'log type code',
+				category:'provisionType.xen.custom',
+				fieldName:'logTypeCode',
+				fieldCode: 'gomorpheus.optiontype.LogTypeCode',
+				fieldLabel:'Log Type Code',
+				fieldContext:'containerType',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'xen',
+				custom:false,
+				displayOrder:102,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.containerType.serverType',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'server type',
+				category:'provisionType.xen.custom',
+				fieldName:'serverType',
+				fieldCode: 'gomorpheus.optiontype.ServerType',
+				fieldLabel:'Server Type',
+				fieldContext:'containerType',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'vm',
+				custom:false,
+				displayOrder:103,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.instanceTypeLayout.description',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'layout description',
+				category:'provisionType.xen.custom',
+				fieldName:'description',
+				fieldCode: 'gomorpheus.optiontype.LayoutDescription',
+				fieldLabel:'Layout Description',
+				fieldContext:'instanceTypeLayout',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'This will provision a single vm container',
+				custom:false,
+				displayOrder:104,
+				fieldClass:null
+		)
+
 		return nodeOptions
 	}
 
