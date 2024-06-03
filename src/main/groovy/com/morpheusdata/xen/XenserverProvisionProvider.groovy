@@ -123,17 +123,19 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		Collection<OptionType> nodeOptions = []
 
 		nodeOptions << new OptionType(
-				name: 'image',
+				name: 'virtual image',
 				category:'provisionType.xen.custom',
 				code: 'provisionType.xen.custom.containerType.virtualImageId',
 				fieldContext: 'containerType',
-				fieldName: 'virtualImage.id',
+				fieldName: 'virtualImageId',
 				fieldCode: 'gomorpheus.label.vmImage',
 				fieldLabel: 'VM Image',
 				fieldGroup: null,
 				inputType: OptionType.InputType.SELECT,
-				displayOrder: 10,
-				required: true,
+				displayOrder:10,
+				fieldClass:null,
+				required: false,
+				editable: false,
 				noSelection: 'Select',
 				optionSource: 'xenVirtualImages'
 		)
@@ -149,7 +151,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				inputType: OptionType.InputType.TEXT,
 				displayOrder: 20,
 				required: false,
-				editable: false
+				enabled:true,
+				editable: false,
+				global:false,
+				placeHolder:null,
+				defaultValue:null,
+				custom:false,
+				fieldClass:null
 		)
 		nodeOptions << new OptionType(
 				name: 'mount config',
@@ -163,7 +171,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				inputType: OptionType.InputType.TEXT,
 				displayOrder: 30,
 				required: false,
-				editable: false
+				enabled:true,
+				editable: false,
+				global:false,
+				placeHolder:null,
+				defaultValue:null,
+				custom:false,
+				fieldClass:null,
 		)
 		nodeOptions << new OptionType(
 				name: 'mount data',
@@ -177,8 +191,14 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				inputType: OptionType.InputType.TEXT,
 				displayOrder: 40,
 				required: false,
+				enabled:true,
 				editable: false,
-				helpTextI18nCode: "gomorpheus.help.deployFolder"
+				global:false,
+				placeHolder:null,
+				helpTextI18nCode: "gomorpheus.help.deployFolder",
+				defaultValue:null,
+				custom:false,
+				fieldClass:null
 		)
 		nodeOptions << new OptionType(
 				code:'provisionType.xen.custom.instanceType.backupType',
