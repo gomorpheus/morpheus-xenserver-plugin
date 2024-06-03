@@ -23,7 +23,7 @@ class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 		this.plugin = plugin
 		this.morpheusContext = morpheusContext
 	}
-	
+
 	/**
 	 * Returns the Morpheus Context for interacting with data stored in the Main Morpheus Application
 	 * @return an implementation of the MorpheusContext for running Future based rxJava queries
@@ -57,7 +57,8 @@ class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 	 */
 	@Override
 	ServiceResponse getBackupRestoreInstanceConfig(BackupResult backupResult, Instance instanceModel, Map restoreConfig, Map opts) {
-		return ServiceResponse.success()
+		log.debug "getBackupRestoreInstanceConfig: ${backupResult}, ${instanceModel}, ${restoreConfig}, ${opts}"
+		return ServiceResponse.success(restoreConfig)
 	}
 
 	/**
