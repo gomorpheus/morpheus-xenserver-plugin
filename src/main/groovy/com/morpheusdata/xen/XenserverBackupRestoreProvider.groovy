@@ -23,7 +23,7 @@ class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 		this.plugin = plugin
 		this.morpheusContext = morpheusContext
 	}
-	
+
 	/**
 	 * Returns the Morpheus Context for interacting with data stored in the Main Morpheus Application
 	 * @return an implementation of the MorpheusContext for running Future based rxJava queries
@@ -57,64 +57,8 @@ class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 	 */
 	@Override
 	ServiceResponse getBackupRestoreInstanceConfig(BackupResult backupResult, Instance instanceModel, Map restoreConfig, Map opts) {
-//		return ServiceResponse.success()
+		log.debug "getBackupRestoreInstanceConfig: ${backupResult}, ${instanceModel}, ${restoreConfig}, ${opts}"
 		return ServiceResponse.success(restoreConfig)
-//		log.debug "getBackupRestoreInstanceConfig: ${backupResult}, ${instanceModel}, ${opts}"
-//		log.info "RAZI1 :: getBackupRestoreInstanceConfig: ${backupResult}, ${instanceModel}, ${opts}"
-//		log.info("RAZI :: getBackupRestoreInstanceConfig: ${backupResult}, ${instanceModel}, ${opts}")
-//		def rtn = [success:false, data:[:]]
-//		try {
-//			def backup = backupResult.backup
-//			def instanceOpts = [:]
-//			def layoutId = backupResult.instanceLayoutId ?: backup.instanceLayoutId ?: instanceModel?.layout?.id
-//			def planId = backupResult.planId ?: backup.servicePlanId ?: instanceModel?.plan?.id ?: opts.plan?.id
-//
-////			def container = Container.get(backup.containerId)
-////			def container = morpheusContext.async.workload.get(backup.containerId).blockingGet()
-////			def containerConfig = container?.getConfigProperties() ?: backup.getConfigProperty('containerConfig')
-////			def instanceLayout = InstanceTypeLayout.read(layoutId)
-//			def instanceLayout = morpheusContext.async.instanceTypeLayout.get(layoutId).blockingGet()
-////			def newLayout = instanceLayout?.cloneLayoutId ? InstanceTypeLayout.read(instanceLayout.cloneLayoutId) : instanceLayout
-//			def newLayout = instanceLayout?.cloneLayoutId ? morpheusContext.async.instanceTypeLayout.get(instanceLayout.cloneLayoutId).blockingGet() : instanceLayout
-////			def newPlan = ServicePlan.read(planId)
-//			def newPlan = morpheusContext.async.servicePlan.get(planId).blockingGet()
-////			def availablityZone = containerConfig?.availabilityZone //not needed
-////			def securityGroupId = containerConfig?.securityGroupId //not needed
-//			instanceOpts.instance = [account:backup.account, instanceType:newLayout?.instanceType, layout:newLayout,
-//									 plan:newPlan, name:opts.name ?: (instanceModel ? instanceModel.name + ' clone' : backup.name),
-//									 site:[id:(opts.siteId ?: instanceModel.site.id)],
-//									 createdBy:[id:opts.userId]]
-//			instanceOpts.servicePlan = newPlan.id
-//			// adhere to custom options
-//			instanceOpts.servicePlanOptions = [maxMemory:backupResult.maxMemory ?: instanceModel?.maxMemory,
-//											   maxStorage:instanceModel?.maxStorage, maxCores:backupResult.maxCores ?: instanceModel?.maxCores, coresPerSocket: backupResult.coresPerSocket ?: instanceModel?.coresPerSocket]
-//			/*instanceOpts.vmwareResourcePoolId = container?.server?.resourcePool?.externalId
-//			instanceOpts.scvmmResourcePoolId = container?.server?.resourcePool?.externalId
-//			instanceOpts.azureResourceGroupId = container?.server?.resourcePool?.externalId
-//			instanceOpts.resourcePoolId = container?.server?.resourcePool?.externalId*/
-//			instanceOpts.volumes = opts.volumes ?: backupResult?.volumesMap?.clone() ?: instanceModel?.volumesMap?.clone()
-//			instanceOpts.networkInterfaces = opts.networkInterfaces ?: backupResult.interfacesMap?.clone()  ?: instanceModel?.interfacesMap?.clone()
-//			instanceOpts.storageController = opts.storageController ?: backupResult.controllersMap?.clone()  ?: instanceModel?.controllersMap?.clone()
-////			instanceOpts.osExternalNetworkId = backupResult.getConfigProperty('containerConfig')?.osExternalNetworkId ?: backupInstance?.getConfigProperty('osExternalNetworkId')
-////			instanceOpts.securityGroup = backupResult.getConfigProperty('containerConfig')?.securityGroup ?: backupInstance?.getConfigProperty('securityGroup')
-//			log.info("RAZI :: opts.zoneId: ${opts.zoneId}")
-//			if(opts.zoneId) {
-//				instanceOpts.zoneId = opts.zoneId
-//			}
-//			/*if(availablityZone) {
-//				instanceOpts.availabilityZone = availablityZone
-//			}
-//			if(securityGroupId) {
-//				instanceOpts.securityGroupId = securityGroupId
-//			}*/
-//			instanceOpts.provisionOpts = [backupSetId:backupResult.backupSetId]
-//			log.info("RAZI :: instanceOpts: ${instanceOpts}")
-//			rtn.success = true
-//			rtn.data.instanceOpts = instanceOpts
-//		} catch(e) {
-//			log.error("getBackupRestoreInstanceConfig error: ${e}", e)
-//		}
-//		return ServiceResponse.create(rtn)
 	}
 
 	/**

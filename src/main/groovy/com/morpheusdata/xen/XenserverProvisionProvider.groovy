@@ -302,7 +302,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			if (opts.backupSetId) { //TODO: first create backup then only we can test it...test it later...
 				//if this is a clone or restore, use the snapshot id as the image
 				def snapshots = context.services.backup.backupResult.list(
-						new DataQuery().withFilter("backupSetId", opts.backupSetId.toLong())
+						new DataQuery().withFilter("backupSetId", opts.backupSetId)
 								.withFilter("containerId", opts.cloneContainerId))
 				def snapshot = snapshots.find { it.backupSetId == opts.backupSetId }
 				def snapshotId = snapshot?.snapshotId
@@ -448,6 +448,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 										maxStorage: workload.getConfigProperty('maxStorage').toLong()
 								)
 								server.status = 'provisioned'
+								server.powerState = ComputeServer.PowerState.on
 								context.async.computeServer.save(server).blockingGet()
 								provisionResponse.success = true
 							} else {
