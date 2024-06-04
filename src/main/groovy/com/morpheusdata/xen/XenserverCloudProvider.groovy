@@ -83,7 +83,7 @@ class XenserverCloudProvider implements CloudProvider {
 		options << new OptionType(
 				name: 'Custom Port',
 				code: 'zoneType.xen.customPort',
-				fieldName: 'customPort',
+				fieldName: 'apiPort',
 				displayOrder: displayOrder += 10,
 				fieldCode: 'gomorpheus.optiontype.CustomPort',
 				fieldLabel:'Custom Port',
