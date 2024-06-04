@@ -1615,7 +1615,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				name		: volumeAdd.name,
 				displayOrder: newCounter,
 				status		: 'provisioned',
-				unitNumber	: addDiskResults.volume?.deviceIndex?.toString()
+				unitNumber	: addDiskResults.volume?.deviceIndex?.toString(),
+				deviceDisplayName : getDiskDisplayName(newCounter)
 		)
 		return newVolume
 	}
