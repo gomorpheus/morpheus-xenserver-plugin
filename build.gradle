@@ -98,12 +98,12 @@ jar {
 		attributes(
 				'Plugin-Class': 'com.morpheusdata.xen.XenserverPlugin',
 				'Plugin-Version': version,
-				'Morpheus-Name': 'XenServer Plugin',
+				'Morpheus-Name': 'XCP-ng Plugin',
 				'Morpheus-Organization': 'morpheus',
 				'Morpheus-Code': 'xenserver',
-				'Morpheus-Description': 'Plugin for XenServer',
-				'Morpheus-Logo': 'assets/morpheus.svg',
-				'Morpheus-Logo-Dark': 'assets/morpheus.svg',
+				'Morpheus-Description': 'Plugin for XCP-ng',
+				'Morpheus-Logo': 'assets/xcpng-light.svg',
+				'Morpheus-Logo-Dark': 'assets/xcpng-dark.svg',
 				'Morpheus-Labels': 'Plugin, Cloud',
 				'Morpheus-Repo': 'https://github.com/gomorpheus/morpheus-xenserver-plugin',
 				'Morpheus-Min-Appliance-Version': "6.3.0"

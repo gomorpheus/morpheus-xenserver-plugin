@@ -25,7 +25,7 @@ resource "option-type" "instanceType-xen-template" {
 resource "workload-type" "xen-1_0" {
   code             = "xen-1.0"
   shortName        = "xen"
-  name             = "Single Xen VM"
+  name             = "Single XCP-ng VM"
   ports            = []
   containerVersion = "1.0"
   repositoryImage  = ""
@@ -50,7 +50,7 @@ resource "workload-type-set" "xen-1_0-set" {
 
 resource "instance-type" "xen" {
   code                 = "xen"
-  name                 = "xen"
+  name                 = "XCP-ng"
   category             = "cloud"
   active               = true
   enabled              = true
@@ -62,12 +62,16 @@ resource "instance-type" "xen" {
   deploymentService    = "defaultDeployService"
   versions             = ["1.0"]
   hasAutoScale         = true
-  description          = "Provision any Xen Compatible Image to a Xen Hypervisor. Utilize the image alongside your other instances."
+  description          = "Provision any XCP-ng Compatible Image to a XCP-ng Hypervisor. Utilize the image alongside your other instances."
   provisionService     = "xenContainerService"
   provisionTypeDefault = true
   environmentPrefix    = "XEN"
   provisionSelectType  = "zone"
   provisionType = "xen"
+  pluginIconPath = "xcpng-light.svg"
+  pluginIconDarkPath = "xcpng-dark.svg"
+  pluginIconHidpiPath = "xcpng-light0.svg"
+  pluginIconDarkHidpiPath = "xcpng-dark.svg"
   optionTypes = [
     "instanceType.xen.template",
     "instanceType.exposePorts"
@@ -76,7 +80,7 @@ resource "instance-type" "xen" {
 
 resource "instance-type-layout" "xen-1_0-single" {
   code            = "xen-1.0-single"
-  name            = "Single Xen VM"
+  name            = "Single XCP-ng VM"
   sortOrder       = 0
   instanceVersion = "1.0"
   description     = "This will provision a single process with no redundancy"

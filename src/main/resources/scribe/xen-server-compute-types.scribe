@@ -1,6 +1,6 @@
 resource "compute-server-type" "xen-server-linux" {
   code                 = "xenserverLinux"
-  name                 = "Xen Docker Host"
+  name                 = "XCP-ng Docker Host"
   description          = ""
   platform             = "linux"
   nodeType             = "morpheus-node"
@@ -69,7 +69,7 @@ resource "compute-type-set" "docker-xenserver-ubuntu-20_04-set" {
 
 resource "compute-type-layout" "docker-xenserver-ubuntu-20_04-single" {
   code              = "docker-xenserver-ubuntu-20.04-single"
-  name              = "Xen Server Docker Host (Ubuntu 20.04)"
+  name              = "XCP-ng Server Docker Host (Ubuntu 20.04)"
   sortOrder         = 5
   computeVersion    = "20.04"
   description       = "This will provision a single docker host vm in xenserver"

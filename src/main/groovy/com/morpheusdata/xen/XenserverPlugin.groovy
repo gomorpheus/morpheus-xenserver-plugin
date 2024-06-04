@@ -32,7 +32,7 @@ class XenserverPlugin extends Plugin {
 
     @Override
     void initialize() {
-        this.setName("XenServer Plugin")
+        this.setName("XCP-ng")
         this.registerProvider(new XenserverCloudProvider(this,this.morpheus))
         this.registerProvider(new XenserverProvisionProvider(this,this.morpheus))
         this.registerProvider(new XenserverBackupProvider(this,this.morpheus))

@@ -1,14 +1,10 @@
 package com.morpheusdata.xen
 
 import com.morpheusdata.core.MorpheusContext
-import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupRestoreProvider
 import com.morpheusdata.core.backup.response.BackupRestoreResponse
-import com.morpheusdata.core.backup.util.BackupStatusUtility
-import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeServer
-import com.morpheusdata.model.Workload
 import com.morpheusdata.response.ServiceResponse;
 import com.morpheusdata.model.BackupRestore;
 import com.morpheusdata.model.BackupResult;
@@ -20,7 +16,6 @@ import groovy.util.logging.Slf4j
 @Slf4j
 class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 
-//	Plugin plugin
 	XenserverPlugin plugin
 	MorpheusContext morpheusContext
 
@@ -28,7 +23,7 @@ class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 		this.plugin = plugin
 		this.morpheusContext = morpheusContext
 	}
-	
+
 	/**
 	 * Returns the Morpheus Context for interacting with data stored in the Main Morpheus Application
 	 * @return an implementation of the MorpheusContext for running Future based rxJava queries
@@ -62,7 +57,8 @@ class XenserverBackupRestoreProvider implements BackupRestoreProvider {
 	 */
 	@Override
 	ServiceResponse getBackupRestoreInstanceConfig(BackupResult backupResult, Instance instanceModel, Map restoreConfig, Map opts) {
-		return ServiceResponse.success()
+		log.debug "getBackupRestoreInstanceConfig: ${backupResult}, ${instanceModel}, ${restoreConfig}, ${opts}"
+		return ServiceResponse.success(restoreConfig)
 	}
 
 	/**
