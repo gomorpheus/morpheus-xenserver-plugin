@@ -1018,16 +1018,18 @@ class XenComputeUtility {
         return rtn
     }
 
-    static archiveVm(opts, vmId, cloudBucket, archiveFolder, Closure progressCallback = null) {
+    static archiveVm(Map opts, vmId, cloudBucket, archiveFolder, Closure progressCallback = null) {
         def rtn = [success: false, vmFiles: []]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts.authConfig)
             opts.connection = config.connection
             def vm = VM.getByUuid(config.connection, vmId)
             def vmName = vm.getNameLabel(config.connection)
-            def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
+            //def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
+            def creds = opts.authConfig.username + ':' + opts.authConfig.password
             def insertOpts = [zone: opts.zone]
-            insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
+            //insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
+            insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
             def srcUrl = getXenApiUrl(opts.zone, true, creds) + '/export?uuid=' + vmId
             def targetFileName = (opts.vmName ?: "${vmName}.${System.currentTimeMillis()}") + '.xva'
             def targetFile = cloudBucket["${archiveFolder}/${targetFileName}"]
