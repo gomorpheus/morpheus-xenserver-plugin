@@ -1551,7 +1551,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 				resizeRequest.interfacesAdd.eachWithIndex { networkAdd, index ->
-					log.info("Ray:: interfaceAdd: ${networkAdd}")
 					def newIndex = computeServer.interfaces?.size()
 					def newNetwork = context.async.network.listById([networkAdd.network.id.toLong()]).firstOrError().blockingGet()
 					def networkConfig = [networkIndex: newIndex, networkUuid: newNetwork.externalId]
@@ -1560,7 +1559,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					if (networkResults.success == true) {
 						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex, index)
 						newInterface.uniqueId = isWorkload ? "morpheus-nic-${instanceId}-${workload.id}-${newIndex}" : "morpheus-nic-${server.id}-${newIndex}"
-						newInterface.primaryInterface = networkAdd?.network?.isPrimary ? true : false
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
@@ -1627,7 +1625,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	def buildNetworkInterface(server, networkResults, newNetwork, newIndex, index) {
 		def newInterface = new ComputeServerInterface([
 				name        : getInterfaceName(server.platform, index),
-				externalId  : "${networkResults.networkIndex}",//networkResults.uuid,
+				externalId  : "${networkResults.networkIndex}",//networkResults.uuid, // check: from resize server
 				internalId  : networkResults.uuid,
 				network     : newNetwork,
 				displayOrder: newIndex
@@ -1651,7 +1649,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		log.info("Ray:: IW: importWorkloadRequest: calling importWorkload")
 		ImportWorkloadResponse response = new ImportWorkloadResponse()
 		ServiceResponse serviceResponse = ServiceResponse.prepare(response)
-		def rtn = [success:false]
 		try {
 			log.info("Ray:: IW: importWorkloadRequest: ${importWorkloadRequest}")
 			log.info("Ray:: IW: importWorkloadRequest.workload: ${importWorkloadRequest.workload}")
@@ -1670,12 +1667,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def snapshotResults = XenComputeUtility.snapshotVm(snapshotOpts, server.externalId)
 			log.info("Ray:: IW: snapshotResults: ${snapshotResults}")
 			log.info("snapshot complete: ${snapshotResults}")
-			//def sourceImage = importWorkloadRequest.sourceImage
-			/*def sourceImageMap = [
-					sshUsername: server.sshUsername,
-					sshPassword: server.sshPassword,
-					isCloudInit: sourceImage ? sourceImage.isCloudInit : (server.serverOs?.platform == 'windows' ? false : true)
-			]*/
 			if(snapshotResults.success) {
 				def storageProvider = importWorkloadRequest.storageBucket
 				log.info("Ray:: IW: storageProvider?.id: ${storageProvider?.id}")
@@ -1687,32 +1678,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def cloudBucket = providerMap[storageProvider.bucketName]
 				log.info("Ray:: IW: cloudBucket: ${cloudBucket}")
 				log.info("Ray:: IW: cloudBucket?.name: ${cloudBucket?.name}")
-				//def cloudBucket1 = providerMap[providerMap.bucketName]
-				//def sshUsername = server?.sshUsername
-				//def sshPassword = server?.sshPassword
-				//def osType = server?.serverOs
-				/*def exportImage = new VirtualImage(
-						[
-								imageType:'xva',
-								userUploaded:true,
-								status:'Saving',
-								owner: server.account,
-								zoneType:container.server.zone.zoneType.code,  // check:
-								name:vmName,
-								imageName:vmName,
-								osType:osType,
-								isPublic:true,
-								isCloudInit:true,
-								installAgent:true,
-								storageProvider:storageProvider
-						] + sourceImageMap)*/
 				log.info("Ray:: IW: importWorkloadRequest.targetImage: ${importWorkloadRequest.targetImage}")
 				def exportImage = importWorkloadRequest.targetImage
 				log.info("Ray:: IW: exportImage: ${exportImage}")
 				def imgTypeStr = "${ImageType.xen}".toString()
 				log.info("Ray:: IW: imgTypeStr: ${imgTypeStr}")
 				exportImage.imageType = ImageType.xen //'xva'
-				/*exportImage.remotePath = importWorkloadRequest.imageBasePath*/
 				exportImage.owner = server.account
 				exportImage = context.async.virtualImage.create(exportImage).blockingGet()
 				log.info("Ray:: IW: exportImage1: ${exportImage}")
@@ -1723,11 +1694,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				exportImage.remotePath = archiveFolder
 				context.async.virtualImage.save(exportImage).blockingGet()
 				log.info("Ray:: IW: exportImage2: ${exportImage}")
-				// targetImage + imageType+basepath
-				/*exportImage.addToAccounts(container.server.account)  // check:
-				exportImage.save(flush:true) // check:*/
-				/*exportImage.save(flush:true)
-				exportImage.discard()*/
 				def archiveOpts = [authConfig: authConfigMap, snapshotId:snapshotResults.snapshotId, vmName:vmName, zone: server.cloud]
 				log.info("Ray:: IW: archiveOpts: ${archiveOpts}")
 				def archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder)
