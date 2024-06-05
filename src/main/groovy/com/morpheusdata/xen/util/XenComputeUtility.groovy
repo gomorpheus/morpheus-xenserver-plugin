@@ -1510,4 +1510,49 @@ class XenComputeUtility {
 		// validate the ipv6 address is an ipv6 address. There is no separate validation for ipv6 addresses, so validate that its not an ipv4 address and it is a valid ip address
 		return address && NetworkUtility.validateIpAddr(address, false) == false && NetworkUtility.validateIpAddr(address, true) == true
 	}
+
+    static getVmSyncVolumes(Map authConfig, vm) {
+        def rtn = []
+        try {
+            def config = getXenConnectionSession(authConfig)
+            def vbdList = vm.getVBDs(config.connection)
+            vbdList?.each { vbd ->
+                if (vbd.getType(config.connection) == com.xensource.xenapi.Types.VbdType.DISK) {
+                    rtn << getVmVolumeInfo(config, vbd)
+                }
+            }
+            rtn = rtn.sort { it.displayOrder }
+        } catch (e) {
+            log.error("getVmVolumes error: ${e}", e)
+        }
+        return rtn
+    }
+
+    static buildSyncLists(existingItems, masterItems, matchExistingToMasterFunc) {
+        log.debug "buildSyncLists: ${existingItems}, ${masterItems}"
+        def rtn = [addList: [], updateList: [], removeList: []]
+        try {
+            existingItems?.each { existing ->
+                def matches = masterItems?.findAll { matchExistingToMasterFunc(existing, it) }
+                if (matches?.size() > 0) {
+                    matches?.each { match ->
+                        rtn.updateList << [existingItem: existing, masterItem: match]
+                    }
+                } else {
+                    rtn.removeList << existing
+                }
+            }
+            masterItems?.each { masterItem ->
+                def match = rtn?.updateList?.find {
+                    it.masterItem == masterItem
+                }
+                if (!match) {
+                    rtn.addList << masterItem
+                }
+            }
+        } catch (e) {
+            log.error "buildSyncLists error: ${e}", e
+        }
+        return rtn
+    }
 }
