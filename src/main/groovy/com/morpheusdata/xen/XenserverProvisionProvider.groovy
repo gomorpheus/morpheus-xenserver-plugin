@@ -1832,58 +1832,35 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	@Override
 	ServiceResponse<ImportWorkloadResponse> importWorkload(ImportWorkloadRequest importWorkloadRequest) {
-		log.info("Ray:: IW: importWorkloadRequest: calling importWorkload")
+		log.info("importWorkload started")
 		ImportWorkloadResponse response = new ImportWorkloadResponse()
 		ServiceResponse serviceResponse = ServiceResponse.prepare(response)
 		try {
-			log.info("Ray:: IW: importWorkloadRequest: ${importWorkloadRequest}")
-			log.info("Ray:: IW: importWorkloadRequest.workload: ${importWorkloadRequest.workload}")
 			Workload workload = importWorkloadRequest.workload
-			log.info("Ray:: IW: workload?.server: ${workload?.server}")
 			ComputeServer server = workload?.server
-			log.info("Ray:: IW: server?.id: ${server?.id}")
 			def authConfigMap = plugin.getAuthConfig(server.cloud)
-			log.info("Ray:: IW: authConfigMap: ${authConfigMap}")
 			def snapshotName = "${workload?.instance?.name}-${workload?.id}-${System.currentTimeMillis()}"
-			log.info("Ray:: IW: snapshotName: ${snapshotName}")
 			def vmName = workload?.instance?.containers?.size() > 0 ? "${workload?.instance?.name}-${workload?.id}" : workload?.instance?.name
-			log.info("Ray:: IW: vmName: ${vmName}")
-			def snapshotOpts = [authConfig: authConfigMap, externalId:server.externalId, snapshotName:snapshotName, snapshotDescription:'morpheus import']
-			log.info("Ray:: IW: snapshotOpts: ${snapshotOpts}")
+			def snapshotOpts = [authConfig: authConfigMap, externalId: server.externalId, snapshotName: snapshotName, snapshotDescription: 'morpheus import']
+			log.debug("snapshotOpts: ${snapshotOpts}")
 			def snapshotResults = XenComputeUtility.snapshotVm(snapshotOpts, server.externalId)
-			log.info("Ray:: IW: snapshotResults: ${snapshotResults}")
-			log.info("snapshot complete: ${snapshotResults}")
-			if(snapshotResults.success) {
+			log.debug("snapshotResults: ${snapshotResults}")
+			if (snapshotResults.success) {
 				def storageProvider = importWorkloadRequest.storageBucket
-				log.info("Ray:: IW: storageProvider?.id: ${storageProvider?.id}")
-				def providerMap = context.async.storageBucket.getBucketStorageProvider(storageProvider.id).blockingGet()//virtualImageService.getStorageProvider(storageProvider) // check:
-				log.info("Ray:: IW: providerMap: ${providerMap}")
-				log.info("Ray:: IW: providerMap?.providerName: ${providerMap?.providerName}")
-				log.info("Ray:: IW: providerMap?.properties: ${providerMap?.properties}")
-				log.info("Ray:: IW: providerMap?.bucketName: ${providerMap?.getProperty("bucketName")}")
+				def providerMap = context.async.storageBucket.getBucketStorageProvider(storageProvider.id).blockingGet()
 				def cloudBucket = providerMap[storageProvider.bucketName]
-				log.info("Ray:: IW: cloudBucket: ${cloudBucket}")
-				log.info("Ray:: IW: cloudBucket?.name: ${cloudBucket?.name}")
-				log.info("Ray:: IW: importWorkloadRequest.targetImage: ${importWorkloadRequest.targetImage}")
 				def exportImage = importWorkloadRequest.targetImage
-				log.info("Ray:: IW: exportImage: ${exportImage}")
-				def imgTypeStr = "${ImageType.xen}".toString()
-				log.info("Ray:: IW: imgTypeStr: ${imgTypeStr}")
-				exportImage.imageType = ImageType.xen //'xva'
+				exportImage.virtualImageType = new VirtualImageType(code: 'xva')
+				//exportImage.imageType = 'xva' // This code is present in embedded
 				exportImage.owner = server.account
 				exportImage = context.async.virtualImage.create(exportImage).blockingGet()
-				log.info("Ray:: IW: exportImage1: ${exportImage}")
-				log.info("Ray:: IW: exportImage?.id: ${exportImage?.id}")
-				log.info("Ray:: IW: importWorkloadRequest.imageBasePath: ${importWorkloadRequest.imageBasePath}")
-				def archiveFolder =  "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
-				log.info("Ray:: IW: archiveFolder: ${archiveFolder}")
+				def archiveFolder = "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
 				exportImage.remotePath = archiveFolder
 				context.async.virtualImage.save(exportImage).blockingGet()
-				log.info("Ray:: IW: exportImage2: ${exportImage}")
-				def archiveOpts = [authConfig: authConfigMap, snapshotId:snapshotResults.snapshotId, vmName:vmName, zone: server.cloud]
-				log.info("Ray:: IW: archiveOpts: ${archiveOpts}")
+				def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud]
+				log.debug("archiveOpts: ${archiveOpts}")
 				def archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder)
-				log.info("Ray:: IW: archiveResults: ${archiveResults}")
+				log.debug("archiveResults: ${archiveResults}")
 				if (archiveResults.success == true) {
 					response.virtualImage = exportImage
 					response.imagePath = archiveFolder
@@ -1892,9 +1869,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				}
 			}
 		} catch (e) {
-			log.error("Ray:: startService error: ${e}", e)
+			log.error("importWorkload error: ${e}", e)
+			serviceResponse.msg = e.message
 		}
-		log.info("Ray:: IW: serviceResponse: ${serviceResponse}")
 		return serviceResponse
 	}
 }
