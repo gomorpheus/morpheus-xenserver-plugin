@@ -1551,6 +1551,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 				resizeRequest.interfacesAdd.eachWithIndex { networkAdd, index ->
+					log.info("Ray:: interfaceAdd: ${networkAdd}")
 					def newIndex = computeServer.interfaces?.size()
 					def newNetwork = context.async.network.listById([networkAdd.network.id.toLong()]).firstOrError().blockingGet()
 					def networkConfig = [networkIndex: newIndex, networkUuid: newNetwork.externalId]
@@ -1559,6 +1560,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					if (networkResults.success == true) {
 						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex, index)
 						newInterface.uniqueId = isWorkload ? "morpheus-nic-${instanceId}-${workload.id}-${newIndex}" : "morpheus-nic-${server.id}-${newIndex}"
+						newInterface.primaryInterface = networkAdd?.network?.isPrimary ? true : false
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
@@ -1625,7 +1627,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	def buildNetworkInterface(server, networkResults, newNetwork, newIndex, index) {
 		def newInterface = new ComputeServerInterface([
 				name        : getInterfaceName(server.platform, index),
-				externalId  : "${networkResults.networkIndex}",//networkResults.uuid, // check: from resize server
+				externalId  : "${networkResults.networkIndex}",//networkResults.uuid,
 				internalId  : networkResults.uuid,
 				network     : newNetwork,
 				displayOrder: newIndex
@@ -1707,14 +1709,16 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				log.info("Ray:: IW: importWorkloadRequest.targetImage: ${importWorkloadRequest.targetImage}")
 				def exportImage = importWorkloadRequest.targetImage
 				log.info("Ray:: IW: exportImage: ${exportImage}")
-				exportImage.imageType = 'xva'
+				def imgTypeStr = "${ImageType.xen}".toString()
+				log.info("Ray:: IW: imgTypeStr: ${imgTypeStr}")
+				exportImage.imageType = ImageType.xen //'xva'
 				/*exportImage.remotePath = importWorkloadRequest.imageBasePath*/
 				exportImage.owner = server.account
-				exportImage = context.async.virtualImage.save(exportImage).blockingGet()
+				exportImage = context.async.virtualImage.create(exportImage).blockingGet()
 				log.info("Ray:: IW: exportImage1: ${exportImage}")
 				log.info("Ray:: IW: exportImage?.id: ${exportImage?.id}")
 				log.info("Ray:: IW: importWorkloadRequest.imageBasePath: ${importWorkloadRequest.imageBasePath}")
-				def archiveFolder =  "${importWorkloadRequest.imageBasePath}/${exportImage.id}"
+				def archiveFolder =  "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
 				log.info("Ray:: IW: archiveFolder: ${archiveFolder}")
 				exportImage.remotePath = archiveFolder
 				context.async.virtualImage.save(exportImage).blockingGet()
