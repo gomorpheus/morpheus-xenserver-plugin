@@ -127,7 +127,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				category:'provisionType.xen.custom',
 				code: 'provisionType.xen.custom.containerType.virtualImageId',
 				fieldContext: 'containerType',
-				fieldName: 'virtualImageId',
+				fieldName: 'virtualImage.id',
 				fieldCode: 'gomorpheus.label.vmImage',
 				fieldLabel: 'VM Image',
 				fieldGroup: null,
