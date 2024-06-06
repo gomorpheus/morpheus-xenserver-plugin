@@ -360,7 +360,7 @@ class XenserverCloudProvider implements CloudProvider {
 				refresh(cloudInfo)
 				rtn.success = true
 			} else {
-				rtn = ServiceResponse.error('xen host not reachable', null, [status: Cloud.Status.offline])
+				rtn = ServiceResponse.error('host not reachable', null, [status: Cloud.Status.offline])
 			}
 		} catch(e) {
 			log.error("refresh cloud error: ${e}", e)
@@ -409,7 +409,7 @@ class XenserverCloudProvider implements CloudProvider {
 
 				rtn = ServiceResponse.success()
 			} else {
-				rtn = ServiceResponse.error(testResults.invalidLogin == true ? 'xen invalid credentials' : 'xen host not reachable', null, [status: Cloud.Status.offline])
+				rtn = ServiceResponse.error(testResults.invalidLogin == true ? 'invalid credentials' : 'host not reachable', null, [status: Cloud.Status.offline])
 			}
 		} catch(e) {
 			log.error("refresh cloud error: ${e}", e)
