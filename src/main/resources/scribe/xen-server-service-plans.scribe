@@ -1,0 +1,36 @@
+resource "service-plan-price-set" "xen-vm-512" {
+  servicePlan           = "xen-vm-512",
+  priceSet              = "default.priceset"
+}
+resource "service-plan-price-set" "xen-vm-1024" {
+  servicePlan           = "xen-vm-1024",
+  priceSet              = "default.priceset"
+}
+resource "service-plan-price-set" "xen-vm-2048" {
+  servicePlan           = "xen-vm-2048",
+  priceSet              = "default.priceset"
+}
+resource "service-plan-price-set" "xen-vm-4096" {
+  servicePlan           = "xen-vm-4096",
+  priceSet              = "default.priceset"
+}
+resource "service-plan-price-set" "xen-vm-8192" {
+  servicePlan           = "xen-vm-8192",
+  priceSet              = "default.priceset"
+}
+resource "service-plan-price-set" "xen-vm-16384" {
+  servicePlan           = "xen-vm-16384",
+  priceSet              = "default.priceset"
+}
+resource "service-plan-price-set" "xen-vm-24576" {
+  servicePlan           = "xen-vm-24576",
+  priceSet              = "default.priceset"
+}
+resource "service-plan-price-set" "xen-vm-32768" {
+  servicePlan           = "xen-vm-32768",
+  priceSet              = "default.priceset"
+}
+resource "service-plan-price-set" "internal-custom-xen" {
+  servicePlan           = "internal-custom-xen",
+  priceSet              = "internal.custom.xen.priceset"
+}

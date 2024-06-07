@@ -1,6 +1,5 @@
 package com.morpheusdata.xen
 
-
 import com.morpheusdata.PrepareHostResponse
 import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
@@ -10,7 +9,6 @@ import com.morpheusdata.core.providers.HostProvisionProvider
 import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
-import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.model.*
 import com.morpheusdata.model.provisioning.HostRequest
@@ -25,9 +23,9 @@ import com.xensource.xenapi.VM
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet {
+class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet, ProvisionProvider.HypervisorConsoleFacet {
 
-	public static final String PROVIDER_NAME = 'XenServer'
+	public static final String PROVIDER_NAME = 'XCP-ng'
 	public static final String PROVIDER_CODE = 'xen'
 	public static final String PROVISION_TYPE_CODE = 'xen'
 
@@ -80,8 +78,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	Icon getCircularIcon() {
-		// TODO: change icon paths to correct filenames once added to your project
-		return new Icon(path:'provision-circular.svg', darkPath:'provision-circular-dark.svg')
+		return new Icon(path:'xcpng-circular-light.svg', darkPath:'xcpng-circular-dark.svg')
 	}
 
 	/**
@@ -124,6 +121,191 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	Collection<OptionType> getNodeOptionTypes() {
 		Collection<OptionType> nodeOptions = []
+
+		nodeOptions << new OptionType(
+				name: 'virtual image',
+				category:'provisionType.xen.custom',
+				code: 'provisionType.xen.custom.containerType.virtualImageId',
+				fieldContext: 'containerType',
+				fieldName: 'virtualImage.id',
+				fieldCode: 'gomorpheus.label.vmImage',
+				fieldLabel: 'VM Image',
+				fieldGroup: null,
+				inputType: OptionType.InputType.SELECT,
+				displayOrder:10,
+				fieldClass:null,
+				required: false,
+				editable: false,
+				noSelection: 'Select',
+				optionSource: 'xenVirtualImages'
+		)
+		nodeOptions << new OptionType(
+				name: 'mount logs',
+				category: "provisionType.xen.custom",
+				code: 'provisionType.xen.custom.containerType.mountLogs',
+				fieldContext: 'containerType',
+				fieldName: 'mountLogs',
+				fieldCode: 'gomorpheus.optiontype.LogFolder',
+				fieldLabel: 'Log Folder',
+				fieldGroup: null,
+				inputType: OptionType.InputType.TEXT,
+				displayOrder: 20,
+				required: false,
+				enabled:true,
+				editable: false,
+				global:false,
+				placeHolder:null,
+				defaultValue:null,
+				custom:false,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				name: 'mount config',
+				category: "provisionType.xen.custom",
+				code: 'provisionType.xen.custom.containerType.mountConfig',
+				fieldContext: 'containerType',
+				fieldName: 'mountConfig',
+				fieldCode: 'gomorpheus.optiontype.ConfigFolder',
+				fieldLabel: 'Config Folder',
+				fieldGroup: null,
+				inputType: OptionType.InputType.TEXT,
+				displayOrder: 30,
+				required: false,
+				enabled:true,
+				editable: false,
+				global:false,
+				placeHolder:null,
+				defaultValue:null,
+				custom:false,
+				fieldClass:null,
+		)
+		nodeOptions << new OptionType(
+				name: 'mount data',
+				category: "provisionType.xen.custom",
+				code: 'provisionType.xen.custom.containerType.mountData',
+				fieldContext: 'containerType',
+				fieldName: 'mountData',
+				fieldCode: 'gomorpheus.optiontype.DeployFolder',
+				fieldLabel: 'Deploy Folder',
+				fieldGroup: null,
+				inputType: OptionType.InputType.TEXT,
+				displayOrder: 40,
+				required: false,
+				enabled:true,
+				editable: false,
+				global:false,
+				placeHolder:null,
+				helpTextI18nCode: "gomorpheus.help.deployFolder",
+				defaultValue:null,
+				custom:false,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.instanceType.backupType',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'backup type',
+				category:'provisionType.xen.custom',
+				fieldName:'backupType',
+				fieldCode: 'gomorpheus.optiontype.BackupType',
+				fieldLabel:'Backup Type',
+				fieldContext:'instanceType',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'xenSnapshot',
+				custom:false,
+				displayOrder:100,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.containerType.statTypeCode',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'stat type code',
+				category:'provisionType.xen.custom',
+				fieldName:'statTypeCode',
+				fieldCode: 'gomorpheus.optiontype.StatTypeCode',
+				fieldLabel:'Stat Type Code',
+				fieldContext:'containerType',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'xen',
+				custom:false,
+				displayOrder:101,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.containerType.logTypeCode',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'log type code',
+				category:'provisionType.xen.custom',
+				fieldName:'logTypeCode',
+				fieldCode: 'gomorpheus.optiontype.LogTypeCode',
+				fieldLabel:'Log Type Code',
+				fieldContext:'containerType',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'xen',
+				custom:false,
+				displayOrder:102,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.containerType.serverType',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'server type',
+				category:'provisionType.xen.custom',
+				fieldName:'serverType',
+				fieldCode: 'gomorpheus.optiontype.ServerType',
+				fieldLabel:'Server Type',
+				fieldContext:'containerType',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'vm',
+				custom:false,
+				displayOrder:103,
+				fieldClass:null
+		)
+		nodeOptions << new OptionType(
+				code:'provisionType.xen.custom.instanceTypeLayout.description',
+				inputType: OptionType.InputType.HIDDEN,
+				name:'layout description',
+				category:'provisionType.xen.custom',
+				fieldName:'description',
+				fieldCode: 'gomorpheus.optiontype.LayoutDescription',
+				fieldLabel:'Layout Description',
+				fieldContext:'instanceTypeLayout',
+				fieldGroup: null,
+				required:false,
+				enabled:true,
+				editable:false,
+				global:false,
+				placeHolder:null,
+				helpBlock:'',
+				defaultValue:'This will provision a single vm container',
+				custom:false,
+				displayOrder:104,
+				fieldClass:null
+		)
+
 		return nodeOptions
 	}
 
@@ -162,9 +344,43 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	Collection<ServicePlan> getServicePlans() {
-		Collection<ServicePlan> plans = []
-		// TODO: create some service plans (sizing like cpus, memory, etc) and add to collection
-		return plans
+		def servicePlans = []
+		servicePlans << new ServicePlan([code:'xen-vm-512', editable:true, name:'512MB Memory', description:'512MB Memory', sortOrder:0, maxCores:1,
+										 maxStorage:10l * 1024l * 1024l * 1024l, maxMemory: 1l * 512l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-1024', editable:true, name:'1GB Memory', description:'1GB Memory', sortOrder:1, maxCores:1,
+										 maxStorage: 10l * 1024l * 1024l * 1024l, maxMemory: 1l * 1024l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-2048', editable:true, name:'2GB Memory', description:'2GB Memory', sortOrder:2, maxCores:1,
+										 maxStorage: 20l * 1024l * 1024l * 1024l, maxMemory: 2l * 1024l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-4096', editable:true, name:'4GB Memory', description:'4GB Memory', sortOrder:3, maxCores:1,
+										 maxStorage: 40l * 1024l * 1024l * 1024l, maxMemory: 4l * 1024l * 1024l * 1024l, maxCpu:1,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-8192', editable:true, name:'8GB Memory', description:'8GB Memory', sortOrder:4, maxCores:2,
+										 maxStorage: 80l * 1024l * 1024l * 1024l, maxMemory: 8l * 1024l * 1024l * 1024l, maxCpu:2,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-16384', editable:true, name:'16GB Memory', description:'16GB Memory', sortOrder:5, maxCores:2,
+										 maxStorage: 160l * 1024l * 1024l * 1024l, maxMemory: 16l * 1024l * 1024l * 1024l, maxCpu:2,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-24576', editable:true, name:'24GB Memory', description:'24GB Memory', sortOrder:6, maxCores:4,
+										 maxStorage: 240l * 1024l * 1024l * 1024l, maxMemory: 24l * 1024l * 1024l * 1024l, maxCpu:4,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'xen-vm-32768', editable:true, name:'32GB Memory', description:'32GB Memory', sortOrder:7, maxCores:4,
+										 maxStorage: 320l * 1024l * 1024l * 1024l, maxMemory: 32l * 1024l * 1024l * 1024l, maxCpu:4,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true])
+
+		servicePlans << new ServicePlan([code:'internal-custom-xen', editable:false, name:'Xen Custom', description:'Xen Custom', sortOrder:0,
+										 customMaxStorage:true, customMaxDataStorage:true, addVolumes:true, customCpu: true, customCores: true, customMaxMemory: true, deletable: false, provisionable: false,
+										 maxStorage:0l, maxMemory: 0l,  maxCpu:0,])
+		servicePlans
 	}
 
 	/**
@@ -233,7 +449,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: server.sourceImage.id)
 				virtualImage = context.async.virtualImage.get(virtualImageId).blockingGet()
 				imageId = virtualImage.locations.find { it.refType == "ComputeZone" && it.refId == cloud.id }?.externalId
-				log.info("runworkload imageId1: ${imageId}")
 				if (!imageId) { //If its userUploaded and still needs uploaded
 					//TODO: We need to upload ovg/vmdk stuff here
 					def primaryNetwork = server.interfaces?.find { it.network }?.network
@@ -272,7 +487,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			if (opts.backupSetId) { //TODO: first create backup then only we can test it...test it later...
 				//if this is a clone or restore, use the snapshot id as the image
 				def snapshots = context.services.backup.backupResult.list(
-						new DataQuery().withFilter("backupSetId", opts.backupSetId.toLong())
+						new DataQuery().withFilter("backupSetId", opts.backupSetId)
 								.withFilter("containerId", opts.cloneContainerId))
 				def snapshot = snapshots.find { it.backupSetId == opts.backupSetId }
 				def snapshotId = snapshot?.snapshotId
@@ -288,12 +503,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						containerConfig.each {
 							it -> workload.setConfigProperty(it.key, it.value)
 						}
-						workload = context.async.workload.save(workload)
+						workload = context.async.workload.save(workload).blockingGet()
 						network = context.async.network.get(networkId).blockingGet()
 					}
 				}
 			}
-			log.info("runworkload imageId2: ${imageId}")
 			if (imageId) {
 				def userGroups = workload.instance.userGroups?.toList() ?: []
 				if (workload.instance.userGroup && userGroups.contains(workload.instance.userGroup) == false) {
@@ -364,7 +578,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				if (createResults.success == true && createResults.vmId) {
 					server.externalId = createResults.vmId
 					provisionResponse.externalId = server.externalId
-					server = saveAndGet(server)
 					setVolumeInfo(server.volumes, createResults.volumes)
 					server = saveAndGet(server)
 					def startResults = XenComputeUtility.startVm(authConfigMap, server.externalId)
@@ -378,53 +591,50 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							def serverDetail = checkServerReady([authConfig: authConfigMap, externalId: server.externalId])
 							log.debug("serverDetail: ${serverDetail}")
 							if (serverDetail.success == true) {
-								def privateIp = serverDetail.ipAddress
-								def publicIp = serverDetail.ipAddress
 								serverDetail.ipAddresses.each { interfaceName, data ->
 									ComputeServerInterface netInterface = server.interfaces.find { it.name == interfaceName }
 									if (netInterface) {
 										if (data.ipAddress) {
 											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-											if (!NetworkUtility.validateIpAddr(address.address)) {
-												log.debug("NetAddress Errors: ${address}")
-											}
 											netInterface.addresses << address
+											netInterface.publicIpAddress = data.ipAddress
 										}
-										if (data.ipv6Address) {
+										if (data.ipv6Address6 && XenComputeUtility.isValidIpv6Address(data.ipv6Address)) {
 											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-											if (!NetworkUtility.validateIpAddr(address.address)) {
-												log.debug("NetAddress Errors: ${address}")
-											}
 											netInterface.addresses << address
+											netInterface.publicIpv6Address = data.ipv6Address
 										}
-										netInterface.publicIpAddress = data.ipAddress
-										netInterface.publicIpv6Address = data.ipv6Address
-										context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
+										context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
+										// reload the server to pickup interface changes
+										server = context.async.computeServer.get(server.id).blockingGet()
 									}
 								}
+								def privateIp = serverDetail.ipAddress
+								def publicIp = serverDetail.ipAddress
 								if (privateIp) {
 									def newInterface = false
 									server.internalIp = privateIp
 									server.externalIp = publicIp
 									server.sshHost = privateIp
+									server = saveAndGet(server)
 								}
 								//update external info
-								server = saveAndGet(server)
 								setNetworkInfo(server.interfaces, serverDetail.networks)
+								// reload the server after setNetworkInfo made changes to interfaces
+								server = context.async.computeServer.get(server.id).blockingGet()
 								server.osDevice = '/dev/vda'
 								server.dataDevice = '/dev/vda'
 								server.lvmEnabled = false
 								server.sshHost = privateIp ?: publicIp
 								server.managed = true
-								server = saveAndGet(server)
 								server.capacityInfo = new ComputeCapacityInfo(
 										maxCores: 1,
 										maxMemory: workload.getConfigProperty('maxMemory').toLong(),
 										maxStorage: workload.getConfigProperty('maxStorage').toLong()
 								)
 								server.status = 'provisioned'
-								saveAndGet(server)
-								context.async.instance.save(workload.instance).blockingGet()
+								server.powerState = ComputeServer.PowerState.on
+								context.async.computeServer.save(server).blockingGet()
 								provisionResponse.success = true
 							} else {
 								server.statusMessage = 'Failed to load server details'
@@ -878,6 +1088,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					setVolumeInfo(server.volumes, createResults.volumes)
 					def startResults = XenComputeUtility.startVm(authConfig, createResults.vmId)
 					provisionResponse.externalId = createResults.vmId
+					setVolumeInfo(server.volumes, createResults.volumes)
 					log.debug("start: ${startResults.success}")
 					if(startResults.success == true) {
 						if(startResults.error == true) {
@@ -1053,7 +1264,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							if(networkInterface.type == null) {
 								networkInterface.type = new ComputeServerInterfaceType(code: 'xenNetwork')
 							}
-							context.async.computeServer.computeServerInterface.save(networkInterface).blockingGet()
+							context.async.computeServer.computeServerInterface.save([networkInterface]).blockingGet()
 						}
 					}
 				}
@@ -1108,24 +1319,20 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								log.debug("NetAddress Errors: ${address}")
 							}
 							netInterface.addresses << address
+							netInterface.publicIpAddress = data.ipAddress
 						}
-						if(data.ipv6Address) {
+						if(data.ipv6Address && XenComputeUtility.isValidIpv6Address(data.ipv6Address)) {
 							def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-							if(!NetworkUtility.validateIpAddr(address.address)){
-								log.debug("NetAddress Errors: ${address}")
-							}
 							netInterface.addresses << address
+							netInterface.publicIpv6Address = data.ipv6Address
 						}
-						netInterface.publicIpAddress = data.ipAddress
-						netInterface.publicIpv6Address = data.ipv6Address
-						context.async.computeServer.computeServerInterface.save(netInterface).blockingGet()
+						context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
 					}
 				}
 				setNetworkInfo(server.interfaces, serverDetail.networks)
 				context.async.computeServer.save(server).blockingGet()
 				rtn.success = true
 			}
-
 		} catch (e){
 			rtn.success = false
 			rtn.msg = "Error in finalizing server: ${e.message}"
@@ -1408,20 +1615,42 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
 		log.debug("resizeWorkload workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
-		ServiceResponse rtn = ServiceResponse.success()
+		log.info("resizeWorkload calling resizeWorkloadAndServer")
+		return resizeWorkloadAndServer(instance?.id, workload, workload.server, resizeRequest, opts, true)
+	}
 
-		ComputeServer computeServer = context.async.computeServer.get(workload.server.id).blockingGet()
+	@Override
+	ServiceResponse resizeServer(ComputeServer server, ResizeRequest resizeRequest, Map opts) {
+		log.info("resizeServer calling resizeWorkloadAndServer")
+		return resizeWorkloadAndServer(null, null, server, resizeRequest, opts, false)
+	}
+
+	private ServiceResponse resizeWorkloadAndServer (Long instanceId, Workload workload, ComputeServer server, ResizeRequest resizeRequest, Map opts, Boolean isWorkload) {
+		log.debug("resizeWorkload ${workload ? "workload" : "server"}.id: ${workload?.id ?: server?.id} - opts: ${opts}")
+
+		ServiceResponse rtn = ServiceResponse.success()
+		ComputeServer computeServer = context.async.computeServer.get(server.id).blockingGet()
 		def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
 		try {
 			computeServer.status = 'resizing'
 			computeServer = saveAndGet(computeServer)
+
+
 			def requestedMemory = resizeRequest.maxMemory
 			def requestedCores = resizeRequest?.maxCores
-			def currentMemory = workload.maxMemory ?: workload.getConfigProperty('maxMemory')?.toLong()
-			def currentCores = workload.maxCores ?: 1
+
+
+			def currentMemory
+			def currentCores
+			if (isWorkload) {
+				currentMemory = workload.maxMemory ?: workload.getConfigProperty('maxMemory')?.toLong()
+				currentCores = workload.maxCores ?: 1
+			} else {
+				currentMemory = computeServer.maxMemory ?: computeServer.getConfigProperty('maxMemory')?.toLong()
+				currentCores = server.maxCores ?: 1
+			}
 			def neededMemory = requestedMemory - currentMemory
 			def neededCores = (requestedCores ?: 1) - (currentCores ?: 1)
-
 			def allocationSpecs = [externalId: computeServer.externalId, maxMemory: requestedMemory, maxCpu: requestedCores]
 			if (neededMemory > 100000000l || neededMemory < -100000000l || neededCores != 0) {
 				log.debug("resizing vm: ${allocationSpecs}")
@@ -1430,6 +1659,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				if (allocationResults.success == false) {
 					rtn.success = false
 					rtn.error = context.services.localization.get("gormorpheus.provision.xenServer.resize.adjustVm")
+					log.warn("${rtn.error}")
 					return rtn
 				}
 			}
@@ -1474,11 +1704,14 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						def volumeType = storageVolumeTypes[volumeAdd.storageType.toLong()]
 						newVolume.type = volumeType
 						newVolume.datastore = datastore
-						newVolume.uniqueId = "morpheus-vol-${instance.id}-${workload.id}-${newCounter}"
+						def uniqueId = isWorkload ? "morpheus-vol-${instanceId}-${workload.id}-${newCounter}" : "morpheus-vol-${server.id}-${newCounter}"
+						newVolume.uniqueId = uniqueId
 						setVolumeInfo(computeServer.volumes, addDiskResults.volumes)
 						context.async.storageVolume.create([newVolume], computeServer).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
-						workload.server = computeServer
+						if (isWorkload) {
+							workload.server = computeServer
+						}
 						newCounter++
 					} else {
 						log.warn("error adding disk: ${addDiskResults}")
@@ -1508,7 +1741,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					log.debug("networkResults ${networkResults}")
 					if (networkResults.success == true) {
 						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex, index)
-						newInterface.uniqueId = "morpheus-nic-${instance.id}-${workload.id}-${newIndex}"
+						newInterface.uniqueId = isWorkload ? "morpheus-nic-${instanceId}-${workload.id}-${newIndex}" : "morpheus-nic-${server.id}-${newIndex}"
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
@@ -1518,7 +1751,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					def deleteResults = XenComputeUtility.deleteVmNetwork(authConfigMap, computeServer.externalId, networkDelete.internalId)
 					log.debug("netdeleteResults: ${deleteResults}")
 					if (deleteResults.success == true) {
-						context.async.computeServer.computeServerInterface.remove([networkDelete], computeServer).blockingGet()
+						computeServer.interfaces = computeServer.interfaces.findAll { it.id != networkDelete.id }
+						context.async.computeServer.save(computeServer).blockingGet()
+						context.async.computeServer.computeServerInterface.remove(networkDelete).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
 				}
@@ -1529,6 +1764,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		} catch (e) {
 			log.error("Unable to resize workload: ${e.message}", e)
 			computeServer.status = 'provisioned'
+			if (!isWorkload)
+				computeServer.statusMessage = "Unable to resize server: ${e.message}"
 			computeServer = saveAndGet(computeServer)
 			rtn.success = false
 			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.resizeWorkload")
@@ -1563,7 +1800,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				name		: volumeAdd.name,
 				displayOrder: newCounter,
 				status		: 'provisioned',
-				unitNumber	: addDiskResults.volume?.deviceIndex?.toString()
+				unitNumber	: addDiskResults.volume?.deviceIndex?.toString(),
+				deviceDisplayName : getDiskDisplayName(newCounter)
 		)
 		return newVolume
 	}
@@ -1571,11 +1809,22 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	def buildNetworkInterface(server, networkResults, newNetwork, newIndex, index) {
 		def newInterface = new ComputeServerInterface([
 				name        : getInterfaceName(server.platform, index),
-				externalId  : networkResults.uuid,
+				externalId  : "${networkResults.networkIndex}",//networkResults.uuid, // check: from resize server
 				internalId  : networkResults.uuid,
 				network     : newNetwork,
 				displayOrder: newIndex
 		])
 		return newInterface
+	}
+
+	@Override
+	ServiceResponse getXvpVNCConsoleUrl(ComputeServer server) {
+		def authConfigMap = plugin.getAuthConfig(server.cloud)
+		def consoleInfo = XenComputeUtility.getConsoles(authConfigMap, server.externalId)
+		if(consoleInfo.success) {
+			return ServiceResponse.success([url: consoleInfo.consoles?.first(), headers: [[name: 'Cookie', value: "session_id=${consoleInfo.sessionId}".toString()]], httpVersion: 'HTTP/1.0'])
+		}
+		return ServiceResponse.error();
+
 	}
 }

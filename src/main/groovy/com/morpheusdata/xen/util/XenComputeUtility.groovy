@@ -4,6 +4,7 @@ import com.bertramlabs.plugins.karman.CloudFile
 import com.bertramlabs.plugins.karman.StorageProvider
 import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.MorpheusUtils
+import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.Datastore
@@ -478,14 +479,19 @@ class XenComputeUtility {
             opts.connection = config.connection
             def vm = VM.getByUuid(opts.connection, vmId)
             def vmVif = findVif(opts, vm, networkUuid)
-            try {
-                if (opts.stopped != true)
-                    vmVif.unplug(opts.connection)
-            } catch (e2) {
-                log.warn("failed to unplug the nic")
-            }
-            vmVif.destroy(opts.connection)
-            rtn.success = true
+			if(vmVif) {
+				try {
+					if (opts.stopped != true)
+						vmVif.unplug(opts.connection)
+				} catch (e2) {
+					log.warn("failed to unplug the nic")
+				}
+				vmVif.destroy(opts.connection)
+				rtn.success = true
+			} else {
+				// vmVif not found, consider it a success
+				rtn.success = true
+			}
         } catch (e) {
             log.error("deleteVmNetwork error: ${e}", e)
             println("error: ${e.dump()}")
@@ -881,7 +887,7 @@ class XenComputeUtility {
     static getConsoles(opts, externalId) {
         def rtn = [success: false]
         try {
-            def config = getXenConnectionSession(opts.zone)
+            def config = getXenConnectionSession(opts)
             opts.connection = config.connection
             def vmRecord = VM.getByUuid(config.connection, externalId)
             rtn.vmId = externalId
@@ -1499,4 +1505,54 @@ class XenComputeUtility {
     static osTypeTemplates = [
             'ubuntu.14.04.64': 'Ubuntu Trusty Tahr 14.04'
     ]
+
+	static isValidIpv6Address(String address) {
+		// validate the ipv6 address is an ipv6 address. There is no separate validation for ipv6 addresses, so validate that its not an ipv4 address and it is a valid ip address
+		return address && NetworkUtility.validateIpAddr(address, false) == false && NetworkUtility.validateIpAddr(address, true) == true
+	}
+
+    static getVmSyncVolumes(Map authConfig, vm) {
+        def rtn = []
+        try {
+            def config = getXenConnectionSession(authConfig)
+            def vbdList = vm.getVBDs(config.connection)
+            vbdList?.each { vbd ->
+                if (vbd.getType(config.connection) == com.xensource.xenapi.Types.VbdType.DISK) {
+                    rtn << getVmVolumeInfo(config, vbd)
+                }
+            }
+            rtn = rtn.sort { it.displayOrder }
+        } catch (e) {
+            log.error("getVmVolumes error: ${e}", e)
+        }
+        return rtn
+    }
+
+    static buildSyncLists(existingItems, masterItems, matchExistingToMasterFunc) {
+        log.debug "buildSyncLists: ${existingItems}, ${masterItems}"
+        def rtn = [addList: [], updateList: [], removeList: []]
+        try {
+            existingItems?.each { existing ->
+                def matches = masterItems?.findAll { matchExistingToMasterFunc(existing, it) }
+                if (matches?.size() > 0) {
+                    matches?.each { match ->
+                        rtn.updateList << [existingItem: existing, masterItem: match]
+                    }
+                } else {
+                    rtn.removeList << existing
+                }
+            }
+            masterItems?.each { masterItem ->
+                def match = rtn?.updateList?.find {
+                    it.masterItem == masterItem
+                }
+                if (!match) {
+                    rtn.addList << masterItem
+                }
+            }
+        } catch (e) {
+            log.error "buildSyncLists error: ${e}", e
+        }
+        return rtn
+    }
 }

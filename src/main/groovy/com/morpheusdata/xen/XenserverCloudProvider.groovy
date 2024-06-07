@@ -38,7 +38,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getDescription() {
-		return 'XenServer'
+		return 'XCP-ng'
 	}
 
 	/**
@@ -48,7 +48,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Icon getIcon() {
-		return new Icon(path:'xen-light-90x30.svg', darkPath:'xen-dark-90x30.svg')
+		return new Icon(path:'xcpng-light.svg', darkPath:'xcpng-dark.svg')
 	}
 
 	/**
@@ -58,7 +58,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Icon getCircularIcon() {
-		return new Icon(path:'xenserver.svg', darkPath:'xenserver.svg')
+		return new Icon(path:'xcpng-circular-light.svg', darkPath:'xcpng-circular-dark.svg')
 	}
 
 	/**
@@ -76,17 +76,18 @@ class XenserverCloudProvider implements CloudProvider {
 				displayOrder: displayOrder,
 				fieldCode: 'gomorpheus.optiontype.ApiUrl',
 				fieldLabel:'API URL',
+				placeHolderText: 'xenserver.domain.com',
 				required: true,
 				inputType: OptionType.InputType.TEXT,
 		)
 		options << new OptionType(
 				name: 'Custom Port',
 				code: 'zoneType.xen.customPort',
-				fieldName: 'customPort',
+				fieldName: 'apiPort',
 				displayOrder: displayOrder += 10,
 				fieldCode: 'gomorpheus.optiontype.CustomPort',
 				fieldLabel:'Custom Port',
-				required: true,
+				required: false,
 				inputType: OptionType.InputType.TEXT,
 				fieldContext: 'config',
 		)
@@ -129,7 +130,7 @@ class XenserverCloudProvider implements CloudProvider {
 		)
 		options << new OptionType(
 				name: 'Inventory Existing Instances',
-				code: 'xenServer-import-existing',
+				code: 'zoneType.xen.importExisting',
 				fieldName: 'importExisting',
 				displayOrder: displayOrder += 10,
 				fieldLabel: 'Inventory Existing Instances',
@@ -139,8 +140,8 @@ class XenserverCloudProvider implements CloudProvider {
 		)
 		options << new OptionType(
 				name: 'Enable Hypervisor Console',
-				code: 'xenServer-enable-hypervisor',
-				fieldName: 'enableHypervisor',
+				code: 'zoneType.xen.enableHypervisor',
+				fieldName: 'enableVnc',
 				displayOrder: displayOrder += 10,
 				fieldLabel: 'Enable Hypervisor Console',
 				required: false,
@@ -179,6 +180,24 @@ class XenserverCloudProvider implements CloudProvider {
 
 		Collection<NetworkType> networks = context.services.network.list(new DataQuery().withFilter(
 				'code','in', ['dockerBridge', 'host', 'overlay']))
+
+		networks << new NetworkType([
+				code				: 'xenNetwork',
+				name				: 'XCP-ng Network',
+				description			: '',
+				overlay				: false,
+				externalType		: 'External',
+				creatable			: false,
+				cidrEditable		: true,
+				dhcpServerEditable	: true,
+				dnsEditable			: true,
+				gatewayEditable		: true,
+				cidrRequired		: false,
+				vlanIdEditable		: true,
+				canAssignPool		: true,
+				hasNetworkServer	: false,
+				hasCidr				: true
+		])
 
 		return networks
 	}
@@ -222,12 +241,12 @@ class XenserverCloudProvider implements CloudProvider {
 		Collection<ComputeServerType> serverTypes = []
 
 		//xen hypervisors
-		serverTypes << new ComputeServerType(code:'xenserverHypervisor', name:'Xen Hypervisor', description:'', platform:PlatformType.linux,
+		serverTypes << new ComputeServerType(code:'xenserverHypervisor', name:'XCP-ng Hypervisor', description:'', platform:PlatformType.linux,
 				nodeType:'xen-node', enabled:true, selectable:false, externalDelete:false, managed:false, controlPower:false, controlSuspend:false,
 				creatable:false, computeService:'xenserverComputeService', displayOrder:0, hasAutomation:false, containerHypervisor:false,
 				bareMetalHost:false, vmHypervisor:true, agentType: ComputeServerType.AgentType.none, provisionTypeCode: 'xen'
 		)
-		serverTypes << new ComputeServerType(code:'xenserverMetalHypervisor', name:'Xen Hypervisor - Metal', description:'',
+		serverTypes << new ComputeServerType(code:'xenserverMetalHypervisor', name:'XCP-ng Hypervisor - Metal', description:'',
 				platform:PlatformType.linux, nodeType:'xen-node', enabled:true, selectable:false, externalDelete:false, managed:false,
 				controlPower:false, controlSuspend:false, creatable:false, computeService:'xenserverComputeService', displayOrder:0,
 				hasAutomation:false, containerHypervisor:false, bareMetalHost:true, vmHypervisor:true, agentType: ComputeServerType.AgentType.none,
@@ -235,7 +254,7 @@ class XenserverCloudProvider implements CloudProvider {
 		)
 
 		//xen docker
-		serverTypes << new ComputeServerType(code:'xenserverLinux', name:'Xen Docker Host', description:'', platform:PlatformType.linux,
+		serverTypes << new ComputeServerType(code:'xenserverLinux', name:'XCP-ng Docker Host', description:'', platform:PlatformType.linux,
 				nodeType:'morpheus-node', reconfigureSupported:true, enabled:true, selectable:false, externalDelete:true, managed:true,
 				controlPower:true, controlSuspend:false, creatable:false, computeService:'xenserverComputeService', displayOrder:20,
 				hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.node,
@@ -243,33 +262,33 @@ class XenserverCloudProvider implements CloudProvider {
 		)
 
 		//kubernetes
-		serverTypes << new ComputeServerType(code:'xenKubeMaster', name:'Xen Kubernetes Master', description:'', platform:PlatformType.linux,
+		serverTypes << new ComputeServerType(code:'xenKubeMaster', name:'XCP-ng Kubernetes Master', description:'', platform:PlatformType.linux,
 				nodeType:'kube-master', reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true,
 				controlPower:true, controlSuspend:true, creatable:true, supportsConsoleKeymap: true, computeService:'xenserverComputeService',
 				displayOrder:10, hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false,
 				agentType: ComputeServerType.AgentType.guest, containerEngine:'docker', provisionTypeCode: 'xen', computeTypeCode:'kube-master',
 				optionTypes:[]
 		)
-		serverTypes << new ComputeServerType(code:'xenKubeWorker', name:'Xen Kubernetes Worker', description:'', platform:PlatformType.linux,
+		serverTypes << new ComputeServerType(code:'xenKubeWorker', name:'XCP-ng Kubernetes Worker', description:'', platform:PlatformType.linux,
 				nodeType:'kube-worker', reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true,
 				controlSuspend:true, creatable:true, supportsConsoleKeymap: true, computeService:'xenserverComputeService', displayOrder:10,
 				hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.guest,
 				containerEngine:'docker', provisionTypeCode: 'xen', computeTypeCode:'kube-worker', optionTypes:[]
 		)
 
-		serverTypes << new ComputeServerType(code:'xenserverVm', name:'Xen Instance', description:'', platform:PlatformType.linux,
+		serverTypes << new ComputeServerType(code:'xenserverVm', name:'XCP-ng Instance', description:'', platform:PlatformType.linux,
 				nodeType:'morpheus-vm-node', reconfigureSupported:true, enabled:true, selectable:false, externalDelete:true, managed:true,
 				controlPower:true, controlSuspend:false, creatable:false, computeService:'xenserverComputeService', displayOrder:0, hasAutomation:true,
 				containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.guest, guestVm:true,
 				provisionTypeCode: 'xen'
 		)
-		serverTypes << new ComputeServerType(code:'xenserverWindowsVm', name:'Xen Instance - Windows', description:'', platform:PlatformType.windows,
+		serverTypes << new ComputeServerType(code:'xenserverWindowsVm', name:'XCP-ng Instance - Windows', description:'', platform:PlatformType.windows,
 				nodeType:'morpheus-windows-vm-node', reconfigureSupported:true, enabled:true, selectable:false, externalDelete:true, managed:true,
 				controlPower:true, controlSuspend:false, creatable: false, computeService:'xenserverComputeService', displayOrder:0,
 				hasAutomation:true, containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.guest,
 				guestVm:true, provisionTypeCode: 'xen'
 		)
-		serverTypes << new ComputeServerType(code:'xenserverUnmanaged', name:'Xen Instance', description:'xen vm', platform:PlatformType.linux,
+		serverTypes << new ComputeServerType(code:'xenserverUnmanaged', name:'XCP-ng Instance', description:'xen vm', platform:PlatformType.linux,
 				nodeType:'unmanaged', reconfigureSupported:true, enabled:true, selectable:false, externalDelete:true, managed:false,
 				controlPower:true, controlSuspend:false, creatable:false, computeService:'xenserverComputeService', displayOrder:99,
 				hasAutomation:false, containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.none,
@@ -341,7 +360,7 @@ class XenserverCloudProvider implements CloudProvider {
 				refresh(cloudInfo)
 				rtn.success = true
 			} else {
-				log.debug('offline: xen host not reachable', syncDate)
+				rtn = ServiceResponse.error('host not reachable', null, [status: Cloud.Status.offline])
 			}
 		} catch(e) {
 			log.error("refresh cloud error: ${e}", e)
@@ -390,7 +409,7 @@ class XenserverCloudProvider implements CloudProvider {
 
 				rtn = ServiceResponse.success()
 			} else {
-				rtn = ServiceResponse.error(testResults.invalidLogin == true ? 'invalid credentials' : 'error connecting')
+				rtn = ServiceResponse.error(testResults.invalidLogin == true ? 'invalid credentials' : 'host not reachable', null, [status: Cloud.Status.offline])
 			}
 		} catch(e) {
 			log.error("refresh cloud error: ${e}", e)
@@ -505,7 +524,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean supportsDistributedWorker() {
-		return false
+		return true
 	}
 
 	/**
@@ -578,7 +597,7 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getDefaultProvisionTypeCode() {
-		return XenserverProvisionProvider.PROVISION_PROVIDER_CODE
+		return XenserverProvisionProvider.PROVIDER_CODE
 	}
 
 	/**
@@ -617,6 +636,6 @@ class XenserverCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getName() {
-		return 'XenServer'
+		return 'XCP-ng'
 	}
 }
