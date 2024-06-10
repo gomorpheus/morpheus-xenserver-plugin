@@ -205,7 +205,8 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 					getPlugin().morpheus.executeCommandOnServer(server, "sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\"; sudo cat /tmp/machine-id-old > /etc/machine-id ; sudo rm /tmp/machine-id-old ; sync", false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
 				}
 			}
-			log.info("backup complete: {}", snapshotResults)
+//			log.info("backup complete: {}", snapshotResults)
+			log.info("RAZI :: snapshotResults backup complete: {}", snapshotResults)
 			if(snapshotResults.success) {
 				//save the snapshot
 				Snapshot snapshotRecord = new Snapshot(account:server.account, externalId:snapshotResults.snapshotId, name:"snapshot-${new Date().time}")
@@ -253,6 +254,7 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 					if(saveResults.success == true && exportResults.success == true) {
 						rtn.success = true
 						rtn.data.backupResult.snapshotId = snapshotResults.snapshotId
+						log.info("RAZI :: rtn.data.backupResult.snapshotId: ${rtn.data.backupResult.snapshotId}")
 						rtn.data.backupResult.externalId = snapshotResults.snapshotId
 						rtn.data.backupResult.setConfigProperty("vmId", snapshotResults.externalId)
 						rtn.data.backupResult.sizeInMb = (saveResults.archiveSize ?: 1) / ComputeUtility.ONE_MEGABYTE
