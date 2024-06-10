@@ -1741,8 +1741,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					def networkResults = XenComputeUtility.addVmNetwork(authConfigMap, computeServer.externalId, networkConfig)
 					log.debug("networkResults ${networkResults}")
 					if (networkResults.success == true) {
-						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex, index)
+						def newInterface = buildNetworkInterface(computeServer, networkResults, newNetwork, newIndex)
 						newInterface.uniqueId = isWorkload ? "morpheus-nic-${instanceId}-${workload.id}-${newIndex}" : "morpheus-nic-${server.id}-${newIndex}"
+						newInterface.primaryInterface = false
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
 						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
 					}
@@ -1807,10 +1808,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		return newVolume
 	}
 
-	def buildNetworkInterface(server, networkResults, newNetwork, newIndex, index) {
+	def buildNetworkInterface(server, networkResults, newNetwork, newIndex) {
 		def newInterface = new ComputeServerInterface([
-				name        : getInterfaceName(server.platform, index),
-				externalId  : "${networkResults.networkIndex}",//networkResults.uuid, // check: from resize server
+				name        : getInterfaceName(server.platform, newIndex),
+				externalId  : "${networkResults.networkIndex}",
 				internalId  : networkResults.uuid,
 				network     : newNetwork,
 				displayOrder: newIndex
