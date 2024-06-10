@@ -69,7 +69,7 @@ class VirtualMachineSync {
                 }.onAdd {itemsToAdd ->
                     addMissingVirtualMachines(itemsToAdd, usageLists, availablePlans, availablePlanPermissions, authConfig, hosts)
                 }.onUpdate { List<SyncTask.UpdateItem<ComputeServer, VM.Record>> updateItems ->
-                    updateMatchedVirtualMachines(updateItems)
+                    updateMatchedVirtualMachines(updateItems, authConfig)
                 }.onDelete { removeItems ->
                     removeMissingVirtualMachines(removeItems)
                 }.observe().blockingSubscribe()
@@ -199,7 +199,7 @@ class VirtualMachineSync {
         return morpheusContext.async.computeServer.get(server.id).blockingGet()
     }
 
-    void updateMatchedVirtualMachines(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList) {
+    void updateMatchedVirtualMachines(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList, authConfig) {
         log.debug("VirtualMachineSync >> updateMatchedVirtualMachines() called")
         List<ComputeServer> saves = []
         for (update in updateList) {
@@ -225,6 +225,16 @@ class VirtualMachineSync {
                     if(currentServer.agentInstalled) {
                         maxUsedStorage = currentServer.usedStorage
                     }
+
+                    def volumesList = cloudItem.volumes ?: XenComputeUtility.getVmSyncVolumes(authConfig, cloudItem.vm)
+                    def volumeResults = syncVmVolumes(volumesList, currentServer)
+                    def vmNetworks = cloudItem.guestMetrics ? cloudItem.guestMetrics['networks'] : [:]
+                    syncVmNetworks(cloudItem.virtualInterfaces, currentServer, vmNetworks)
+                    if(volumeResults.maxStorage && currentServer.maxStorage != volumeResults.maxStorage) {
+                        currentServer.maxStorage = volumeResults.maxStorage
+                        save = true
+                    }
+
                     currentServer.capacityInfo = capacityInfo
                     if (save) {
                         saves << currentServer
@@ -406,7 +416,8 @@ class VirtualMachineSync {
                         volume.rootVolume = true
                     }
                     if (dataStoreExId) {
-                        def datastore = new Datastore("code": "xenserver.sr.${server.cloud.id}.${dataStoreExId}")
+                        def datastore = morpheusContext.services.cloud.datastore.find(
+                                new DataQuery().withFilter("code", "xenserver.sr.${server.cloud.id}.${dataStoreExId}"))
                         if (datastore) {
                             volume.datastore = datastore
                         }
