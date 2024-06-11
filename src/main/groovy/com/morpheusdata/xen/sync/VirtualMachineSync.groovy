@@ -89,9 +89,6 @@ class VirtualMachineSync {
 				try {
 					def vmConfig = buildVmConfig(cloudItem, servicePlan, availablePlans, availablePlanPermissions, hosts)
 					ComputeServer add = new ComputeServer(vmConfig)
-					if(servicePlan) {
-						applyServicePlan(add, servicePlan)
-					}
 					ComputeServer savedServer = morpheusContext.async.computeServer.create(add).blockingGet()
 					if(!savedServer) {
 						log.error "Error in creating server ${add}"
@@ -149,18 +146,6 @@ class VirtualMachineSync {
             ]
         }
         vmConfig
-    }
-
-    private applyServicePlan(ComputeServer server, ServicePlan servicePlan) {
-        server.plan = servicePlan
-        server.maxCores = servicePlan.maxCores
-        server.maxCpu = servicePlan.maxCpu
-        server.maxMemory = servicePlan.maxMemory
-        if (server.computeCapacityInfo) {
-            server.computeCapacityInfo.maxCores = server.maxCores
-            server.computeCapacityInfo.maxCpu = server.maxCpu
-            server.computeCapacityInfo.maxMemory = server.maxMemory
-        }
     }
 
     private Boolean performPostSaveSync(ComputeServer server, Map cloudItem, Map authConfig) {
