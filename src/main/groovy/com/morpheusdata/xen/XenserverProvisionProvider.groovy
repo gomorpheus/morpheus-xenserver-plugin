@@ -331,13 +331,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				new DataQuery().withFilter("code", "standard")).toList().blockingGet()
 	}
 
-	//TODO: This method is available in embedded code, here it needs core support.
-	// It is Stubbed out because core support doesn't exist at time of implementation.
-//	@Override
-	def importContainer(Container container, Map opts = [:]) {
-		// Method stub: No implementation yet
-	}
-
 	/**
 	 * Provides a Collection of ${@link ServicePlan} related to this ProvisionProvider that can be seeded in.
 	 * Some clouds do not use this as they may be synced in from the public cloud. This is more of a factor for
@@ -1852,7 +1845,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def cloudBucket = providerMap[storageProvider.bucketName]
 				def exportImage = importWorkloadRequest.targetImage
 				exportImage.virtualImageType = new VirtualImageType(code: 'xva')
-				//exportImage.imageType = 'xva' // This code is present in embedded
+				exportImage.imageType = ImageType.xva
 				exportImage.owner = server.account
 				exportImage = context.async.virtualImage.create(exportImage).blockingGet()
 				def archiveFolder = "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
@@ -1860,7 +1853,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				context.async.virtualImage.save(exportImage).blockingGet()
 				def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud]
 				log.debug("archiveOpts: ${archiveOpts}")
-				def archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder)
+				def archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder) { percent ->
+					exportImage.statusPercent = percent.toDouble()
+					context.services.virtualImage.save(exportImage)
+				}
 				log.debug("archiveResults: ${archiveResults}")
 				if (archiveResults.success == true) {
 					response.virtualImage = exportImage
