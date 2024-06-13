@@ -460,7 +460,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 									containerType: 'vhd',
 									cloudFiles   : cloudFiles,
 									imageFile    : imageFile,
-									imageSize    : imageFile.contentLength
+									imageSize    : imageFile?.contentLength
 							]
 					def imageConfig =
 							[
@@ -594,7 +594,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 											netInterface.addresses << address
 											netInterface.publicIpAddress = data.ipAddress
 										}
-										if (data.ipv6Address6 && XenComputeUtility.isValidIpv6Address(data.ipv6Address)) {
+										if (data.ipv6Address) {
 											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
 											netInterface.addresses << address
 											netInterface.publicIpv6Address = data.ipv6Address
@@ -1256,6 +1256,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						if(matchNetwork) {
 							networkInterface.externalId = "${matchNetwork.deviceIndex}"
 							networkInterface.internalId = "${matchNetwork.uuid}"
+							networkInterface.macAddress = matchNetwork.macAddress
 							if(networkInterface.type == null) {
 								networkInterface.type = new ComputeServerInterfaceType(code: 'xenNetwork')
 							}
@@ -1544,12 +1545,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								def keyInfo = key.tokenize('/')
 								def interfaceName = "eth${keyInfo[0]}"
 								rtn.ipAddresses[interfaceName] = rtn.ipAddresses[interfaceName] ?: [:]
-								if(keyInfo[1] == 'ip') {
+								if(keyInfo[1] == 'ipv4') {
 									rtn.ipAddresses[interfaceName].ipAddress = value
 									if(interfaceName == 'eth0') {
 										rtn.ipAddress = value
 									}
-								} else { //ipv6
+								} else if(keyInfo[1] == 'ipv6') { //ipv6
 									rtn.ipAddresses[interfaceName].ipv6Address = value
 								}
 							}

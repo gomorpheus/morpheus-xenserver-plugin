@@ -69,7 +69,7 @@ class VirtualMachineSync {
                 }.onAdd {itemsToAdd ->
                     addMissingVirtualMachines(itemsToAdd, usageLists, availablePlans, availablePlanPermissions, authConfig, hosts)
                 }.onUpdate { List<SyncTask.UpdateItem<ComputeServer, VM.Record>> updateItems ->
-                    updateMatchedVirtualMachines(updateItems)
+                    updateMatchedVirtualMachines(updateItems, authConfig)
                 }.onDelete { removeItems ->
                     removeMissingVirtualMachines(removeItems)
                 }.observe().blockingSubscribe()
@@ -89,9 +89,6 @@ class VirtualMachineSync {
 				try {
 					def vmConfig = buildVmConfig(cloudItem, servicePlan, availablePlans, availablePlanPermissions, hosts)
 					ComputeServer add = new ComputeServer(vmConfig)
-					if(servicePlan) {
-						applyServicePlan(add, servicePlan)
-					}
 					ComputeServer savedServer = morpheusContext.async.computeServer.create(add).blockingGet()
 					if(!savedServer) {
 						log.error "Error in creating server ${add}"
@@ -151,18 +148,6 @@ class VirtualMachineSync {
         vmConfig
     }
 
-    private applyServicePlan(ComputeServer server, ServicePlan servicePlan) {
-        server.plan = servicePlan
-        server.maxCores = servicePlan.maxCores
-        server.maxCpu = servicePlan.maxCpu
-        server.maxMemory = servicePlan.maxMemory
-        if (server.computeCapacityInfo) {
-            server.computeCapacityInfo.maxCores = server.maxCores
-            server.computeCapacityInfo.maxCpu = server.maxCpu
-            server.computeCapacityInfo.maxMemory = server.maxMemory
-        }
-    }
-
     private Boolean performPostSaveSync(ComputeServer server, Map cloudItem, Map authConfig) {
         log.debug("performPostSaveSync: ${server?.id}")
         def changes = false
@@ -199,7 +184,7 @@ class VirtualMachineSync {
         return morpheusContext.async.computeServer.get(server.id).blockingGet()
     }
 
-    void updateMatchedVirtualMachines(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList) {
+    void updateMatchedVirtualMachines(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList, authConfig) {
         log.debug("VirtualMachineSync >> updateMatchedVirtualMachines() called")
         List<ComputeServer> saves = []
         for (update in updateList) {
@@ -225,6 +210,16 @@ class VirtualMachineSync {
                     if(currentServer.agentInstalled) {
                         maxUsedStorage = currentServer.usedStorage
                     }
+
+                    def volumesList = cloudItem.volumes ?: XenComputeUtility.getVmSyncVolumes(authConfig, cloudItem.vm)
+                    def volumeResults = syncVmVolumes(volumesList, currentServer)
+                    def vmNetworks = cloudItem.guestMetrics ? cloudItem.guestMetrics['networks'] : [:]
+                    syncVmNetworks(cloudItem.virtualInterfaces, currentServer, vmNetworks)
+                    if(volumeResults.maxStorage && currentServer.maxStorage != volumeResults.maxStorage) {
+                        currentServer.maxStorage = volumeResults.maxStorage
+                        save = true
+                    }
+
                     currentServer.capacityInfo = capacityInfo
                     if (save) {
                         saves << currentServer
@@ -406,7 +401,8 @@ class VirtualMachineSync {
                         volume.rootVolume = true
                     }
                     if (dataStoreExId) {
-                        def datastore = new Datastore("code": "xenserver.sr.${server.cloud.id}.${dataStoreExId}")
+                        def datastore = morpheusContext.services.cloud.datastore.find(
+                                new DataQuery().withFilter("code", "xenserver.sr.${server.cloud.id}.${dataStoreExId}"))
                         if (datastore) {
                             volume.datastore = datastore
                         }
