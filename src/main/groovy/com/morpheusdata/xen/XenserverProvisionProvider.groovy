@@ -1827,7 +1827,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	@Override
 	ServiceResponse<ImportWorkloadResponse> importWorkload(ImportWorkloadRequest importWorkloadRequest) {
-		log.info("importWorkload started")
+		log.debug("importWorkload started")
 		ImportWorkloadResponse response = new ImportWorkloadResponse()
 		ServiceResponse serviceResponse = ServiceResponse.prepare(response)
 		try {
