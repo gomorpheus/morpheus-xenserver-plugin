@@ -1411,7 +1411,6 @@ class XenComputeUtility {
             if (rtn.contentLength < 0 && fileSize > 0)
                 rtn.contentLength = fileSize
             log.info("download image contentLength: ${rtn.contentLength}")
-            //def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getEntity().getContent(), 1200), rtn.contentLength, null, null)
             def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getContent(), 1200), rtn.contentLength, 1, 0)
             vmInputStream.progressCallback = progressCallback
             targetFile.setContentLength(rtn.contentLength)
