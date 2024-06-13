@@ -13,7 +13,9 @@ import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.model.*
 import com.morpheusdata.model.provisioning.HostRequest
 import com.morpheusdata.model.provisioning.WorkloadRequest
+import com.morpheusdata.request.ImportWorkloadRequest
 import com.morpheusdata.request.ResizeRequest
+import com.morpheusdata.response.ImportWorkloadResponse
 import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
 import com.morpheusdata.response.ServiceResponse
@@ -23,7 +25,7 @@ import com.xensource.xenapi.VM
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet, ProvisionProvider.HypervisorConsoleFacet {
+class XenserverProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, HostProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet, ProvisionProvider.HypervisorConsoleFacet, WorkloadProvisionProvider.ImportWorkloadFacet {
 
 	public static final String PROVIDER_NAME = 'XCP-ng'
 	public static final String PROVIDER_CODE = 'xen'
@@ -327,13 +329,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	Collection<StorageVolumeType> getDataVolumeStorageTypes() {
 		context.async.storageVolume.storageVolumeType.list(
 				new DataQuery().withFilter("code", "standard")).toList().blockingGet()
-	}
-
-	//TODO: This method is available in embedded code, here it needs core support.
-	// It is Stubbed out because core support doesn't exist at time of implementation.
-//	@Override
-	def importContainer(Container container, Map opts = [:]) {
-		// Method stub: No implementation yet
 	}
 
 	/**
@@ -1828,5 +1823,53 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		}
 		return ServiceResponse.error();
 
+	}
+
+	@Override
+	ServiceResponse<ImportWorkloadResponse> importWorkload(ImportWorkloadRequest importWorkloadRequest) {
+		log.debug("importWorkload started")
+		ImportWorkloadResponse response = new ImportWorkloadResponse()
+		ServiceResponse serviceResponse = ServiceResponse.prepare(response)
+		try {
+			Workload workload = importWorkloadRequest.workload
+			ComputeServer server = workload?.server
+			def authConfigMap = plugin.getAuthConfig(server.cloud)
+			def snapshotName = "${workload?.instance?.name}-${workload?.id}-${System.currentTimeMillis()}"
+			def vmName = workload?.instance?.containers?.size() > 0 ? "${workload?.instance?.name}-${workload?.id}" : workload?.instance?.name
+			def snapshotOpts = [authConfig: authConfigMap, externalId: server.externalId, snapshotName: snapshotName, snapshotDescription: 'morpheus import']
+			log.debug("snapshotOpts: ${snapshotOpts}")
+			def snapshotResults = XenComputeUtility.snapshotVm(snapshotOpts, server.externalId)
+			log.debug("snapshotResults: ${snapshotResults}")
+			if (snapshotResults.success) {
+				def storageProvider = importWorkloadRequest.storageBucket
+				def providerMap = context.async.storageBucket.getBucketStorageProvider(storageProvider.id).blockingGet()
+				def cloudBucket = providerMap[storageProvider.bucketName]
+				def exportImage = importWorkloadRequest.targetImage
+				exportImage.virtualImageType = new VirtualImageType(code: 'xva')
+				exportImage.imageType = ImageType.xva
+				exportImage.owner = server.account
+				exportImage = context.async.virtualImage.create(exportImage).blockingGet()
+				def archiveFolder = "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
+				exportImage.remotePath = archiveFolder
+				context.async.virtualImage.save(exportImage).blockingGet()
+				def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud]
+				log.debug("archiveOpts: ${archiveOpts}")
+				def archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder) { percent ->
+					exportImage.statusPercent = percent.toDouble()
+					context.services.virtualImage.save(exportImage)
+				}
+				log.debug("archiveResults: ${archiveResults}")
+				if (archiveResults.success == true) {
+					response.virtualImage = exportImage
+					response.imagePath = archiveFolder
+					serviceResponse.data = response
+					serviceResponse.success = true
+				}
+			}
+		} catch (e) {
+			log.error("importWorkload error: ${e}", e)
+			serviceResponse.msg = e.message
+		}
+		return serviceResponse
 	}
 }
