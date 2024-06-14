@@ -155,8 +155,6 @@ class XenComputeUtility {
             def config = getXenConnectionSession(opts.authConfig)
             opts.connection = config.connection
             def srRecord = SR.getByUuid(config.connection, opts.datastore.externalId)
-            log.info("RAZI :: opts.sourceVmId: ${opts.sourceVmId}")
-            log.info("RAZI :: opts.imageId: ${opts.imageId}")
             def template = VM.getByUuid(config.connection, opts.imageId)
             def sourceVmId = opts.sourceVmId
             def sourceVm

@@ -449,7 +449,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: server.sourceImage.id)
 				virtualImage = context.async.virtualImage.get(virtualImageId).blockingGet()
 				imageId = virtualImage.locations.find { it.refType == "ComputeZone" && it.refId == cloud.id }?.externalId
-				log.info("RAZI :: imageId before : if (!imageId): ${imageId}")
 				if (!imageId) { //If its userUploaded and still needs uploaded
 					//TODO: We need to upload ovg/vmdk stuff here
 					def primaryNetwork = server.interfaces?.find { it.network }?.network
@@ -479,7 +478,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							]
 					imageConfig.authConfig = authConfigMap
 					def imageResults = XenComputeUtility.insertTemplate(imageConfig)
-					log.info("RAZI :: imageResults: ${imageResults}")
 					log.debug("insertTemplate: imageResults: ${imageResults}")
 					if (imageResults.success == true) {
 						imageId = imageResults.imageId
@@ -492,9 +490,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						new DataQuery().withFilter("backupSetId", opts.backupSetId)
 								.withFilter("containerId", opts.cloneContainerId))
 				def snapshot = snapshots.find { it.backupSetId == opts.backupSetId }
-				log.info("RAZI :: snapshot?.snapshotId: ${snapshot?.snapshotId}")
 				def snapshotId = snapshot?.snapshotId
-				log.info("RAZI :: snapshot?.configMap?.vmId: ${snapshot?.configMap?.vmId}")
 				sourceVmId = snapshot?.configMap?.vmId
 				if (snapshotId) {
 					imageId = snapshotId
@@ -512,8 +508,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 			}
-			log.info("RAZI :: imageId before : if (imageId): ${imageId}")
-			log.info("RAZI :: sourceVmId before : if (imageId): ${sourceVmId}")
 			if (imageId) {
 				def userGroups = workload.instance.userGroups?.toList() ?: []
 				if (workload.instance.userGroup && userGroups.contains(workload.instance.userGroup) == false) {
@@ -572,12 +566,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				server = saveAndGet(server)
 				createOpts.server = server
 				def createResults
-				log.info("RAZI :: sourceVmId before : if (sourceVmId): ${sourceVmId}")
 				if (sourceVmId) {
 					createOpts.sourceVmId = sourceVmId
 					log.debug("runworkload: calling cloneServer")
 					createResults = XenComputeUtility.cloneServer(createOpts, getCloudIsoOutputStream(createOpts))
-					log.info("RAZI :: createResults: ${createResults}")
 				} else {
 					log.debug("runworkload: calling createProvisionServer")
 					createResults = createProvisionServer(createOpts)
