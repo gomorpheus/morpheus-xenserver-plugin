@@ -13,7 +13,7 @@ import com.morpheusdata.model.Snapshot
 import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.xen.util.XenComputeUtility
 import groovy.util.logging.Slf4j
-
+import com.morpheusdata.core.util.DateUtility
 import java.util.zip.ZipOutputStream
 
 @Slf4j
@@ -258,6 +258,15 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 						rtn.data.backupResult.sizeInMb = (saveResults.archiveSize ?: 1) / ComputeUtility.ONE_MEGABYTE
 						rtn.data.backupResult.status = BackupResult.Status.SUCCEEDED
 						rtn.data.updates = true
+						if(!backupResult.endDate) {
+							rtn.data.backupResult.endDate = new Date()
+							def startDate = backupResult.startDate
+							if(startDate) {
+								def start = DateUtility.parseDate(startDate)
+								def end = rtn.data.backupResult.endDate
+								rtn.data.backupResult.durationMillis = end.time - start.time
+							}
+						}
 					} else {
 						rtn.data.backupResult.status = BackupResult.Status.FAILED
 						rtn.data.updates = true
