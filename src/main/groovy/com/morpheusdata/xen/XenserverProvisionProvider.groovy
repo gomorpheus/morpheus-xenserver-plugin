@@ -500,7 +500,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					imageId = snapshotId
 				}
 				if (!network && (cloneContainer || snapshot.configMap)) {
-					def cloneContainerConfig = cloneContainer?.configMap ?: snapshot.configMap
+					def cloneContainerConfig = cloneContainer?.configMap ?: snapshot?.configMap ?: [:]
 					networkId = cloneContainerConfig.networkId
 					if (networkId) {
 						containerConfig.networkId = networkId
@@ -768,12 +768,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def stopResults = stopWorkload(workload)
 				log.debug("removeWorkload: stopResults: ${stopResults}")
 				def authConfigMap = plugin.getAuthConfig(workload.server.cloud)
-				if(!opts.keepBackups) {
-					workload.server.snapshots?.each { snap ->
-						log.debug("Removing VM Xen Snapshot: {}", snap.externalId)
-						XenComputeUtility.destroyVm(authConfigMap, snap.externalId)
-					}
-				}
 				def removeResults = XenComputeUtility.destroyVm(authConfigMap, workload.server.externalId)
 				log.debug("removeWorkload: removeResults: ${removeResults}")
 				if(removeResults.success == true) {
