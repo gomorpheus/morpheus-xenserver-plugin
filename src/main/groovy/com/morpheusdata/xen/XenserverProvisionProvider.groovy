@@ -1441,7 +1441,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		def virtualImageTypes = [
 			new VirtualImageType(
 				code:"xen", name:"XCP-ng", nameCode:"gomorpheus.virtualImage.types.xcpng",
-				creatable: true, active:true, visible: true
+				creatable: false, active:true, visible: true
 			),
 			new VirtualImageType(code: 'vhd', name: 'VHD'),
 			new VirtualImageType(code: 'xva', name: 'XVA'),
