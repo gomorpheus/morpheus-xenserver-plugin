@@ -4,7 +4,7 @@ resource "option-type" "instanceType-xen-template" {
   name             = "Template"
   category         = "instanceType.xen"
   fieldName        = "imageId"
-  optionSource     = "xenVirtualImages"
+  optionSource     = "virtualImages"
   fieldCode        = "gomorpheus.optiontype.Image"
   fieldLabel       = "Image"
   fieldContext     = "config"

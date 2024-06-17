@@ -139,7 +139,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				required: false,
 				editable: false,
 				noSelection: 'Select',
-				optionSource: 'xenVirtualImages'
+				optionSource: 'virtualImages'
 		)
 		nodeOptions << new OptionType(
 				name: 'mount logs',

@@ -1084,7 +1084,6 @@ class XenComputeUtility {
 
     static insertContainerImage(opts) {
         def rtn = [success: false, found: false]
-//        def uploadTask
         try {
             def currentList = listTemplates(opts.authConfig)?.templateList
             def image = opts.image
@@ -1101,7 +1100,7 @@ class XenComputeUtility {
                         imageFile       :image.imageFile,
                         diskSize        :image.imageSize,
                         cloudFiles      :image.cloudFiles,
-//                        cachePath       :opts.cachePath,
+                        //cachePath       :opts.cachePath,
                         datastore       :opts.datastore,
                         network         :opts.network,
                         connection      :opts.connection
@@ -1109,7 +1108,7 @@ class XenComputeUtility {
 
 
                 //estimated disk size is wrong. we have to recalculate it
-                if (image.imageFile.name.endsWith('.tar.gz')) {
+                if (image.imageFile?.name?.endsWith('.tar.gz')) {
                     log.info("tar gz stream detected. recalculating size...")
                     def sourceStream = image.imageFile.inputStream
                     def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
@@ -1128,8 +1127,6 @@ class XenComputeUtility {
                     rtn.vdi = createResults.vdi
                     rtn.srRecord = srRecord
                     insertOpts.vdi = rtn.vdi
-//                    def creds = getXenUsername(opts.zone) + ':' + getXenPassword(opts.zone)
-//                    insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(getXenUsername(opts.zone), getXenPassword(opts.zone))
                     insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
