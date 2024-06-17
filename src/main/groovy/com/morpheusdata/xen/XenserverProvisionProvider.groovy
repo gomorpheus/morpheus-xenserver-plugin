@@ -1436,6 +1436,20 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		return false
 	}
 
+	@Override
+	Collection<VirtualImageType> getVirtualImageTypes() {
+		def virtualImageTypes = [
+			new VirtualImageType(
+				code:"xen", name:"XCP-ng", nameCode:"gomorpheus.virtualImage.types.xcpng",
+				creatable: true, active:true, visible: true
+			),
+			new VirtualImageType(code: 'vhd', name: 'VHD'),
+			new VirtualImageType(code: 'xva', name: 'XVA'),
+		]
+
+		return virtualImageTypes
+	}
+
 	def setVolumeInfo(serverVolumes, externalVolumes) {
 		log.debug("volumes: ${externalVolumes}")
 		try {

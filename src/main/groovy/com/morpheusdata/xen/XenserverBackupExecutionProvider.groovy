@@ -10,6 +10,8 @@ import com.morpheusdata.model.BackupResult
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeServer
 import com.morpheusdata.model.Snapshot
+import com.morpheusdata.model.Workload
+import com.morpheusdata.model.projection.SnapshotIdentityProjection
 import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.xen.util.XenComputeUtility
 import groovy.util.logging.Slf4j
@@ -103,34 +105,50 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 	@Override
 	ServiceResponse deleteBackupResult(BackupResult backupResult, Map opts) {
 		log.debug("Delete backup result {}", backupResult.id)
+
 		ServiceResponse rtn = ServiceResponse.prepare()
 		try{
-			def snapshotId = backupResult.snapshotId
-			def sourceWorkload = plugin.morpheus.async.workload.get(opts?.containerId ?: backupResult.containerId).blockingGet()
-			ComputeServer computeServer = sourceWorkload.server
-			Cloud cloud = computeServer.cloud
-			//TODO: below lines of code needs core support
-//			if(backup.copyToStore) {
-//				super.cleanBackupResult(backupResult)
-//			}
+			String snapshotId = backupResult.snapshotId
+			Workload sourceWorkload = morpheusContext.services.workload.get(opts?.containerId ?: backupResult.containerId)
+			Cloud cloud = null
+			ComputeServer computeServer = null
+			if(sourceWorkload) {
+				computeServer = sourceWorkload?.server
+				cloud = computeServer.cloud
+			} else if(backupResult.zoneId) {
+				cloud = morpheusContext.services.cloud.get(backupResult.zoneId)
+			}
+
 			if(cloud) {
 				Map authConfig = plugin.getAuthConfig(cloud)
-				def result = XenComputeUtility.destroyVm(authConfig, snapshotId)
-				log.debug("delete xen snapshot result: {}", result)
-				if(!result?.success) {
+				Boolean deleteSuccess = false
+				try {
+					def result = XenComputeUtility.destroyVm(authConfig, snapshotId)
+					log.debug("delete xen snapshot result: {}", result)
+					if(result?.success) {
+						deleteSuccess = true
+					}
+				} catch(com.xensource.xenapi.Types.UuidInvalid ignored) {
+					// snapshot not found, continue
+					deleteSuccess = true
+				}
+				if(!deleteSuccess) {
 					rtn.success = false
 				} else {
-					def snapshotRecord = computeServer?.snapshots?.find{it.externalId == snapshotId}
-					if(snapshotRecord) {
-						computeServer.snapshots.remove(snapshotRecord)
-						morpheusContext.async.computeServer.save(computeServer).blockingGet()
-						morpheusContext.async.snapshot.remove(snapshotRecord).blockingGet()
+					if(computeServer) {
+						// snapshot deleted successfully and this is not a preserved backup, clean up snapshot record from the server
+						SnapshotIdentityProjection snapshotRecord = computeServer?.snapshots?.find { it.externalId == snapshotId }
+						if(snapshotRecord) {
+							computeServer.snapshots.remove(snapshotRecord)
+							morpheusContext.services.computeServer.save(computeServer)
+							morpheusContext.services.snapshot.remove(snapshotRecord)
+						}
 					}
 					rtn.success = true
 				}
 			}
 		} catch(e) {
-			log.error("error in deleteBackupResult: ${e.message}",e)
+			log.error("error in deleteBackupResult: {}", e,e)
 			rtn.success = false
 		}
 		return rtn

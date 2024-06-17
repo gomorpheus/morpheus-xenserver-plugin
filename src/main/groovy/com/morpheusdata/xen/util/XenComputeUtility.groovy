@@ -363,25 +363,24 @@ class XenComputeUtility {
         def rtn = [success: false]
         try {
 
-            def config = getXenConnectionSession(authConfig)
-            def vm = VM.getByUuid(config.connection, vmId)
-            def vbdList = vm.getVBDs(config.connection)
-            def vdiList = []
-            vbdList?.each { vbd ->
-                def vdi = vbd.getVDI(config.connection)
-                if (vbd.getType(config.connection) == com.xensource.xenapi.Types.VbdType.DISK && vdi) {
-                    vdiList << vdi
-                }
-            }
-            vm.destroy(config.connection)
-            vdiList?.each { vdi ->
-                vdi.destroy(config.connection)
-            }
-            rtn.success = true
+			def config = getXenConnectionSession(authConfig)
+			def vm = VM.getByUuid(config.connection, vmId)
+			def vbdList = vm.getVBDs(config.connection)
+			def vdiList = []
+			vbdList?.each { vbd ->
+				def vdi = vbd.getVDI(config.connection)
+				if(vbd.getType(config.connection) == com.xensource.xenapi.Types.VbdType.DISK && vdi) {
+					vdiList << vdi
+				}
+			}
+			vm.destroy(config.connection)
+			vdiList?.each { vdi ->
+				vdi.destroy(config.connection)
+			}
+			rtn.success = true
+		} catch(com.xensource.xenapi.Types.UuidInvalid ignored) {
+			rtn.success = true
         } catch (e) {
-            if ("${e}".contains('uuid you supplied was invalid')) {
-                rtn.success = true //not found
-            }
             log.error("destroyVm error: ${e}", e)
             rtn.msg = 'error on destroy vm'
         }
@@ -1362,9 +1361,10 @@ class XenComputeUtility {
     static downloadImage(opts, srcUrl, targetStream) {
         log.info("downloadImage")
 		CloseableHttpResponse httpResponse
+		HttpApiClient httpClient
         def rtn = [success: false, ovfFiles: []]
         try {
-			def httpClient = new HttpApiClient()
+			httpClient = new HttpApiClient()
 			def requetOptions = new HttpApiClient.RequestOptions()
 			def response = httpClient.callStreamApi(srcUrl, null, opts.authConfig.username, opts.authConfig.password, requetOptions, "GET")
 			httpResponse = response.data
@@ -1382,6 +1382,7 @@ class XenComputeUtility {
         } finally {
 			try {
 				httpResponse?.close()
+				httpClient?.shutdownClient()
 			} catch (Exception ex3) {
 				log.error("downloadImage target Stream close error, {}", ex3)
 			}
@@ -1400,9 +1401,10 @@ class XenComputeUtility {
     static archiveImage(opts, srcUrl, targetFile, fileSize = 0, progressCallback = null) {
         log.info("downloadImage: src: ${srcUrl}")
 		CloseableHttpResponse httpResponse
+		HttpApiClient httpClient
         def rtn = [success: false, ovfFiles: []]
         try {
-			def httpClient = new HttpApiClient()
+			httpClient = new HttpApiClient()
 			def requetOptions = new HttpApiClient.RequestOptions()
 			def response = httpClient.callStreamApi(srcUrl, null, opts.authConfig.username, opts.authConfig.password, requetOptions, "GET")
 			httpResponse = response.data
@@ -1420,7 +1422,8 @@ class XenComputeUtility {
         } catch (e) {
             log.error("downloadImage From Stream error: ${e}", e)
         } finally {
-			httpResponse.close()
+			httpResponse?.close()
+			httpClient?.shutdownClient()
         }
         return rtn
     }
