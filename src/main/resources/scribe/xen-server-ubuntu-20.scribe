@@ -1,54 +1,54 @@
 resource "workload-type" "ubuntu-xen-20_04" {
   code              = "ubuntu-xen-20.04"
-  short_name        = "ubuntu"
+  shortName        = "ubuntu"
   name              = "Ubuntu 20.04"
   ports             = [22]
-  container_version = "20.04"
-  repository_image  = null
-  entry_point       = null
-  server_type       = "vm"
-  stat_type_code    = "vm"
-  log_type_code     = "ubuntu"
-  show_server_logs  = true
-  check_type_code   = "containerCheck"
-  mount_point       = "/morpheus"
-  virtual_image     = virtual-image.xenserver-image-morpheus-ubuntu-20_04
-  container_ports   = ["ubuntu.22"]
+  containerVersion = "20.04"
+  repositoryImage  = null
+  entryPoint       = null
+  serverType       = "vm"
+  statTypeCode    = "vm"
+  logTypeCode     = "ubuntu"
+  showServerLogs  = true
+  checkTypeCode   = "containerCheck"
+  mountPoint       = "/morpheus"
+  virtualImage     = virtual-image.xenserver-image-morpheus-ubuntu-20_04
+  containerPorts   = ["ubuntu.22"]
   actions           = ["ubuntu-remove-node"]
-  provision_type    = "xen"
-  backup_type       = "xenSnapshot"
+  provisionType    = "xen"
+  backupType       = "xenSnapshot"
 }
 
 resource "workload-type-set" "ubuntu-xen-20_04-set" {
   code            = "ubuntu-xen-20.04-set"
-  workload_type   = workload-type.ubuntu-xen-20_04
-  priority_order  = 0
-  dynamic_count   = true
-  container_count = 1
+  workloadType   = workload-type.ubuntu-xen-20_04
+  priorityOrder  = 0
+  dynamicCount   = true
+  containerCount = 1
 }
 
 resource "instance-type-layout" "ubuntu-xen-20_04" {
   code                        = "ubuntu-xen-20.04"
   name                        = "Xen VM"
-  sort_order                  = 20
-  server_type                 = "vm"
-  supports_convert_to_managed = true
-  instance_version            = "20.04"
+  sortOrder                  = 20
+  serverType                 = "vm"
+  supportsConvertToManaged = true
+  instanceVersion            = "20.04"
   description                 = "This will provision a single process with no redundancy"
-  instance_type               = instance-type.ubuntu
-  server_count                = 1
-  port_count                  = 1
+  instanceType               = instance-type.ubuntu
+  serverCount                = 1
+  portCount                  = 1
   enabled                     = true
   creatable                   = true
   workloads                   = [workload-type-set.ubuntu-xen-20_04-set]
   actions                     = ["ubuntu-add-node"]
-  provision_type              = "xen"
+  provisionType              = "xen"
 }
 
 resource "scale-action" "ubuntu-xen-20_04" {
   code        = "ubuntu-xen-20.04"
-  scale_type  = "action"
+  scaleType  = "action"
   layout      = instance-type-layout.ubuntu-xen-20_04
-  up_action   = "ubuntu-add-node"
-  down_action = "ubuntu-remove-node"
+  upAction   = "ubuntu-add-node"
+  downAction = "ubuntu-remove-node"
 }

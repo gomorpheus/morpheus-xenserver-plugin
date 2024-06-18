@@ -21,7 +21,7 @@ resource "virtual-image" "xenserver-image-morpheus-ubuntu-20_04" {
 resource "virtual-image" "xenserver-image-morpheus-ubuntu-16_04" {
   code               = "xen.image.morpheus.ubuntu.16.04.3-v1.ubuntu.16.04.3.amd64"
   category           = "xen.image.morpheus.ubuntu"
-  sshUsername        = 'cloud-user'
+  sshUsername        = "cloud-user"
   sshPassword        = null
   name               = "Morpheus Ubuntu 16.04.3 v1"
   imageType          = "vhd"
@@ -41,7 +41,7 @@ resource "virtual-image" "xenserver-image-morpheus-ubuntu-16_04" {
 resource "virtual-image" "xenserver-image-morpheus-ubuntu-14_04" {
   code               = "xen.image.morpheus.ubuntu.14.04"
   category           = "xen.image.morpheus.ubuntu.14.04"
-  sshUsername        = 'ubuntu'
+  sshUsername        = "ubuntu"
   sshPassword        = null
   name               = "morpheus ubuntu 14.04"
   imageType          = "vhd"
@@ -62,7 +62,7 @@ resource "virtual-image" "xenserver-image-morpheus-ubuntu-14_04" {
 resource "virtual-image" "xenserver-image-morpheus-ubuntu-14_04-v1" {
   code               = "xen.image.morpheus.ubuntu.14.04-v1"
   category           = "xen.image.morpheus.ubuntu.14.04"
-  sshUsername        = 'ubuntu'
+  sshUsername        = "ubuntu"
   sshPassword        = null
   name               = "morpheus ubuntu 14.04"
   imageType          = "vhd"

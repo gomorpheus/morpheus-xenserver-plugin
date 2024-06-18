@@ -2,105 +2,105 @@
 resource "account-price-set" "custom-xen" {
   code           = "internal.custom.xen.priceset"
   name           = "Custom Xen Price Set"
-  price_unit     = "month"
-  system_created = true
+  priceUnit     = "month"
+  systemCreated = true
   type           = "component"
 }
 
 resource "account-price" "custom-xen-memory" {
   code           = "internal.custom.xen.memory.usd"
   name           = "Custom Xen Memory"
-  system_created = false
+  systemCreated = false
 }
 
 resource "account-price" "custom-xen-cpu" {
   code           = "internal.custom.xen.cpu.usd"
   name           = "Custom Xen Cpu"
-  system_created = false
+  systemCreated = false
 }
 
 resource "account-price" "custom-xen-core" {
   code           = "internal.custom.xen.core.usd"
   name           = "Custom Xen Core"
-  system_created = false
+  systemCreated = false
 }
 
 resource "account-price" "custom-xen-storage" {
   code           = "internal.custom.xen.storage.usd"
   name           = "Custom Xen Storage"
-  system_created = false
+  systemCreated = false
 }
 
 resource "account-price-history" "custom-xen-memory-price-history" {
   code           = "internal.custom.xen.memory.usd"
-  account_price  = custom-xen-memory
+  accountPrice  = account-price.custom-xen-memory
   cost           = 0
   currency       = "usd"
   markup         = 0
-  markup_percent = 0
+  markupPercent = 0
   price          = 0
-  price_type     = "memory"
-  price_unit     = "month"
-  resource_type  = "compute"
+  priceType     = "memory"
+  priceUnit     = "month"
+  resourceType  = "compute"
 }
 
 resource "account-price-history" "custom-xen-cpu-price-history" {
   code           = "internal.custom.xen.cpu.usd"
-  account_price  = custom-xen-cpu
+  accountPrice  = account-price.custom-xen-cpu
   cost           = 0
   currency       = "usd"
   markup         = 0
-  markup_percent = 0
+  markupPercent = 0
   price          = 0
-  price_type     = "cpu"
-  price_unit     = "month"
-  resource_type  = "compute"
+  priceType     = "cpu"
+  priceUnit     = "month"
+  resourceType  = "compute"
 }
 
 resource "account-price-history" "custom-xen-core-price-history" {
   code           = "internal.custom.xen.core.usd"
-  account_price  = custom-xen-core
+  accountPrice  = account-price.custom-xen-core
   cost           = 0
   currency       = "usd"
   markup         = 0
-  markup_percent = 0
+  markupPercent = 0
   price          = 0
-  price_type     = "cores"
-  price_unit     = "month"
-  resource_type  = "compute"
+  priceType     = "cores"
+  priceUnit     = "month"
+  resourceType  = "compute"
 }
 
 resource "account-price-history" "custom-xen-storage-price-history" {
   code           = "internal.custom.xen.storage.usd"
-  account_price  = custom-xen-storage
+  accountPrice  = account-price.custom-xen-storage
   cost           = 0
   currency       = "usd"
   markup         = 0
-  markup_percent = 0
+  markupPercent = 0
   price          = 0
-  price_type     = "storage"
-  price_unit     = "month"
-  resource_type  = "compute"
-  volume_type    = "standard"
-  incur_charges  = "always"
+  priceType     = "storage"
+  priceUnit     = "month"
+  resourceType  = "compute"
+  volumeType    = "standard"
+  incurCharges  = "always"
 }
 
 resource "account-price-set-price" "custom-xen-memory-price-set-price" {
-  account_price_set = custom-xen
-  price             = custom-xen-memory
+  accountPriceSet = account-price-set.custom-xen
+  price             = account-price.custom-xen-memory
 }
 
 resource "account-price-set-price" "custom-xen-cpu-price-set-price" {
-  account_price_set = custom-xen
-  price             = custom-xen-cpu
+  accountPriceSet = account-price-set.custom-xen
+  price             = account-price.custom-xen-cpu
 }
 
 resource "account-price-set-price" "custom-xen-core-price-set-price" {
-  account_price_set = custom-xen
-  price             = custom-xen-core
+  accountPriceSet = account-price-set.custom-xen
+  price             = account-price.custom-xen-core
 }
 
 resource "account-price-set-price" "custom-xen-storage-price-set-price" {
-  account_price_set = custom-xen
-  price             = custom-xen-storage
+  accountPriceSet = account-price-set.custom-xen
+  price             = account-price.custom-xen-storage
 }
