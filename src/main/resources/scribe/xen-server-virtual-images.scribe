@@ -17,3 +17,65 @@ resource "virtual-image" "xenserver-image-morpheus-ubuntu-20_04" {
   delete             = false
   zoneType           = "xen"
 }
+
+resource "virtual-image" "xenserver-image-morpheus-ubuntu-16_04" {
+  code               = "xen.image.morpheus.ubuntu.16.04.3-v1.ubuntu.16.04.3.amd64"
+  category           = "xen.image.morpheus.ubuntu"
+  sshUsername        = 'cloud-user'
+  sshPassword        = null
+  name               = "Morpheus Ubuntu 16.04.3 v1"
+  imageType          = "vhd"
+  remotePath         = "https://s3-us-west-1.amazonaws.com/morpheus-images/xen/ubuntu/ubuntu-16_04_3-v1-amd64/morpheus-ubuntu-16_04_3-v1-amd64.vhd"
+  imagePath          = "xen/ubuntu/ubuntu-16_04_3-v1-amd64"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = false
+  isCloudInit        = true
+  externalId         = null
+  osType             = "ubuntu.16.04.64"
+  active             = true
+  delete             = false
+  zoneType           = "xen"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-ubuntu-14_04" {
+  code               = "xen.image.morpheus.ubuntu.14.04"
+  category           = "xen.image.morpheus.ubuntu.14.04"
+  sshUsername        = 'ubuntu'
+  sshPassword        = null
+  name               = "morpheus ubuntu 14.04"
+  imageType          = "vhd"
+  remotePath         = "https://s3-us-west-1.amazonaws.com/morpheus-images/xen/ubuntu/ubuntu-14_04/ubuntu-14_04.vhd"
+  imagePath          = "xen/ubuntu/ubuntu-14_04"
+  imageName          = "morpheus-ubuntu-14_04.vhd"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = false
+  isCloudInit        = true
+  externalId         = null
+  osType             = "ubuntu.14.04.64"
+  active             = true
+  delete             = false
+  zoneType           = "xen"
+}
+
+resource "virtual-image" "xenserver-image-morpheus-ubuntu-14_04" {
+  code               = "xen.image.morpheus.ubuntu.14.04-v1"
+  category           = "xen.image.morpheus.ubuntu.14.04"
+  sshUsername        = 'ubuntu'
+  sshPassword        = null
+  name               = "morpheus ubuntu 14.04"
+  imageType          = "vhd"
+  remotePath         = "https://s3-us-west-1.amazonaws.com/morpheus-images/xen/ubuntu/ubuntu-14_04_3-v1/ubuntu-14_04_3/morpheus-ubuntu-14_04_3-v1.vhd"
+  imagePath          = "xen/ubuntu/ubuntu-14_04_3-v1/ubuntu-14_04_3"
+  imageName          = "morpheus-ubuntu-14_04_3-v1.vhd"
+  systemImage        = true
+  installAgent       = true
+  computeServerImage = false
+  isCloudInit        = true
+  externalId         = null
+  osType             = "ubuntu.14.04.64"
+  active             = true
+  delete             = false
+  zoneType           = "xen"
+}
