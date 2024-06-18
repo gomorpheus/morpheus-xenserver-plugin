@@ -1,0 +1,54 @@
+resoruce "workload-type" "ubuntu-xen-14_04" {
+  code              = "ubuntu-xen-14.04"
+  name              = "Ubuntu 14.04"
+  short_name        = "ubuntu"
+  ports             = ["22"]
+  container_version = "14.04"
+  repository_image  = ""
+  entry_point       = ""
+  server_type       = "vm"
+  stat_type_code    = "vm"
+  log_type_code     = "ubuntu"
+  show_server_logs  = "true"
+  check_type_code   = "containerCheck"
+  mount_point       = "/morpheus"
+  virtual_image     = virtual-image.xenserver-image-morpheus-ubuntu-14_04-v1
+  provision_type    = "xen"
+  container_ports   = ["ubuntu.22"]
+  actions           = ["ubuntu-remove-node"]
+  backup_type       = "xenSnapshot"
+}
+
+resource "workload-type-set" "ubuntu-xen-14_04-set" {
+  code            = "ubuntu-xen-14.04-set"
+  container_type  = workload-type.ubuntu-xen-14_04
+  priority_order  = 0
+  dynamic_count   = true
+  container_count = 1
+}
+
+resource "instance-type-layout" "ubuntu-xen-14_04" {
+  code                        = "ubuntu-xen-14.04"
+  name                        = "Xen Ubuntu 14.04"
+  sort_order                  = 14
+  server_type                 = "vm"
+  instance_version            = "14.04"
+  description                 = "This will provision a single process with no redundancy"
+  instance_type               = "ubuntu"
+  server_count                = 1
+  supports_convert_to_managed = true
+  port_count                  = 1
+  enabled                     = true
+  creatable                   = true
+  containers                  = [workload-type-set.ubuntu-xen-14_04-set]
+  actions                     = ["ubuntu-add-node"]
+  provision_type              = "xen"
+}
+
+resource "scale-action" "ubuntu-xen-14.04" {
+  code        = "ubuntu-xen-14.04"
+  scale_type  = "action"
+  layout      = instance-type-layout.ubuntu-xen-14_04
+  up_action   = "ubuntu-add-node"
+  down_action = "ubuntu-remove-node"
+}

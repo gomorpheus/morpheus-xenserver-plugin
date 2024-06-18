@@ -1,0 +1,54 @@
+resource "workload-type" "docker-xen-ubuntu-16_04" {
+  code              = "docker-xen-ubuntu-16.04"
+  name              = "Docker Ubuntu 16.04"
+  short_name        = "ubuntu"
+  ports = ["22"]
+  container_version = "16.04"
+  container_type    = "docker"
+  repository_image  = null
+  image_code        = "morpheus ubuntu 16.04"
+  entry_point       = null
+  mount_logs        = "/var/log"
+  stat_type_code    = "server"
+  log_type_code     = "ubuntu"
+  show_server_logs  = true
+  category          = "ubuntu"
+  clone_type        = "ubuntu"
+  priority_order    = 0
+  server_type       = "vm"
+  provider_type     = "xen"
+  check_type_code   = "vmCheck"
+  virtual_image     = virtual-image.xenserver-image-morpheus-ubuntu-20_04
+  container_ports   = ["ubuntu.22"]
+  provision_type    = "xen"
+}
+
+resource "compute-type-set" "docker-xen-ubuntu-16_04-set" {
+  code                      = "docker-xen-ubuntu-16.04-set"
+  name                      = "docker host"
+  container_type            = workload-type.docker-xen-ubuntu-16_04
+  compute_server_type       = "xenserverLinux"
+  category                  = "ubuntu"
+  priority_order            = 0
+  dynamic_count             = true
+  node_count                = 1
+  node_type                 = "worker"
+  can_add_nodes             = true
+  install_container_runtime = true
+  install_storage_runtime   = true
+}
+
+resource "compute-type-layout" "docker-xen-ubuntu-16_04-single" {
+  code                = "docker-xen-ubuntu-16.04-single"
+  name                = "Xen Docker Host"
+  sort_order          = 5
+  compute_version     = "16.04"
+  description         = "This will provision a single docker host vm in xen"
+  type                = "xenserverLinux"
+  server_count        = 1
+  memory_requirement  = (1024 * 1024 * 1024) //1 gig
+  has_auto_scale      = true
+  group_type          = "docker-cluster"
+  compute_servers     = [compute-type-set.docker-xen-ubuntu-16_04-set]
+  provision_type      = "xen"
+}

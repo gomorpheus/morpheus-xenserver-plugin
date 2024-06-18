@@ -1,32 +1,32 @@
 resource "option-type" "instanceType-xen-template" {
-  code             = "instanceType.xen.template"
-  type             = "select"
-  name             = "Template"
-  category         = "instanceType.xen"
-  fieldName        = "imageId"
-  optionSource     = "virtualImages"
-  fieldCode        = "gomorpheus.optiontype.Image"
-  fieldLabel       = "Image"
-  fieldContext     = "config"
-  fieldGroup       = "Options"
-  required         = true
-  enabled          = true
-  editable         = false
-  global           = false
-  placeHolder      = null
-  helpBlock        = ""
-  defaultValue     = null
-  custom           = false
-  displayOrder     = 1
-  fieldClass       = null
-  description      = "Choose from a list of Virtual Images that might want to be provisioned."
+  code         = "instanceType.xen.template"
+  type         = "select"
+  name         = "Template"
+  category     = "instanceType.xen"
+  fieldName    = "imageId"
+  optionSource = "virtualImages"
+  fieldCode    = "gomorpheus.optiontype.Image"
+  fieldLabel   = "Image"
+  fieldContext = "config"
+  fieldGroup   = "Options"
+  required     = true
+  enabled      = true
+  editable     = false
+  global       = false
+  placeHolder  = null
+  helpBlock    = ""
+  defaultValue = null
+  custom       = false
+  displayOrder = 1
+  fieldClass   = null
+  description  = "Choose from a list of Virtual Images that might want to be provisioned."
 }
 
 resource "workload-type" "xen-1_0" {
   code             = "xen-1.0"
   shortName        = "xen"
   name             = "Single XCP-ng VM"
-  ports            = []
+  ports = []
   containerVersion = "1.0"
   repositoryImage  = ""
   entryPoint       = ""
@@ -36,45 +36,44 @@ resource "workload-type" "xen-1_0" {
   checkTypeCode    = "vmCheck"
   serverType       = "vm"
   mountPoint       = "/data"
-  provisionType = "xen"
+  provisionType    = "xen"
   actions = ["generic-remove-node"]
 }
 
 resource "workload-type-set" "xen-1_0-set" {
-  code          = "xen-1.0-set"
-  workloadType = workload-type.xen-1_0
+  code           = "xen-1.0-set"
+  workloadType   = workload-type.xen-1_0
   priorityOrder  = 0
   dynamicCount   = true
   containerCount = 1
 }
 
 resource "instance-type" "xen" {
-  code                 = "xen"
-  name                 = "XCP-ng"
-  category             = "cloud"
-  active               = true
-  enabled              = true
-  viewSet              = "xen"
-  stackTier            = 30
-  hasConfig            = false
-  hasSettings          = false
-  hasDeployment        = false
-  deploymentService    = "defaultDeployService"
-  versions             = ["1.0"]
-  hasAutoScale         = true
-  description          = "Provision any XCP-ng Compatible Image to a XCP-ng Hypervisor. Utilize the image alongside your other instances."
-  provisionService     = "xenContainerService"
-  provisionTypeDefault = true
-  environmentPrefix    = "XEN"
-  provisionSelectType  = "zone"
-  provisionType = "xen"
-  pluginIconPath = "xcpng-light.svg"
-  pluginIconDarkPath = "xcpng-dark.svg"
-  pluginIconHidpiPath = "xcpng-light0.svg"
+  code                    = "xen"
+  name                    = "XCP-ng"
+  category                = "cloud"
+  active                  = true
+  enabled                 = true
+  viewSet                 = "xen"
+  stackTier               = 30
+  hasConfig               = false
+  hasSettings             = false
+  hasDeployment           = false
+  deploymentService       = "defaultDeployService"
+  versions = ["1.0"]
+  hasAutoScale            = true
+  description             = "Provision any XCP-ng Compatible Image to a XCP-ng Hypervisor. Utilize the image alongside your other instances."
+  provisionService        = "xenContainerService"
+  provisionTypeDefault    = true
+  environmentPrefix       = "XEN"
+  provisionSelectType     = "zone"
+  provisionType           = "xen"
+  pluginIconPath          = "xcpng-light.svg"
+  pluginIconDarkPath      = "xcpng-dark.svg"
+  pluginIconHidpiPath     = "xcpng-light0.svg"
   pluginIconDarkHidpiPath = "xcpng-dark.svg"
-  optionTypes = [
-    "instanceType.xen.template",
-    "instanceType.exposePorts"
+  optionTypes             = [
+    "instanceType.xen.template", "instanceType.exposePorts"
   ]
 }
 
@@ -91,14 +90,14 @@ resource "instance-type-layout" "xen-1_0-single" {
   creatable       = true
   containers      = [workload-type-set.xen-1_0-set]
   actions         = ["generic-add-node"]
-  optionTypes   = []
-  provisionType = "xen"
+  optionTypes     = []
+  provisionType   = "xen"
 }
 
 resource "scale-action" "xen-1_0-single" {
-  code      = "xen-1.0-single"
-  scaleType = "action"
-  layout = instance-type-layout.xen-1_0-single
-  upAction = "generic-add-node"
+  code       = "xen-1.0-single"
+  scaleType  = "action"
+  layout     = instance-type-layout.xen-1_0-single
+  upAction   = "generic-add-node"
   downAction = "generic-remove-node"
 }

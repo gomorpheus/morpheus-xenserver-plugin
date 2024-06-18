@@ -59,7 +59,7 @@ resource "virtual-image" "xenserver-image-morpheus-ubuntu-14_04" {
   zoneType           = "xen"
 }
 
-resource "virtual-image" "xenserver-image-morpheus-ubuntu-14_04" {
+resource "virtual-image" "xenserver-image-morpheus-ubuntu-14_04-v1" {
   code               = "xen.image.morpheus.ubuntu.14.04-v1"
   category           = "xen.image.morpheus.ubuntu.14.04"
   sshUsername        = 'ubuntu'
