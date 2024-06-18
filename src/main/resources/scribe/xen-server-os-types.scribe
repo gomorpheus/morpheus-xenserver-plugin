@@ -1,0 +1,44 @@
+//xen
+resource "os-type" "xenserver-6_5" {
+  code          = "xenserver.6.5"
+  category      = "xen"
+  platform      = "linux"
+  vendor        = "xen"
+  name          = "xen server 6.5"
+  os_version    = "6.5"
+  install_agent = false
+  os_family     = "xen"
+}
+
+resource "os-type" "xenserver-6_2" {
+  code          = "xenserver.6.2"
+  category      = "xen"
+  platform      = "linux"
+  vendor        = "xen"
+  name          = "xen server 6.2"
+  os_version    = "6.2"
+  install_agent = false
+  os_family     = "xen"
+}
+
+resource "os-type" "xenserver-6_1" {
+  code          = "xenserver.6.1"
+  category      = "xen"
+  platform      = "linux"
+  vendor        = "xen"
+  name          = "xen server 6.1"
+  os_version    = "6.1"
+  install_agent = false
+  os_family     = "xen"
+}
+
+resource "os-type" "xenserver-6_0" {
+  code          = "xenserver.6.0"
+  category      = "xen"
+  platform      = "linux"
+  vendor        = "xen"
+  name          = "xen server 6.0"
+  os_version    = "6.0"
+  install_agent = false
+  os_family     = "xen"
+}
