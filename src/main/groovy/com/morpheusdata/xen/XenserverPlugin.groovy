@@ -19,6 +19,7 @@ import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.model.AccountCredential
 import com.morpheusdata.model.Cloud
+import com.morpheusdata.xen.datasets.VirtualImageDatasetProvider
 import com.morpheusdata.xen.util.XenComputeUtility
 import groovy.util.logging.Slf4j
 
@@ -33,9 +34,12 @@ class XenserverPlugin extends Plugin {
     @Override
     void initialize() {
         this.setName("XCP-ng")
-        this.registerProvider(new XenserverCloudProvider(this,this.morpheus))
-        this.registerProvider(new XenserverProvisionProvider(this,this.morpheus))
-        this.registerProvider(new XenserverBackupProvider(this,this.morpheus))
+		this.registerProviders(
+        	new XenserverCloudProvider(this,this.morpheus),
+        	new XenserverProvisionProvider(this,this.morpheus),
+        	new XenserverBackupProvider(this,this.morpheus),
+			new VirtualImageDatasetProvider(this, this.morpheus)
+		)
     }
 
     /**
