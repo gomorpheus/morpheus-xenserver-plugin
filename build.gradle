@@ -118,6 +118,7 @@ assets {
 task copyRuntimeLibs(type: Copy) {
 	into "lib"
 	from project.configurations.runtimeClasspath - project.configurations.provided
+	exclude "xcpng-8.2.jar"
 }
 
 task(console, dependsOn: 'classes', type: JavaExec) {
