@@ -13,6 +13,7 @@ import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.util.MorpheusUtils
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.VirtualImage
+import com.morpheusdata.model.projection.VirtualImageIdentityProjection
 import groovy.util.logging.Slf4j
 import io.reactivex.rxjava3.core.Observable
 
@@ -47,39 +48,15 @@ class VirtualImageDatasetProvider extends AbstractDatasetProvider<VirtualImage, 
 
 	@Override
 	Observable list(DatasetQuery datasetQuery) {
-		Long cloudId = datasetQuery.get("zoneId")?.toLong()
-		Cloud tmpZone = cloudId ? morpheus.services.cloud.get(cloudId) : null
-		List<String> supportedImageTypes = getImageTypes()
-		log.info("query parameters: ${datasetQuery.parameters}")
-		DataQuery query  = new DatasetQuery().withFilters(
-			new DataOrFilter(
-				new DataFilter("visibility", "public"),
-				new DataFilter("accounts.id", datasetQuery.get("accountId")?.toLong()),
-				new DataFilter("owner.id", datasetQuery.get("accountId")?.toLong())
-			),
-			new DataFilter("deleted", false),
-			new DataOrFilter(
-				new DataFilter("imageType", "in", supportedImageTypes),
-				new DataFilter("virtualImageType.code", "in", supportedImageTypes),
-			)
-		)
-		if(tmpZone) {
-			query = query.withFilters(
-				new DataOrFilter(
-					new DataFilter("category", "xenserver.image.${tmpZone.id}"),
-					new DataFilter("userUploaded", true)
-				)
-			)
-		}
-		query = query.withSort("name", DataQuery.SortOrder.asc)
-
+		DataQuery query = buildQuery(datasetQuery)
 		return morpheus.async.virtualImage.list(query)
 	}
 
 	@Override
 	Observable<Map> listOptions(DatasetQuery datasetQuery) {
-		list(datasetQuery).map { VirtualImage item ->
-			return [name: "${item.name} (${item.imageType}, ${item.id})", value: item.id]
+		DataQuery query = buildQuery(datasetQuery)
+		morpheus.async.virtualImage.listIdentityProjections(query).map { VirtualImageIdentityProjection item ->
+			return [name: item.name, value: item.id]
 		}
 	}
 
@@ -116,5 +93,34 @@ class VirtualImageDatasetProvider extends AbstractDatasetProvider<VirtualImage, 
 		return (List<String>) plugin.getProvidersByType(ProvisionProvider).collect { ProvisionProvider provider ->
 			provider.getVirtualImageTypes().collect { it.code }
 		}.flatten().unique()
+	}
+
+	DataQuery buildQuery(DatasetQuery datasetQuery) {
+		Long cloudId = datasetQuery.get("zoneId")?.toLong()
+		Cloud tmpZone = cloudId ? morpheus.services.cloud.get(cloudId) : null
+		List<String> supportedImageTypes = getImageTypes()
+		log.info("query parameters: ${datasetQuery.parameters}")
+		DataQuery query  = new DatasetQuery().withFilters(
+			new DataOrFilter(
+				new DataFilter("visibility", "public"),
+				new DataFilter("accounts.id", datasetQuery.get("accountId")?.toLong()),
+				new DataFilter("owner.id", datasetQuery.get("accountId")?.toLong())
+			),
+			new DataFilter("deleted", false),
+			new DataOrFilter(
+				new DataFilter("imageType", "in", supportedImageTypes),
+				new DataFilter("virtualImageType.code", "in", supportedImageTypes),
+			)
+		)
+		if(tmpZone) {
+			query = query.withFilters(
+				new DataOrFilter(
+					new DataFilter("category", "xenserver.image.${tmpZone.id}"),
+					new DataFilter("userUploaded", true)
+				)
+			)
+		}
+
+		return query.withSort("name", DataQuery.SortOrder.asc)
 	}
 }
