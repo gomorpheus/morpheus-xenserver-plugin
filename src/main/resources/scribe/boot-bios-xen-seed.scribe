@@ -1,0 +1,52 @@
+resource "virtual-image" "pxe.image.morpheus.xenserver.6.5" {
+  code               = "pxe.image.morpheus.xenserver.6.5"
+  category           = "pxe.image.morpheus.xenserver"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "morpheus pxe xenserver 6.5"
+  imageType          = "pxe"
+  imagePath          = "pxe/xenserver/6.5"
+  systemImage        = true
+  installAgent       = true
+  isCloudInit        = false
+  externalId         = null
+  osType             = "xenserver.6.5"
+}
+
+resource "config-script" "pxe.answerFile.ks.xenserver.6.5" {
+    code             = "pxe.answerFile.ks.xenserver.6.5"
+    name             = "default xen 6.5 kickstart"
+    category         = "pxe.answerFile.ks"
+    type             = "answerFile"
+    scriptVersion    = "1.0"
+    scriptType       = "ks"
+    script {
+        _literal = true
+        value = <<EOF
+        <?xml version="1.0"?>
+        <installation srtype="lvm">
+        <primary-disk>sda</primary-disk>
+        <keymap>us</keymap>
+        <hostname><%=hostname%></hostname>
+        <root-password><%=rootPassword%></root-password>
+        <source type="url"><%=webHost%>/boot/image/<%=imageId%>/files/</source>
+        <admin-interface name="<%=interfaceName%>" proto="dhcp"/>
+        <timezone>America/Denver</timezone>
+        <time-config-method>ntp</time-config-method>
+        <ntp-server>0.pool.ntp.org</ntp-server>
+        <ntp-server>1.pool.ntp.org</ntp-server>
+        </installation>
+        EOF
+    }
+    scriptName       = "xenserver.xml"
+    refType          = "VirtualImage"
+    active           = true
+    refId {
+        domainClass = "virtualImage"
+        meta {
+            key = "code"
+            useId = true
+        }
+        code = "pxe.image.morpheus.xenserver.6.5"
+    }
+}

@@ -1,0 +1,87 @@
+resource "workload-type" "kubernetes-ubuntu-20.04-xen-amd64" {
+  code             = "kubernetes-ubuntu-20.04-xen-amd64"
+  shortName        = "kubernetes-ubuntu"
+  name             = "Xen Kubernetes Cluster on Ubuntu 20.04"
+  containerVersion = "20.04"
+  repositoryImage  = ""
+  imageCode        = "xen morpheus kubernetes on ubuntu 20.04"
+  entryPoint       = ""
+  mountLogs        = "/var/log"
+  statTypeCode     = "server"
+  logTypeCode      = "ubuntu"
+  showServerLogs   = true
+  category         = "kubernetes"
+  cloneType        = "ubuntu"
+  priorityOrder    = 0
+  serverType       = "vm"
+  providerType     = "xen"
+  checkTypeCode    = "vmCheck"
+  virtualImage     = virtual-image.xenserver-image-morpheus-ubuntu-20_04
+  containerPorts   = ["ubuntu.22"]
+  provisionType    = "xen"
+  scripts          = [
+    "kube-ubuntu-22-setup-script-v1", "kube-adm-master-setup-script-v1", "kubernetes-ectd-encrypt-install-master-script-v1"
+  ]
+  templates = ["k8-cypher","kubernetes-etcd-encrypt-install-master","kubeadm-cluster-master-init"]
+}
+
+# worker vm
+resource "workload-type" "kubernetes-ubuntu-20.04-worker-xen-amd64" {
+  code             = "kubernetes-ubuntu-20.04-worker-xen-amd64"
+  shortName        = "kubernetes-worker-ubuntu"
+  name             = "Xen Kubernetes Worker on Ubuntu 20.04"
+  containerVersion = "20.04"
+  repositoryImage  = ""
+  imageCode        = "xen morpheus kubernetes on ubuntu 20.04"
+  entryPoint       = ""
+  mountLogs        = "/var/log"
+  statTypeCode     = "server"
+  logTypeCode      = "ubuntu"
+  showServerLogs   = true
+  category         = "kubernetes"
+  cloneType        = "ubuntu"
+  priorityOrder    = 0
+  serverType       = "vm"
+  providerType     = "xen"
+  checkTypeCode    = "vmCheck"
+  virtualImage     = virtual-image.xenserver-image-morpheus-ubuntu-20_04
+  containerPorts   = ["ubuntu.22"]
+  provisionType    = "xen"
+  scripts          = [
+    "kube-ubuntu-22-setup-script-v1", "kubernetes-worker-join-v1"
+  ]
+  templates = []
+}
+
+# master set
+resource "compute-type-set" "kubernetes-ubuntu-20.04-xen-amd64-set" {
+  code             = "kubernetes-ubuntu-20.04-xen-amd64-set"
+  name             = "kubernetes master"
+  workloadType      = workload-type.kubernetes-ubuntu-20.04-xen-amd64
+  computeServerType = compute-server-type.xenKubeMaster
+  category         = "ubuntu"
+  priorityOrder    = 0
+  dynamicCount     = false
+  nodeCount        = 1
+  nameSuffix       = "-master"
+  nodeType         = "master"
+  installContainerRuntime = false
+  installStorageRuntime = false
+}
+
+# worker set
+resource "compute-type-set" "kubernetes-ubuntu-20.04-worker-xen-amd64-set" {
+  code             = "kubernetes-ubuntu-20.04-worker-xen-amd64-set"
+  name             = "kubernetes worker"
+  containerType    = workload-type.kubernetes-ubuntu-20.04-worker-xen-amd64
+  computeServerType= "xenKubeWorker"
+  category         = "ubuntu"
+  priorityOrder    = 1
+  dynamicCount     = true
+  nodeCount        = 3
+  nameSuffix       = "-worker"
+  nodeType         = "worker"
+  canAddNodes      = true
+  installContainerRuntime = false
+  installStorageRuntime = false
+}
