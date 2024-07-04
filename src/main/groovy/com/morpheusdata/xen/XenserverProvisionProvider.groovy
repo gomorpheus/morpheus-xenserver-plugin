@@ -429,7 +429,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		def imageId
 		def sourceVmId
 		def virtualImage
-		def imageFormat = 'vhd'
+		def imageFormat = 'xva'
 		try {
 			def containerConfig = workload.getConfigMap()
 			def rootVolume = server.volumes?.find { it.rootVolume == true }
@@ -437,19 +437,40 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def network = context.async.network.get(networkId).blockingGet()
 			def sourceWorkload = context.async.workload.get(opts.cloneContainerId).blockingGet()
 			def cloneContainer = opts.cloneContainerId ? sourceWorkload : null
+			log.info("Ray :: workload: containerConfig.datastoreId: ${containerConfig.datastoreId}")
 			def morphDataStores = context.async.cloud.datastore.listById([containerConfig.datastoreId?.toLong()])
 					.toMap { it.id.toLong() }.blockingGet()
+			log.info("Ray :: workload: containerConfig.size: ${morphDataStores.size()}")
 			def datastore = rootVolume?.datastore ?: morphDataStores[containerConfig.datastoreId?.toLong()]
+			log.info("Ray :: workload: containerConfig.datastore: ${datastore}")
+			log.info("Ray :: workload: containerConfig.datastore?.name: ${datastore?.name}")
 			def authConfigMap = plugin.getAuthConfig(cloud)
+			log.info("Ray :: runWorkload: ")
 			if (containerConfig.imageId || containerConfig.template || server.sourceImage?.id) {
 				def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: server.sourceImage.id)
+				log.info("Ray :: runWorkload: virtualImageId: ${virtualImageId}")
 				virtualImage = context.async.virtualImage.get(virtualImageId).blockingGet()
+				log.info("Ray :: runWorkload: virtualImage: ${virtualImage}")
+				log.info("Ray :: runWorkload: virtualImage?.externalId: ${virtualImage?.externalId}")
+				log.info("Ray :: runWorkload: virtualImage?.id: ${virtualImage?.id}")
+				log.info("Ray :: runWorkload: virtualImage?.name: ${virtualImage?.name}")
+				log.info("Ray :: runWorkload: virtualImage?.locations?.size(): ${virtualImage?.locations?.size()}")
+				log.info("Ray :: runWorkload: virtualImage?.locations: ${virtualImage?.locations}")
+				log.info("Ray :: runWorkload: cloud?.id: ${cloud?.id}")
 				imageId = virtualImage.locations.find { it.refType == "ComputeZone" && it.refId == cloud.id }?.externalId
+				log.info("Ray :: runWorkload: imageId: ${imageId}")
 				if (!imageId) { //If its userUploaded and still needs uploaded
 					//TODO: We need to upload ovg/vmdk stuff here
 					def primaryNetwork = server.interfaces?.find { it.network }?.network
+					log.info("Ray :: runWorkload: primaryNetwork: ${primaryNetwork}")
 					def cloudFiles = context.async.virtualImage.getVirtualImageFiles(virtualImage).blockingGet()
+					log.info("Ray :: runWorkload: cloudFiles?.size(): ${cloudFiles?.size()}")
+					imageFormat = virtualImage.virtualImageType?.code ?: virtualImage.imageType
+					cloudFiles?.eachWithIndex { it, index ->
+						log.info("Ray :: runWorkload: cloudFiles ${index}:: ${it.name} : ${it.getURL()} : ${it.contentLength}")
+					}
 					def imageFile = cloudFiles?.find { cloudFile -> cloudFile.name.toLowerCase().indexOf('.' + imageFormat) > -1 }
+					log.info("Ray :: runWorkload: imageFile?.name: ${imageFile?.name}")
 					def containerImage =
 							[
 									name         : virtualImage.name,
@@ -458,11 +479,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 									minRam       : virtualImage.minRam ?: (512 * ComputeUtility.ONE_MEGABYTE),
 									tags         : 'morpheus, ubuntu',
 									imageType    : 'disk_image',
-									containerType: 'vhd',
+									containerType: virtualImage.virtualImageType?.code ?: virtualImage.imageType, //'vhd',
 									cloudFiles   : cloudFiles,
 									imageFile    : imageFile,
 									imageSize    : imageFile?.contentLength
 							]
+					log.info("Ray :: runWorkload: containerImage: ${containerImage}")
 					def imageConfig =
 							[
 									zone      : cloud,
@@ -470,8 +492,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 									name      : virtualImage.name,
 									datastore : datastore,
 									network   : primaryNetwork,
-									osTypeCode: virtualImage?.osType?.code
+									osTypeCode: virtualImage?.osType?.code,
+									containerType : containerImage?.containerType
 							]
+					log.info("Ray :: runWorkload: imageConfig: ${imageConfig}")
 					imageConfig.authConfig = authConfigMap
 					def imageResults = XenComputeUtility.insertTemplate(imageConfig)
 					log.debug("insertTemplate: imageResults: ${imageResults}")
@@ -1861,7 +1885,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def archiveFolder = "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
 				exportImage.remotePath = archiveFolder
 				context.async.virtualImage.save(exportImage).blockingGet()
-				def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud]
+				def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud, snapshotName: snapshotResults.snapshotName]
 				log.debug("archiveOpts: ${archiveOpts}")
 				def archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder) { percent ->
 					exportImage.statusPercent = percent.toDouble()
