@@ -1,0 +1,13 @@
+resource "virtual-image" "pxe_image_morpheus_xenserver_6_5" {
+  code               = "pxe_image_morpheus_xenserver_6_5"
+  category           = "pxe.image.morpheus.xenserver"
+  sshUsername        = "root"
+  sshPassword        = null
+  name               = "morpheus pxe xenserver 6.5"
+  imageType          = "pxe"
+  imagePath          = "pxe/xenserver/6.5"
+  isCloudInit        = false
+  systemImage        = true
+  installAgent       = true
+  osType             = "xenserver.6.5"
+}
