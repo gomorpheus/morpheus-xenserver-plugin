@@ -9,10 +9,7 @@ import com.morpheusdata.model.Cloud
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
 import groovy.util.logging.Slf4j
-import org.apache.commons.compress.archivers.ArchiveEntry
-import org.apache.commons.compress.archivers.ArchiveStreamFactory
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZUtils
 import org.apache.commons.compress.utils.IOUtils
@@ -27,7 +24,6 @@ import org.apache.http.entity.InputStreamEntity
 import org.apache.http.impl.client.BasicCredentialsProvider
 import org.apache.http.impl.client.HttpClients
 import org.w3c.dom.Document
-import org.w3c.dom.Element
 import org.w3c.dom.Node
 import org.w3c.dom.NodeList
 import org.xml.sax.InputSource
@@ -37,11 +33,8 @@ import javax.net.ssl.SSLSocket
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 import java.security.cert.X509Certificate
 import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
@@ -1139,13 +1132,13 @@ class XenComputeUtility {
 
                     CloudFile cloudFile = image.imageFile
                     def cloudFileName = cloudFile.name
-                    if (cloudFilename.indexOf(".") > 0) {
-                        cloudFilename = cloudFilename.substring(0, cloudFilename.lastIndexOf("."))
+                    if (cloudFileName.indexOf(".") > 0) {
+                        cloudFileName = cloudFileName.substring(0, cloudFileName.lastIndexOf("."))
                     }
                     int index=cloudFileName.lastIndexOf('/')
                     cloudFileName = cloudFileName.substring(index+1)
 
-                    def fileVal = getNameFromFile(cloudFile.inputStream, cloudFilename)
+                    def fileVal = getNameFromFile(cloudFile.inputStream, cloudFileName)
                     if (fileVal) {
                         def templateList = listTemplates(opts.authConfig)?.templateList
                         def matchFile = templateList.find { it.nameLabel == fileVal }
