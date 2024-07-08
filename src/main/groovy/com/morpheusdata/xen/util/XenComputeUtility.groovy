@@ -1071,15 +1071,9 @@ class XenComputeUtility {
         def rtn = [success: false]
         def config = getXenConnectionSession(opts.authConfig)
         opts.connection = config.connection
-        log.info("Ray :: insertTemplate: opts: ${opts}")
         def imageResults
-        log.info("Ray :: insertTemplate: opts.containerType: ${opts.containerType}")
         imageResults = insertContainerImage(opts)
-        log.info("Ray :: insertTemplate: imageResults: ${imageResults}")
         if (imageResults.success == true) {
-            log.info("Ray :: insertTemplate: imageResults.vdi: ${imageResults.vdi}")
-            log.info("Ray :: insertTemplate: imageResults.found: ${imageResults.found}")
-            log.info("Ray :: insertTemplate: imageResults.imageId: ${imageResults.imageId}")
             if (imageResults.vdi) {
                 opts.vdi = imageResults.vdi
                 opts.srRecord = imageResults.srRecord
@@ -1088,7 +1082,6 @@ class XenComputeUtility {
                 if (rtn.success == true)
                     rtn.imageId = templateResults.vmId
             } else if (imageResults.found == true || imageResults.imageId) {
-                log.info("Ray :: insertTemplate: imageResults.imageId1: ${imageResults.imageId}")
                 rtn.success = true
                 rtn.imageId = imageResults.imageId
             } else {
@@ -1106,7 +1099,6 @@ class XenComputeUtility {
         try {
             def currentList = listTemplates(opts.authConfig)?.templateList
             def image = opts.image
-            log.info("Ray :: image.name: ${image.name}")
             def match = currentList.find { it.uuid == image.externalId || it.nameLabel == image.name }
             if (!match) {
                 def insertOpts = [
@@ -1138,91 +1130,28 @@ class XenComputeUtility {
                     sourceStream.close()
 
                 }
-                log.info("Ray :: opts.containerType: ${opts.containerType}")
                 if(opts.containerType == 'xva') {
                     def tgtUrl = getXenApiUrl(opts.zone, true) + '/import'
                     insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
-                    log.info("Ray :: for xva: tgtUrl: ${tgtUrl}")
 
 
                     CloudFile cloudFile = image.imageFile
-                    log.info("Ray :: for xva: cloudFile: ${cloudFile}")
-                    log.info("Ray :: for xva: cloudFile?.name: ${cloudFile?.name}")
-                    def datas = cloudFile.name?.split("\\.")
-                    log.info("Ray :: for xva: datas: ${datas}")
-                    log.info("Ray :: for xva: datas?.length: ${datas?.length}")
-                    def cloudFileName = cloudFile ? cloudFile.name?.split("\\.")[0] : null
-                    log.info("Ray :: cloudFileName start: ${cloudFileName}")
+                    def cloudFileName = cloudFile.name
+                    if (cloudFilename.indexOf(".") > 0) {
+                        cloudFilename = cloudFilename.substring(0, cloudFilename.lastIndexOf("."))
+                    }
                     int index=cloudFileName.lastIndexOf('/')
-                    log.info("Ray :: index: ${index}")
                     cloudFileName = cloudFileName.substring(index+1)
-                    log.info("Ray :: cloudFileName end: ${cloudFileName}")
-                    def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(cloudFile.inputStream)
-                    String matchedFileName = null
-                    TarArchiveEntry entry
-                    while((entry = tarStream.getNextTarEntry()) != null) {
-                        log.info("Ray :: Folder : " + entry.name)
-                        if (!entry.isDirectory() && entry.name == "ova.xml") {
-                            log.info("Ray :: Matched Files: " + entry.name)
-                            matchedFileName = entry.name
-                            break;
-                        }
-                    }
 
-                    byte[] buf = new byte[(int) entry.getSize()];
-                    int readed  = IOUtils.readFully(tarStream,buf);
-                    if(readed != buf.length) {
-                        throw new RuntimeException("Read bytes count and entry size differ");
-                    }
-                    String string = new String(buf, StandardCharsets.UTF_8);
-                    log.info("Ray :: string: ${string}")
-
-                    log.info("Ray :: matchedFileName: ${matchedFileName}")
-                    String fileVal = null
-                    if (matchedFileName) {
-                        log.info("Ray :: entry.name : ${entry.name}")
-
-                        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance()
-                        DocumentBuilder db = dbf.newDocumentBuilder()
-                        InputSource is = new InputSource(new StringReader(string));
-                        Document domObject = db.parse(is)
-                        domObject.getDocumentElement().normalize()
-                        NodeList list = domObject.getDocumentElement().getElementsByTagName("name")
-                        log.info("Ray :: list.length : ${list.length}")
-                        for (int i = 0; i < list.getLength(); i++) {
-                            Node node = list.item(i)
-                            log.info("Ray :: node.getTextContent() : ${node.getTextContent()}")
-                            log.info("Ray :: node.getNodeType()  : ${node.getNodeType()}")
-                            if (node.getNodeType() == Node.ELEMENT_NODE && node.getTextContent() == "name_label" ) {
-                                def nodeVal = node.getNextSibling().getTextContent()
-                                log.info("Ray :: cloudFileName  : ${cloudFileName}")
-                                log.info("Ray :: Found data: fileVal: ${nodeVal}")
-                                log.info("Ray :: Found data: fileVal11: ${nodeVal.contains(cloudFileName)}")
-                                if (nodeVal && nodeVal.contains(cloudFileName)) {
-                                    fileVal = nodeVal
-                                    break
-                                }
-                            }
-                        }
-                    }
-                    log.info("Ray :: final fileVal: ${fileVal}")
+                    def fileVal = getNameFromFile(cloudFile.inputStream, cloudFilename)
                     if (fileVal) {
                         def templateList = listTemplates(opts.authConfig)?.templateList
-                        log.info("Ray :: templateList.size(): ${templateList?.size()}")
                         def matchFile = templateList.find { it.nameLabel == fileVal }
-                        log.info("Ray :: matchFile?.uuid: ${matchFile?.uuid}")
                         rtn.imageId = matchFile?.uuid
-                        //rtn.imageId = "c7fa078d-c6b1-ed16-b3ef-e24d84653b2d"
-                        log.info("Ray :: rtn.imageId1: ${rtn.imageId}")
                     }
-
-                    log.info("Ray :: Found data: fileVal: ${fileVal}")
                     def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
-                    log.info("Ray :: uploadResults : ${uploadResults}")
-                    //log.info("Ray :: uploadResults.data : ${uploadResults?.data}")
-                    //rtn.imageId = uploadResults?.data?.toString()
                     rtn.success = uploadResults.success
                 } else {
                     def createResults = createVdi(insertOpts)
@@ -1237,7 +1166,6 @@ class XenComputeUtility {
                         insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
                         //sleep(10l*60l*1000l)
                         log.debug "insertContainerImage image: ${image}"
-                        log.info("Ray :: for xva: tgtUrl: ${tgtUrl}")
                         def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
                         rtn.success = uploadResults.success
 
@@ -1254,7 +1182,7 @@ class XenComputeUtility {
         } catch (e) {
             log.error("insertContainerImage error: ${e}", e)
         }
-        log.info("Ray :: rtn.imageId2: ${rtn.imageId}")
+
         return rtn
     }
 
@@ -1374,7 +1302,7 @@ class XenComputeUtility {
     }
 
     static uploadImage(InputStream sourceStream, Long contentLength, String tgtUrl, Map opts = [:]) {
-        log.info("Ray :: uploadImage: stream: ${contentLength} :: ${tgtUrl} :: ${opts}")
+        log.debug("uploadImage: stream: ${contentLength} :: ${tgtUrl} :: ${opts}")
         def outboundClient
         def progressStream
         def rtn = [success: false]
@@ -1448,15 +1376,8 @@ class XenComputeUtility {
                 opts.vdi.resize(opts.connection, contentLength)
             log.debug "uploadImage opts.vdi: ${opts.vdi?.dump()}"
             def responseBody = outboundClient.execute(outboundPut)
-
             log.info ("uploadImage: stream: responseBody.statusLine.statusCode: ${responseBody.statusLine.statusCode}")
             if (responseBody.statusLine.statusCode < 400) {
-                /*def taskId = responseBody.getFirstHeader("task-id").getValue()
-                if (taskId) {
-                    taskId = taskId.split(":")[1]
-                }
-                log.info("Ray :: task_id: ${taskId}")
-                rtn.data = taskId*/
                 rtn.success = true
             } else {
                 rtn.success = false
@@ -1670,5 +1591,43 @@ class XenComputeUtility {
             log.error "buildSyncLists error: ${e}", e
         }
         return rtn
+    }
+
+    static getNameFromFile(inputStream, cloudFileName) {
+        def fileVal = null
+        def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(inputStream)
+        String matchedFileName = null
+        TarArchiveEntry entry
+        while((entry = tarStream.getNextTarEntry()) != null) {
+            if (!entry.isDirectory() && entry.name == "ova.xml") {
+                matchedFileName = entry.name
+                break;
+            }
+        }
+        byte[] buf = new byte[(int) entry.getSize()];
+        int readed  = IOUtils.readFully(tarStream,buf);
+        if(readed != buf.length) {
+            throw new RuntimeException("Read bytes count and entry size differ");
+        }
+        String string = new String(buf, StandardCharsets.UTF_8);
+        if (matchedFileName) {
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance()
+            DocumentBuilder db = dbf.newDocumentBuilder()
+            InputSource is = new InputSource(new StringReader(string));
+            Document domObject = db.parse(is)
+            domObject.getDocumentElement().normalize()
+            NodeList list = domObject.getDocumentElement().getElementsByTagName("name")
+            for (int i = 0; i < list.getLength(); i++) {
+                Node node = list.item(i)
+                if (node.getNodeType() == Node.ELEMENT_NODE && node.getTextContent() == "name_label" ) {
+                    def nodeVal = node.getNextSibling().getTextContent()
+                    if (nodeVal && nodeVal.contains(cloudFileName)) {
+                        fileVal = nodeVal
+                        break
+                    }
+                }
+            }
+        }
+        return fileVal
     }
 }
