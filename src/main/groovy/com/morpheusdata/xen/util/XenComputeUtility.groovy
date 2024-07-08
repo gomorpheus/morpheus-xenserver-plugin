@@ -1139,13 +1139,13 @@ class XenComputeUtility {
 
                     CloudFile cloudFile = image.imageFile
                     def cloudFileName = cloudFile.name
-                    if (cloudFilename.indexOf(".") > 0) {
-                        cloudFilename = cloudFilename.substring(0, cloudFilename.lastIndexOf("."))
+                    if (cloudFileName.indexOf(".") > 0) {
+						cloudFileName = cloudFileName.substring(0, cloudFileName.lastIndexOf("."))
                     }
                     int index=cloudFileName.lastIndexOf('/')
                     cloudFileName = cloudFileName.substring(index+1)
 
-                    def fileVal = getNameFromFile(cloudFile.inputStream, cloudFilename)
+                    def fileVal = getNameFromFile(cloudFile.inputStream, cloudFileName)
                     if (fileVal) {
                         def templateList = listTemplates(opts.authConfig)?.templateList
                         def matchFile = templateList.find { it.nameLabel == fileVal }
