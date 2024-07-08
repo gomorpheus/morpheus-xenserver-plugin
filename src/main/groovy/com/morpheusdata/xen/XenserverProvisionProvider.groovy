@@ -429,7 +429,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		def imageId
 		def sourceVmId
 		def virtualImage
-		def imageFormat = 'vhd'
+		def imageFormat = 'xva'
 		try {
 			def containerConfig = workload.getConfigMap()
 			def rootVolume = server.volumes?.find { it.rootVolume == true }
@@ -449,6 +449,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					//TODO: We need to upload ovg/vmdk stuff here
 					def primaryNetwork = server.interfaces?.find { it.network }?.network
 					def cloudFiles = context.async.virtualImage.getVirtualImageFiles(virtualImage).blockingGet()
+					imageFormat = virtualImage.virtualImageType?.code ?: virtualImage.imageType
 					def imageFile = cloudFiles?.find { cloudFile -> cloudFile.name.toLowerCase().indexOf('.' + imageFormat) > -1 }
 					def containerImage =
 							[
@@ -458,7 +459,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 									minRam       : virtualImage.minRam ?: (512 * ComputeUtility.ONE_MEGABYTE),
 									tags         : 'morpheus, ubuntu',
 									imageType    : 'disk_image',
-									containerType: 'vhd',
+									containerType: virtualImage.virtualImageType?.code ?: virtualImage.imageType, //'vhd',
 									cloudFiles   : cloudFiles,
 									imageFile    : imageFile,
 									imageSize    : imageFile?.contentLength
@@ -470,7 +471,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 									name      : virtualImage.name,
 									datastore : datastore,
 									network   : primaryNetwork,
-									osTypeCode: virtualImage?.osType?.code
+									osTypeCode: virtualImage?.osType?.code,
+									containerType : containerImage?.containerType
 							]
 					imageConfig.authConfig = authConfigMap
 					def imageResults = XenComputeUtility.insertTemplate(imageConfig)
@@ -1861,7 +1863,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def archiveFolder = "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
 				exportImage.remotePath = archiveFolder
 				context.async.virtualImage.save(exportImage).blockingGet()
-				def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud]
+				def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud, snapshotName: snapshotResults.snapshotName]
 				log.debug("archiveOpts: ${archiveOpts}")
 				def archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder) { percent ->
 					exportImage.statusPercent = percent.toDouble()

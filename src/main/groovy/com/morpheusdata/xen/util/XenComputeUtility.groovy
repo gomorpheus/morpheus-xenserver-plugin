@@ -3,23 +3,22 @@ package com.morpheusdata.xen.util
 import com.bertramlabs.plugins.karman.CloudFile
 import com.bertramlabs.plugins.karman.StorageProvider
 import com.morpheusdata.core.util.HttpApiClient
-import com.morpheusdata.core.util.MorpheusUtils
 import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
-import com.morpheusdata.model.Datastore
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
 import groovy.util.logging.Slf4j
-import org.apache.commons.beanutils.PropertyUtils
+import org.apache.commons.compress.archivers.ArchiveEntry
+import org.apache.commons.compress.archivers.ArchiveStreamFactory
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZUtils
-import org.apache.http.HttpHost
+import org.apache.commons.compress.utils.IOUtils
 import org.apache.http.auth.AuthScope
 import org.apache.http.client.methods.CloseableHttpResponse
-import org.apache.http.client.methods.HttpGet
 import org.apache.http.client.methods.HttpPut
-import org.apache.http.conn.ConnectTimeoutException
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory
 import org.apache.http.conn.ssl.SSLContextBuilder
 import org.apache.http.conn.ssl.TrustStrategy
@@ -27,14 +26,22 @@ import org.apache.http.conn.ssl.X509HostnameVerifier
 import org.apache.http.entity.InputStreamEntity
 import org.apache.http.impl.client.BasicCredentialsProvider
 import org.apache.http.impl.client.HttpClients
-import org.apache.http.protocol.HttpContext
+import org.w3c.dom.Document
+import org.w3c.dom.Element
+import org.w3c.dom.Node
+import org.w3c.dom.NodeList
+import org.xml.sax.InputSource
 
-import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSession
 import javax.net.ssl.SSLSocket
-import java.lang.reflect.InvocationTargetException
+import javax.xml.parsers.DocumentBuilder
+import javax.xml.parsers.DocumentBuilderFactory
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.security.cert.X509Certificate
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
@@ -965,6 +972,7 @@ class XenComputeUtility {
                 def snapshotName = opts.snapshotName ?: "${vm.getNameLabel(config.connection)}.${System.currentTimeMillis()}"
                 rtn.newVm = vm.snapshot(config.connection, snapshotName)
                 rtn.snapshotId = rtn.newVm.getUuid(config.connection)
+                rtn.snapshotName = rtn.newVm.getNameLabel(config.connection)
                 rtn.success = true
             } else {
                 rtn.msg = 'VM is not available'
@@ -1063,19 +1071,23 @@ class XenComputeUtility {
         def rtn = [success: false]
         def config = getXenConnectionSession(opts.authConfig)
         opts.connection = config.connection
-        def imageResults = insertContainerImage(opts)
+        def imageResults
+        imageResults = insertContainerImage(opts)
         if (imageResults.success == true) {
-            if (imageResults.found == true) {
-                rtn.success = true
-                rtn.imageId = imageResults.imageId
-            } else {
+            if (imageResults.vdi) {
                 opts.vdi = imageResults.vdi
                 opts.srRecord = imageResults.srRecord
                 def templateResults = createTemplate(opts)
                 rtn.success = templateResults.success
                 if (rtn.success == true)
                     rtn.imageId = templateResults.vmId
+            } else if (imageResults.found == true || imageResults.imageId) {
+                rtn.success = true
+                rtn.imageId = imageResults.imageId
+            } else {
+                rtn.success = false
             }
+
         } else {
             log.warn("Image Upload Failed! ${imageResults}")
         }
@@ -1116,25 +1128,50 @@ class XenComputeUtility {
                     def tarEntry = tarStream.getNextTarEntry()
                     insertOpts.diskSize = tarEntry.getSize()
                     sourceStream.close()
-                }
-                def createResults = createVdi(insertOpts)
 
-                if (createResults.success == true) {
-                    //upload it -
-                    def srRecord = SR.getByUuid(opts.connection, opts.datastore.externalId)
-                    def tgtUrl = getXenApiUrl(opts.zone, true) + '/import_raw_vdi?vdi=' + createResults.vdiId + '&format=vhd'
-                    rtn.vdiId = createResults.vdiId
-                    rtn.vdi = createResults.vdi
-                    rtn.srRecord = srRecord
-                    insertOpts.vdi = rtn.vdi
+                }
+                if(opts.containerType == 'xva') {
+                    def tgtUrl = getXenApiUrl(opts.zone, true) + '/import'
                     insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
+
+
+                    CloudFile cloudFile = image.imageFile
+                    def cloudFileName = cloudFile.name
+                    if (cloudFilename.indexOf(".") > 0) {
+                        cloudFilename = cloudFilename.substring(0, cloudFilename.lastIndexOf("."))
+                    }
+                    int index=cloudFileName.lastIndexOf('/')
+                    cloudFileName = cloudFileName.substring(index+1)
+
+                    def fileVal = getNameFromFile(cloudFile.inputStream, cloudFilename)
+                    if (fileVal) {
+                        def templateList = listTemplates(opts.authConfig)?.templateList
+                        def matchFile = templateList.find { it.nameLabel == fileVal }
+                        rtn.imageId = matchFile?.uuid
+                    }
                     def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
                     rtn.success = uploadResults.success
-
                 } else {
-                    rtn.msg = createResults.msg ?: createResults.error
+                    def createResults = createVdi(insertOpts)
+                    if (createResults.success == true) {
+                        //upload it -
+                        def srRecord = SR.getByUuid(opts.connection, opts.datastore.externalId)
+                        def tgtUrl = getXenApiUrl(opts.zone, true) + '/import_raw_vdi?vdi=' + createResults.vdiId + '&format=vhd'
+                        rtn.vdiId = createResults.vdiId
+                        rtn.vdi = createResults.vdi
+                        rtn.srRecord = srRecord
+                        insertOpts.vdi = rtn.vdi
+                        insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
+                        //sleep(10l*60l*1000l)
+                        log.debug "insertContainerImage image: ${image}"
+                        def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
+                        rtn.success = uploadResults.success
+
+                    } else {
+                        rtn.msg = createResults.msg ?: createResults.error
+                    }
                 }
             } else {
                 println("using image: ${match.uuid}")
@@ -1554,5 +1591,43 @@ class XenComputeUtility {
             log.error "buildSyncLists error: ${e}", e
         }
         return rtn
+    }
+
+    static getNameFromFile(inputStream, cloudFileName) {
+        def fileVal = null
+        def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(inputStream)
+        String matchedFileName = null
+        TarArchiveEntry entry
+        while((entry = tarStream.getNextTarEntry()) != null) {
+            if (!entry.isDirectory() && entry.name == "ova.xml") {
+                matchedFileName = entry.name
+                break;
+            }
+        }
+        byte[] buf = new byte[(int) entry.getSize()];
+        int readed  = IOUtils.readFully(tarStream,buf);
+        if(readed != buf.length) {
+            throw new RuntimeException("Read bytes count and entry size differ");
+        }
+        String string = new String(buf, StandardCharsets.UTF_8);
+        if (matchedFileName) {
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance()
+            DocumentBuilder db = dbf.newDocumentBuilder()
+            InputSource is = new InputSource(new StringReader(string));
+            Document domObject = db.parse(is)
+            domObject.getDocumentElement().normalize()
+            NodeList list = domObject.getDocumentElement().getElementsByTagName("name")
+            for (int i = 0; i < list.getLength(); i++) {
+                Node node = list.item(i)
+                if (node.getNodeType() == Node.ELEMENT_NODE && node.getTextContent() == "name_label" ) {
+                    def nodeVal = node.getNextSibling().getTextContent()
+                    if (nodeVal && nodeVal.contains(cloudFileName)) {
+                        fileVal = nodeVal
+                        break
+                    }
+                }
+            }
+        }
+        return fileVal
     }
 }
