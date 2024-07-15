@@ -514,6 +514,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				server.sourceImage = virtualImage
 				server.serverOs = server.serverOs ?: virtualImage.osType
 				server.osType = (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform
+				if(server.osType == 'windows') {
+					server.guestConsoleType = ComputeServer.GuestConsoleType.rdp
+				} else if(server.osType == 'linux') {
+					server.guestConsoleType = ComputeServer.GuestConsoleType.ssh
+				}
 				def newType = this.findVmNodeServerTypeForCloud(cloud.id, server.osType, 'xenserver-provision-provider')
 				if (newType && server.computeServerType != newType) {
 					server.computeServerType = newType
