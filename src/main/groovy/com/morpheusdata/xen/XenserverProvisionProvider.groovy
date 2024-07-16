@@ -514,11 +514,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				server.sourceImage = virtualImage
 				server.serverOs = server.serverOs ?: virtualImage.osType
 				server.osType = (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform
-				if(server.osType == 'windows') {
-					server.guestConsoleType = ComputeServer.GuestConsoleType.rdp
-				} else if(server.osType == 'linux') {
-					server.guestConsoleType = ComputeServer.GuestConsoleType.ssh
-				}
 				def newType = this.findVmNodeServerTypeForCloud(cloud.id, server.osType, 'xenserver-provision-provider')
 				if (newType && server.computeServerType != newType) {
 					server.computeServerType = newType
@@ -583,6 +578,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					provisionResponse.externalId = server.externalId
 					setVolumeInfo(server.volumes, createResults.volumes)
 					server = saveAndGet(server)
+
 					def startResults = XenComputeUtility.startVm(authConfigMap, server.externalId)
 					log.debug("start: ${startResults.success}")
 					if (startResults.success == true) {
@@ -610,6 +606,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 										context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
 										// reload the server to pickup interface changes
 										server = context.async.computeServer.get(server.id).blockingGet()
+
 									}
 								}
 								def privateIp = serverDetail.ipAddress
@@ -625,6 +622,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								setNetworkInfo(server.interfaces, serverDetail.networks)
 								// reload the server after setNetworkInfo made changes to interfaces
 								server = context.async.computeServer.get(server.id).blockingGet()
+
 								server.osDevice = '/dev/vda'
 								server.dataDevice = '/dev/vda'
 								server.lvmEnabled = false
@@ -927,11 +925,15 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	}
 
 	protected ComputeServer saveAndGet(ComputeServer server) {
-		def saveSuccessful = context.async.computeServer.bulkSave([server]).blockingGet()
-		if(!saveSuccessful) {
+		def saveResult = context.async.computeServer.bulkSave([server]).blockingGet()
+		def updatedServer
+		if(saveResult.success == true) {
+			updatedServer = saveResult.persistedItems.find { it.id == server.id }
+		} else {
+			updatedServer = saveResult.failedItems.find { it.id == server.id }
 			log.warn("Error saving server: ${server?.id}" )
 		}
-		return context.async.computeServer.get(server.id).blockingGet()
+		return updatedServer ?: server
 	}
 
 	@Override
