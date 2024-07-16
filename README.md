@@ -8,7 +8,7 @@ XCP-ng - Version 8.2 or greater
 `./gradlew shadowJar`
 
 ### Configuration
-The following options are required when setting up a Morpheus Cloud to a Nutanix Prism Central environment using this plugin:
+The following options are required when setting up a Morpheus Cloud to an XCP-ng environment using this plugin:
 1. API URL: XCP-ng host URL (i.e. https://10.100.10.100)
 2. Custom Port (optional, defaults to 443)
 2. Username
