@@ -38,8 +38,8 @@ resource "instance-type-layout" "ubuntu-xen-14_04" {
   serverCount                = 1
   supportsConvertToManaged = true
   portCount                  = 1
-  enabled                     = true
-  creatable                   = true
+  enabled                     = false
+  creatable                   = false
   containers                  = [workload-type-set.ubuntu-xen-14_04-set]
   actions                     = ["ubuntu-add-node"]
   provisionType              = "xen"
