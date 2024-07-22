@@ -1197,29 +1197,28 @@ class XenComputeUtility {
             def deviceConfig = pbdRecord.deviceConfig
 
             log.info("Preparing to Upload ISO Disk to Datastore: ${isoDatastore.name} - with deviceConfig: ${deviceConfig.dump()} ${deviceConfig['type']}")
-            if (deviceConfig['type'] == 'nfs_iso') {
-                def locationArgs = deviceConfig['location'].tokenize(':')
-                log.debug("Looking for nfs: ${locationArgs[0]}")
-                def provider = StorageProvider.create(provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1])
-                def iso = provider['/'][opts.cloudConfigFile]
-                iso.setBytes(cloudIsoOutputStream)
-                iso.save()
+            if (deviceConfig['type'] == 'cifs') {
+				def deviceLocations = deviceConfig['location'].tokenize('\\/')
+				def share = deviceLocations[1..-1].join('/')
+				def devicePassword = deviceConfig['cifspassword']
+				def deviceSecret = deviceConfig['cifspassword_secret']
+				if (deviceSecret) {
+					def secret = com.xensource.xenapi.Secret.getByUuid(opts.connection, deviceSecret)
+					devicePassword = secret.getValue(opts.connection)
+				}
 
+				log.debug("Looking for cifs: ${deviceLocations[0]}")
+				def provider = StorageProvider.create(provider: 'cifs', host: deviceLocations[0], username: deviceConfig['username'], password: devicePassword)
+				def iso = provider[share][opts.cloudConfigFile]
+				iso.setBytes(cloudIsoOutputStream)
+				iso.save()
             } else {
-                def deviceLocations = deviceConfig['location'].tokenize('\\/')
-                def share = deviceLocations[1..-1].join('/')
-                def devicePassword = deviceConfig['cifspassword']
-                def deviceSecret = deviceConfig['cifspassword_secret']
-                if (deviceSecret) {
-                    def secret = com.xensource.xenapi.Secret.getByUuid(opts.connection, deviceSecret)
-                    devicePassword = secret.getValue(opts.connection)
-                }
-
-                log.debug("Looking for cifs: ${deviceLocations[0]}")
-                def provider = StorageProvider.create(provider: 'cifs', host: deviceLocations[0], username: deviceConfig['username'], password: devicePassword)
-                def iso = provider[share][opts.cloudConfigFile]
-                iso.setBytes(cloudIsoOutputStream)
-                iso.save()
+				def locationArgs = deviceConfig['location'].tokenize(':')
+				log.debug("Looking for nfs: ${locationArgs[0]}")
+				def provider = StorageProvider.create(provider: 'nfs', host: locationArgs[0], exportFolder: locationArgs[1])
+				def iso = provider['/'][opts.cloudConfigFile]
+				iso.setBytes(cloudIsoOutputStream)
+				iso.save()
             }
             srRecord.scan(opts.connection)
             //find it
