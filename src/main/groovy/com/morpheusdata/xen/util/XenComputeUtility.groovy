@@ -366,6 +366,25 @@ class XenComputeUtility {
         return rtn
     }
 
+	static restartVm(Map authConfig, String vmId) {
+		def rtn = [success: false]
+		try {
+			def config = getXenConnectionSession(authConfig)
+			def vm = VM.getByUuid(config.connection, vmId)
+			if (vm.getPowerState(config.connection) == com.xensource.xenapi.Types.VmPowerState.RUNNING) {
+				// this only attempts a clean reboot. To replicate the stop behavior, attempt a clean stop and then a hard stop if the clean fails, we could call stopVm() then startVm();
+				vm.cleanReboot(config.connection)
+				rtn.success = true
+			} else {
+				return startVm(authConfig, vmId)
+			}
+		} catch (e) {
+			log.error("restartVm error: ${e}", e)
+			rtn.msg = 'error restarting vm'
+		}
+		return rtn
+	}
+
     static destroyVm(Map authConfig, vmId) {
         def rtn = [success: false]
         try {

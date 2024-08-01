@@ -741,8 +741,27 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse restartWorkload(Workload workload) {
-		// Generally a call to stopWorkLoad() and then startWorkload()
-		return ServiceResponse.success()
+		log.debug("restartWrokload: ${workload.id}")
+		def rtn = ServiceResponse.prepare()
+		try {
+			if(workload.server?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
+				def restartResults = XenComputeUtility.restartVm(authConfigMap, workload.server.externalId)
+				log.debug("restartWrokload: restartResults: ${restartResults}")
+				if(restartResults.success == true) {
+					rtn.success = true
+				} else {
+					rtn.msg = "${restartResults.msg}" ?: 'Failed to restart vm'
+				}
+			} else {
+				rtn.error = context.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
+			}
+		} catch(e) {
+			log.error("startContainer error: ${e}", e)
+			rtn.error = context.services.localization.get("gomorpheus.provision.xenServer.error.restartWorkload")
+		}
+
+		return rtn
 	}
 
 	/**
