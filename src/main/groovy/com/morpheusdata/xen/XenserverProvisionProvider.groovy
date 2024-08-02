@@ -1216,7 +1216,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			//add optional data disk
 			if (opts.dataDisks?.size() > 0) {
 				opts.dataDisks?.eachWithIndex { disk, diskIndex ->
-					def dataSrRecord = SR.getByUuid(config.connection, disk.datastore.externalId)
+					def tmpDisk = context.async.storageVolume.get(disk.id).blockingGet()
+					def dataSrRecord = SR.getByUuid(config.connection, tmpDisk.datastore.externalId)
 					def dataVdi = XenComputeUtility.createVdi(opts, dataSrRecord, disk.maxStorage)
 					def dataVbd = XenComputeUtility.createVbd(opts, newVm, dataVdi, (lastDiskIndex + 1).toString())
 					lastDiskIndex = dataVbd.deviceId?.toInteger() ?: lastDiskIndex + 1
@@ -1228,7 +1229,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						} else {
 							disk.unitNumber = lastDiskIndex
 						}
-						context.async.storageVolume.save(disk).blockingGet()
+						context.async.storageVolume.save(tmpDisk).blockingGet()
 					}
 				}
 			}
