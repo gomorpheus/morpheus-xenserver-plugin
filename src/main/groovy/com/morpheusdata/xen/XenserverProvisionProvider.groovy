@@ -518,7 +518,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				if (newType && server.computeServerType != newType) {
 					server.computeServerType = newType
 				}
-				server = saveAndGet(server)
+				server = saveAndGetMorpheusServer(server, true)
 				def maxMemory = workload.maxMemory ?: workload.instance.plan.maxMemory
 				def maxCores = workload.maxCores ?: workload.instance.plan.maxCores
 				def maxStorage = this.getRootSize(workload)
@@ -561,7 +561,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				createOpts.cloudConfigFile = getCloudFileDiskName(server.id)
 				createOpts.isSysprep = virtualImage?.isSysprep
 				log.debug("Creating VM on Xen Server Additional Details: ${createOpts}")
-				server = saveAndGet(server)
 				createOpts.server = server
 				def createResults
 				if (sourceVmId) {
@@ -577,8 +576,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					server.externalId = createResults.vmId
 					provisionResponse.externalId = server.externalId
 					setVolumeInfo(server.volumes, createResults.volumes)
-					server = saveAndGet(server)
-
+					server = saveAndGetMorpheusServer(server, true)
 					def startResults = XenComputeUtility.startVm(authConfigMap, server.externalId)
 					log.debug("start: ${startResults.success}")
 					if (startResults.success == true) {
@@ -591,22 +589,24 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							log.debug("serverDetail: ${serverDetail}")
 							if (serverDetail.success == true) {
 								serverDetail.ipAddresses.each { interfaceName, data ->
-									ComputeServerInterface netInterface = server.interfaces.find { it.name == interfaceName }
-									if (netInterface) {
-										if (data.ipAddress) {
-											def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-											netInterface.addresses << address
-											netInterface.publicIpAddress = data.ipAddress
+									Long netInterfaceId = server.interfaces.find { it.name == interfaceName }?.id
+									if(netInterfaceId) {
+										ComputeServerInterface netInterface = context.async.computeServer.computeServerInterface.get(netInterfaceId).blockingGet()
+										if (netInterface) {
+											if (data.ipAddress) {
+												def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
+												netInterface.addresses << address
+												netInterface.publicIpAddress = data.ipAddress
+											}
+											if (data.ipv6Address) {
+												def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
+												netInterface.addresses << address
+												netInterface.publicIpv6Address = data.ipv6Address
+											}
+											context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
+											// reload the server to pickup interface changes
+											server = getMorpheusServer(server.id)
 										}
-										if (data.ipv6Address) {
-											def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-											netInterface.addresses << address
-											netInterface.publicIpv6Address = data.ipv6Address
-										}
-										context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
-										// reload the server to pickup interface changes
-										server = context.async.computeServer.get(server.id).blockingGet()
-
 									}
 								}
 								def privateIp = serverDetail.ipAddress
@@ -616,12 +616,12 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 									server.internalIp = privateIp
 									server.externalIp = publicIp
 									server.sshHost = privateIp
-									server = saveAndGet(server)
+									server = saveAndGetMorpheusServer(server)
 								}
 								//update external info
 								setNetworkInfo(server.interfaces, serverDetail.networks)
 								// reload the server after setNetworkInfo made changes to interfaces
-								server = context.async.computeServer.get(server.id).blockingGet()
+								server = getMorpheusServer(server.id)
 
 								server.osDevice = '/dev/vda'
 								server.dataDevice = '/dev/vda'
@@ -644,7 +644,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						}
 					} else {
 						server.statusMessage = 'Failed to start server'
-						saveAndGet(server)
+						saveAndGetMorpheusServer(server)
 					}
 				} else {
 					provisionResponse.setError('An unknown error occurred while making an API request to Xen.')
@@ -652,6 +652,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				}
 			} else {
 				server.statusMessage = 'Image not found'
+				saveAndGetMorpheusServer(server)
 			}
 			provisionResponse.noAgent = opts.noAgent ?: false
 			if (provisionResponse.success != true) {
@@ -809,7 +810,29 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse<ProvisionResponse> getServerDetails(ComputeServer server) {
-		return new ServiceResponse<ProvisionResponse>(true, null, null, new ProvisionResponse(success:true))
+		log.debug("getServerDetails: ${server}")
+		def provisionResponse = new ProvisionResponse()
+		ServiceResponse<ProvisionResponse> rtn = ServiceResponse.prepare(provisionResponse)
+		try {
+			Map authConfig = plugin.getAuthConfig(server.cloud)
+			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
+			if (serverDetail.success == true) {
+				provisionResponse.privateIp = serverDetail.ipAddress
+				provisionResponse.publicIp = serverDetail.ipAddress
+				provisionResponse.externalId = server.externalId
+				def finalizeResults = finalizeHost(server)
+				if(finalizeResults.success == true) {
+					provisionResponse.success = true
+					rtn.success = true
+				}
+			}
+		} catch (e){
+			log.error("Error getServerDetails: ${e}", e)
+			rtn.success = false
+			rtn.msg = "Error in getting server detail: ${e}"
+		}
+
+		return rtn
 	}
 
 	/**
@@ -943,16 +966,26 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		return rtn
 	}
 
-	protected ComputeServer saveAndGet(ComputeServer server) {
+	protected ComputeServer saveAndGetMorpheusServer(ComputeServer server, Boolean fullReload=false) {
 		def saveResult = context.async.computeServer.bulkSave([server]).blockingGet()
 		def updatedServer
 		if(saveResult.success == true) {
-			updatedServer = saveResult.persistedItems.find { it.id == server.id }
+			if(fullReload) {
+				updatedServer = getMorpheusServer(server.id)
+			} else {
+				updatedServer = saveResult.persistedItems.find { it.id == server.id }
+			}
 		} else {
 			updatedServer = saveResult.failedItems.find { it.id == server.id }
 			log.warn("Error saving server: ${server?.id}" )
 		}
 		return updatedServer ?: server
+	}
+
+	protected  ComputeServer getMorpheusServer(Long id) {
+		return context.services.computeServer.find(
+			new DataQuery().withFilter("id", id).withJoin("interfaces.network")
+		)
 	}
 
 	@Override
@@ -976,7 +1009,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				rtn.msg = "No virtual image selected"
 			} else {
 				server.sourceImage = virtualImage
-				saveAndGet(server)
+				saveAndGetMorpheusServer(server)
 				rtn.success = true
 			}
 		} catch(e) {
@@ -1278,13 +1311,14 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							matchNetwork = externalNetworks.find{displayOrder == it.deviceIndex}
 						}
 						if(matchNetwork) {
-							networkInterface.externalId = "${matchNetwork.deviceIndex}"
-							networkInterface.internalId = "${matchNetwork.uuid}"
-							networkInterface.macAddress = matchNetwork.macAddress
-							if(networkInterface.type == null) {
-								networkInterface.type = new ComputeServerInterfaceType(code: 'xenNetwork')
+							def tmpInterface = context.async.computeServer.computeServerInterface.get(networkInterface.id).blockingGet()
+							tmpInterface.externalId = "${matchNetwork.deviceIndex}"
+							tmpInterface.internalId = "${matchNetwork.uuid}"
+							tmpInterface.macAddress = matchNetwork.macAddress
+							if(tmpInterface.type == null) {
+								tmpInterface.type = new ComputeServerInterfaceType(code: 'xenNetwork')
 							}
-							context.async.computeServer.computeServerInterface.save([networkInterface]).blockingGet()
+							context.async.computeServer.computeServerInterface.save([tmpInterface]).blockingGet()
 						}
 					}
 				}
@@ -1663,11 +1697,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		log.debug("resizeWorkload ${workload ? "workload" : "server"}.id: ${workload?.id ?: server?.id} - opts: ${opts}")
 
 		ServiceResponse rtn = ServiceResponse.success()
-		ComputeServer computeServer = context.async.computeServer.get(server.id).blockingGet()
+		ComputeServer computeServer = getMorpheusServer(server.id)
 		def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
 		try {
 			computeServer.status = 'resizing'
-			computeServer = saveAndGet(computeServer)
+			computeServer = saveAndGetMorpheusServer(computeServer)
 
 
 			def requestedMemory = resizeRequest.maxMemory
@@ -1742,7 +1776,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						newVolume.uniqueId = uniqueId
 						setVolumeInfo(computeServer.volumes, addDiskResults.volumes)
 						context.async.storageVolume.create([newVolume], computeServer).blockingGet()
-						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
+						computeServer = getMorpheusServer(computeServer.id)
 						if (isWorkload) {
 							workload.server = computeServer
 						}
@@ -1756,7 +1790,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					log.debug("deleteResults ${deleteResults}")
 					if (deleteResults.success == true) {
 						context.async.storageVolume.remove([volume], computeServer, true).blockingGet()
-						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
+						computeServer = getMorpheusServer(computeServer.id)
 					}
 				}
 			}
@@ -1778,7 +1812,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						newInterface.uniqueId = isWorkload ? "morpheus-nic-${instanceId}-${workload.id}-${newIndex}" : "morpheus-nic-${server.id}-${newIndex}"
 						newInterface.primaryInterface = false
 						context.async.computeServer.computeServerInterface.create([newInterface], computeServer).blockingGet()
-						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
+						computeServer = getMorpheusServer(computeServer.id)
 					}
 				}
 				resizeRequest?.interfacesDelete?.eachWithIndex { networkDelete, index ->
@@ -1789,19 +1823,19 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						computeServer.interfaces = computeServer.interfaces.findAll { it.id != networkDelete.id }
 						context.async.computeServer.save(computeServer).blockingGet()
 						context.async.computeServer.computeServerInterface.remove(networkDelete).blockingGet()
-						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
+						computeServer = getMorpheusServer(computeServer.id)
 					}
 				}
 			}
 			computeServer.status = 'provisioned'
-			computeServer = saveAndGet(computeServer)
+			computeServer = saveAndGetMorpheusServer(computeServer)
 			rtn.success = true
 		} catch (e) {
 			log.error("Unable to resize workload: ${e.message}", e)
 			computeServer.status = 'provisioned'
 			if (!isWorkload)
 				computeServer.statusMessage = "Unable to resize server: ${e.message}"
-			computeServer = saveAndGet(computeServer)
+			computeServer = saveAndGetMorpheusServer(computeServer)
 			rtn.success = false
 			def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.error.resizeWorkload")
 			rtn.setError(error)
