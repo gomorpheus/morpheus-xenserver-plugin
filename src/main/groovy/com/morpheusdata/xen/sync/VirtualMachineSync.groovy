@@ -220,6 +220,13 @@ class VirtualMachineSync {
                         save = true
                     }
 
+                    //Update the power state of the VM and the status of its associated container/instance
+                    def powerState = cloudItem.vm.powerState.toString() == 'Running' ? ComputeServer.PowerState.on : ComputeServer.PowerState.off
+                    if(currentServer.powerState != powerState) {
+                        currentServer.powerState = powerState
+                        save = true
+                    }
+
                     currentServer.capacityInfo = capacityInfo
                     if (save) {
                         saves << currentServer
