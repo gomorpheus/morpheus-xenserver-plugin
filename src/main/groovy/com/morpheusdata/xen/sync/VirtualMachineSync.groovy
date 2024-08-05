@@ -69,7 +69,7 @@ class VirtualMachineSync {
                 }.onAdd {itemsToAdd ->
                     addMissingVirtualMachines(itemsToAdd, usageLists, availablePlans, availablePlanPermissions, authConfig, hosts)
                 }.onUpdate { List<SyncTask.UpdateItem<ComputeServer, VM.Record>> updateItems ->
-                    updateMatchedVirtualMachines(updateItems, authConfig)
+                    updateMatchedVirtualMachines(updateItems, authConfig,availablePlans,availablePlanPermissions,hosts)
                 }.onDelete { removeItems ->
                     removeMissingVirtualMachines(removeItems)
                 }.observe().blockingSubscribe()
@@ -184,14 +184,16 @@ class VirtualMachineSync {
         return morpheusContext.async.computeServer.get(server.id).blockingGet()
     }
 
-    void updateMatchedVirtualMachines(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList, authConfig) {
+    void updateMatchedVirtualMachines(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList, authConfig,Collection<ServicePlan> availablePlans,Collection<ResourcePermission> availablePlanPermissions,Map hosts) {
         log.debug("VirtualMachineSync >> updateMatchedVirtualMachines() called")
         List<ComputeServer> saves = []
+        ServicePlan servicePlan = morpheusContext.services.servicePlan.find(new DataQuery().withFilter("code", "internal-custom-xen"))
         for (update in updateList) {
             ComputeServer currentServer = update.existingItem
             Map cloudItem = update.masterItem
             if (currentServer.status != 'provisioning') {
                 try {
+                    def vmConfig = buildVmConfig(cloudItem, servicePlan, availablePlans, availablePlanPermissions, hosts)
                     def	maxCpu = cloudItem.vm.VCPUsMax?.toLong() ?: 1
                     def maxMemory = cloudItem.vm.memoryTarget?.toLong() ?: 0
                     def maxStorage = cloudItem.totalDiskSize?.toLong() ?: 0
@@ -219,6 +221,15 @@ class VirtualMachineSync {
                         currentServer.maxStorage = volumeResults.maxStorage
                         save = true
                     }
+
+                    //Update the power state of the VM and the status of its associated container/instance
+                    if(currentServer.powerState != vmConfig.powerState) {
+							currentServer.powerState = vmConfig.powerState
+							save = true
+							if (currentServer.computeServerType?.guestVm) {
+								morpheusContext.async.computeServer.updatePowerState(currentServer.id, currentServer.powerState).blockingGet()
+							}
+					}
 
                     currentServer.capacityInfo = capacityInfo
                     if (save) {
