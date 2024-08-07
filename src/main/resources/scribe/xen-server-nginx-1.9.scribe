@@ -1,13 +1,13 @@
 resource "virtual-image" "xenserver-image-morpheus-nginx-1_9" {
-  code          = "xen.image.morpheus.nginx.1.9"
-  category      = "xen.image.morpheus.nginx.1.9"
+  code         = "xen.image.morpheus.nginx.1.9"
+  category     = "xen.image.morpheus.nginx.1.9"
   sshUsername  = "ubuntu"
   sshPassword  = null
-  name          = "Morpheus NGINX 1.9 on Ubuntu 14.04"
+  name         = "Morpheus NGINX 1.9 on Ubuntu 14.04"
   imageType    = "vhd"
   remotePath   = "https://s3-us-west-1.amazonaws.com/morpheus-images/xen/nginx/nginx-1_9-v1/ubuntu-14_04_3/morpheus-nginx-1_9-ubuntu-14_04_3-v1.vhd"
   imagePath    = "xen/nginx/nginx-1_9-v1/ubuntu-14_04_3"
-  isCloudInit = true
+  isCloudInit  = true
   systemImage  = true
   installAgent = true
   imageName    = "morpheus-nginx-1_9-ubuntu-14_04_3-v1.vhd"
@@ -15,45 +15,45 @@ resource "virtual-image" "xenserver-image-morpheus-nginx-1_9" {
 }
 
 resource "workload-type" "nginx-xen-1_9" {
-  code                   = "nginx-xen-1.9"
-  name                   = "NGINX 1.9"
-  shortName             = "nginx"
-  description            = "NGINX 1.9"
-  category               = "nginx"
+  code                 = "nginx-xen-1.9"
+  name                 = "NGINX 1.9"
+  shortName            = "nginx"
+  description          = "NGINX 1.9"
+  category             = "nginx"
   containerTypeCode    = "nginx-xen-1.9"
-  containerVersion      = "1.9"
-  repositoryImage       = null
-  entryPoint            = "/entrypoint.sh"
+  containerVersion     = "1.9"
+  repositoryImage      = null
+  entryPoint           = "/entrypoint.sh"
   statTypeCode         = "vm"
   logTypeCode          = "nginx"
   checkTypeCode        = "webGetCheck"
-  mountPoint            = "/data"
-  mountData             = "/morpheus/data"
-  mountConfig           = "/etc/nginx"
-  mountLogs             = "/var/log/nginx"
-  cloneType             = "nginx"
-  priorityOrder         = 0
-  serverType            = "vm"
-  providerType          = "xen"
-  deploymentType        = "nginx"
-  virtualImage          = virtual-image.xenserver-image-morpheus-nginx-1_9
-  actions                = ["nginx-1.9-remove-node"]
-  scripts                = ["nginx-1.9-vm-entrypoint", "nginx-1.9-vm-start", "nginx-1.9-vm-stop"]
-  containerMounts       = ["nginx-1.9-config", "nginx-1.9-data", "nginx-1.9-certs", "nginx-1.9-logs"]
-  templates              = ["nginx-1.9"]
-  provisionType         = "xen"
-  backupType            = "xenSnapshot"
-  containerPorts        = ["nginx.80", "nginx.443"]
+  mountPoint           = "/data"
+  mountData            = "/morpheus/data"
+  mountConfig          = "/etc/nginx"
+  mountLogs            = "/var/log/nginx"
+  cloneType            = "nginx"
+  priorityOrder        = 0
+  serverType           = "vm"
+  providerType         = "xen"
+  deploymentType       = "nginx"
+  virtualImage         = virtual-image.xenserver-image-morpheus-nginx-1_9
+  actions = ["nginx-1.9-remove-node"]
+  scripts = ["nginx-1.9-vm-entrypoint", "nginx-1.9-vm-start", "nginx-1.9-vm-stop"]
+  containerMounts = ["nginx-1.9-config", "nginx-1.9-data", "nginx-1.9-certs", "nginx-1.9-logs"]
+  templates = ["nginx-1.9"]
+  provisionType        = "xen"
+  backupType           = "xenSnapshot"
+  containerPorts = ["nginx.80", "nginx.443"]
   hasSslCert           = true
-  certificateFile       = "nginx"
-  certificatePath       = "/etc/nginx/certs"
+  certificateFile      = "nginx"
+  certificatePath      = "/etc/nginx/certs"
   certificateWritePath = "/config/certs"
-  certificateStyle      = "crt_key"
+  certificateStyle     = "crt_key"
 }
 
 resource "workload-type-set" "nginx-xen-1_9-set" {
-  code            = "nginx-xen-1.9-set"
-  category        = "nginx"
+  code           = "nginx-xen-1.9-set"
+  category       = "nginx"
   workloadType   = workload-type.nginx-xen-1_9
   priorityOrder  = 0
   dynamicCount   = true
@@ -61,19 +61,19 @@ resource "workload-type-set" "nginx-xen-1_9-set" {
 }
 
 resource "instance-type-layout" "nginx-xen-1_9-single" {
-  code             = "nginx-xen-1.9-single"
-  name             = "Xen NGINX"
-  description      = "This will provision a single process with no redundancy"
+  code            = "nginx-xen-1.9-single"
+  name            = "Xen NGINX"
+  description     = "This will provision a single process with no redundancy"
   sortOrder       = 10
   instanceType    = "nginx"
   instanceVersion = "1.9"
   serverCount     = 1
   portCount       = 2
   serverType      = "vm"
-  hasAutoScale   = true
-  enabled          = true
-  creatable        = true
+  hasAutoScale    = true
+  enabled         = true
+  creatable       = true
   provisionType   = "xen"
-  workloads        = [workload-type-set.nginx-xen-1_9-set]
-  actions          = ["nginx-1.9-add-node"]
+  workloads = [workload-type-set.nginx-xen-1_9-set]
+  actions = ["nginx-1.9-add-node"]
 }

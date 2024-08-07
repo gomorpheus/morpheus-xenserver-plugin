@@ -1,6 +1,6 @@
 resource "workload-type" "docker-xen-ubuntu-16_04" {
-  code              = "docker-xen-ubuntu-16.04"
-  name              = "Docker Ubuntu 16.04"
+  code             = "docker-xen-ubuntu-16.04"
+  name             = "Docker Ubuntu 16.04"
   shortName        = "ubuntu"
   ports = ["22"]
   containerVersion = "16.04"
@@ -9,46 +9,46 @@ resource "workload-type" "docker-xen-ubuntu-16_04" {
   imageCode        = "morpheus ubuntu 16.04"
   entryPoint       = null
   mountLogs        = "/var/log"
-  statTypeCode    = "server"
-  logTypeCode     = "ubuntu"
-  showServerLogs  = true
-  category          = "ubuntu"
+  statTypeCode     = "server"
+  logTypeCode      = "ubuntu"
+  showServerLogs   = true
+  category         = "ubuntu"
   cloneType        = "ubuntu"
   priorityOrder    = 0
   serverType       = "vm"
   providerType     = "xen"
-  checkTypeCode   = "vmCheck"
+  checkTypeCode    = "vmCheck"
   virtualImage     = virtual-image.xenserver-image-morpheus-ubuntu-20_04
-  containerPorts   = ["ubuntu.22"]
+  containerPorts = ["ubuntu.22"]
   provisionType    = "xen"
 }
 
 resource "compute-type-set" "docker-xen-ubuntu-16_04-set" {
-  code                      = "docker-xen-ubuntu-16.04-set"
-  name                      = "docker host"
-  containerType            = workload-type.docker-xen-ubuntu-16_04
+  code                    = "docker-xen-ubuntu-16.04-set"
+  name                    = "docker host"
+  containerType           = workload-type.docker-xen-ubuntu-16_04
   computeServerType       = "xenserverLinux"
-  category                  = "ubuntu"
-  priorityOrder            = 0
-  dynamicCount             = true
-  nodeCount                = 1
-  nodeType                 = "worker"
+  category                = "ubuntu"
+  priorityOrder           = 0
+  dynamicCount            = true
+  nodeCount               = 1
+  nodeType                = "worker"
   canAddNodes             = true
   installContainerRuntime = true
   installStorageRuntime   = true
 }
 
 resource "compute-type-layout" "docker-xen-ubuntu-16_04-single" {
-  code                = "docker-xen-ubuntu-16.04-single"
-  name                = "Xen Docker Host"
-  sortOrder          = 5
-  computeVersion     = "16.04"
-  description         = "This will provision a single docker host vm in xen"
-  type                = "xenserverLinux"
-  serverCount        = 1
-  memoryRequirement  = (1024 * 1024 * 1024) //1 gig
-  hasAutoScale      = true
-  groupType          = "docker-cluster"
-  computeServers     = [compute-type-set.docker-xen-ubuntu-16_04-set]
-  provisionType      = "xen"
+  code           = "docker-xen-ubuntu-16.04-single"
+  name           = "Xen Docker Host"
+  sortOrder      = 5
+  computeVersion = "16.04"
+  description    = "This will provision a single docker host vm in xen"
+  type           = "xenserverLinux"
+  serverCount    = 1
+  memoryRequirement = (1024 * 1024 * 1024) //1 gig
+  hasAutoScale   = true
+  groupType      = "docker-cluster"
+  computeServers = [compute-type-set.docker-xen-ubuntu-16_04-set]
+  provisionType  = "xen"
 }

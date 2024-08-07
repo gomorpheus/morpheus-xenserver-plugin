@@ -21,7 +21,7 @@ resource "workload-type" "ubuntu-xen-16_04" {
 
 resource "workload-type-set" "ubuntu-xen-16_04-set" {
   code            = "ubuntu-xen-16.04-set"
-  containerType  = container-type.ubuntu-xen-16_04
+  containerType  = workload-type.ubuntu-xen-16_04
   priorityOrder  = 0
   dynamicCount   = true
   containerCount = 1
