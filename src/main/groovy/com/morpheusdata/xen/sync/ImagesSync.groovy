@@ -43,7 +43,6 @@ class ImagesSync {
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             def listResults = XenComputeUtility.listTemplates(authConfig)
-            log.debug("templates: ${listResults}")
             if (listResults.success == true) {
                 def cloudItems = listResults?.templateList
 

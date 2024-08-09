@@ -34,7 +34,6 @@ class DatastoresSync {
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             def listResults = XenComputeUtility.listStorageRepositories(authConfig)
-            log.debug("sr list: ${listResults}")
             if (listResults.success == true) {
                 def cloudItems = listResults?.srList
 
