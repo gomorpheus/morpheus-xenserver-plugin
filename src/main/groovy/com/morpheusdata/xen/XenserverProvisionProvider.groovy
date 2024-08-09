@@ -591,7 +591,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						} else {
 							//good to go
 							def serverDetail = checkServerReady([authConfig: authConfigMap, externalId: server.externalId])
-							log.debug("serverDetail: ${serverDetail}")
+							// log.debug("serverDetail: ${serverDetail}")
 							if (serverDetail.success == true) {
 								serverDetail.ipAddresses.each { interfaceName, data ->
 									Long netInterfaceId = server.interfaces.find { it.name == interfaceName }?.id
@@ -1611,7 +1611,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							'We will automatically retry. Any detailed exceptions will be logged at debug level.')
 					log.debug("Errors from get server detail: ${ex.message}", ex)
 				}
-				log.debug("serverDetail: ${serverDetail}")
+				// log.debug("serverDetail: ${serverDetail}")
 				if(serverDetail?.success == true && serverDetail?.vmRecord && serverDetail?.ipAddress) {
 					if(serverDetail.ipAddress) {
 						rtn.success = true
