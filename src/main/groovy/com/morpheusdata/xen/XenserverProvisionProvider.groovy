@@ -462,7 +462,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 									containerType: virtualImage.virtualImageType?.code ?: virtualImage.imageType, //'vhd',
 									cloudFiles   : cloudFiles,
 									imageFile    : imageFile,
-									imageSize    : imageFile?.contentLength
+									imageSize    : imageFile?.contentLength // TODO: is this compressed here, making this value inaccurate?
 							]
 					def imageConfig =
 							[
@@ -479,6 +479,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					log.debug("insertTemplate: imageResults: ${imageResults}")
 					if (imageResults.success == true) {
 						imageId = imageResults.imageId
+					} else {
+						def errorMessage = imageResults.msg ?: 'An error occurred while uploading the image. See logs for more details.'
+						provisionResponse.setError(errorMessage)
+						provisionResponse.success = false
+						return new ServiceResponse(success: false, msg: errorMessage, data: provisionResponse)
 					}
 				}
 			}
