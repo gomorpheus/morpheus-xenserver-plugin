@@ -6,6 +6,7 @@ import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.NetworkUtility
 import com.morpheusdata.core.util.ProgressInputStream
 import com.morpheusdata.model.Cloud
+import com.morpheusdata.response.ServiceResponse
 import com.xensource.xenapi.*
 import com.xensource.xenapi.Types.VmPowerState
 import groovy.util.logging.Slf4j
@@ -39,6 +40,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.cert.X509Certificate
+import java.util.zip.GZIPInputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -1011,8 +1013,6 @@ class XenComputeUtility {
             def vm = VM.getByUuid(config.connection, vmId)
             def vmName = vm.getNameLabel(config.connection)
             def creds = opts.authConfig.username + ':' + opts.authConfig.password
-            def insertOpts = [zone: opts.zone]
-            insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
             def srcUrl = getXenApiUrl(opts.zone, true, creds) + '/export?uuid=' + vmId
             def targetFileName = (opts.vmName ?: "${vmName}.${System.currentTimeMillis()}") + '.xva'
             def targetFolder = opts.targetDir
@@ -1052,8 +1052,6 @@ class XenComputeUtility {
             def vm = VM.getByUuid(config.connection, vmId)
             def vmName = vm.getNameLabel(config.connection)
             def creds = opts.authConfig.username + ':' + opts.authConfig.password
-            def insertOpts = [zone: opts.zone]
-            insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
             def srcUrl = getXenApiUrl(opts.zone, true, creds) + '/export?uuid=' + vmId
             def targetFileName = (opts.vmName ?: "${vmName}.${System.currentTimeMillis()}") + '.xva'
             def targetFile = cloudBucket["${archiveFolder}/${targetFileName}"]
@@ -1120,38 +1118,35 @@ class XenComputeUtility {
             def image = opts.image
             def match = currentList.find { it.uuid == image.externalId || it.nameLabel == image.name }
             if (!match) {
-                def insertOpts = [
-                        zone            :opts.zone,
-                        name            :image.name,
-                        imageSrc        :image.imageSrc,
-                        minDisk         :image.minDisk,
-                        minRam          :image.minRam,
-                        imageType       :image.imageType,
-                        containerType   :image.containerType,
-                        imageFile       :image.imageFile,
-                        diskSize        :image.imageSize,
-                        cloudFiles      :image.cloudFiles,
-                        //cachePath       :opts.cachePath,
-                        datastore       :opts.datastore,
-                        network         :opts.network,
-                        connection      :opts.connection
-                ]
+				def insertOpts = [
+					zone         : opts.zone,
+					name         : image.name,
+					imageSrc     : image.imageSrc,
+					minDisk      : image.minDisk,
+					minRam       : image.minRam,
+					imageType    : image.imageType,
+					containerType: image.containerType,
+					imageFile    : image.imageFile,
+					diskSize     : image.imageSize,
+					cloudFiles   : image.cloudFiles,
+					//cachePath       :opts.cachePath,
+					datastore    : opts.datastore,
+					network      : opts.network,
+					connection   : opts.connection,
+					authConfig   : opts.authConfig
+				]
 
 
                 //estimated disk size is wrong. we have to recalculate it
                 if (image.imageFile?.name?.endsWith('.tar.gz')) {
                     log.info("tar gz stream detected. recalculating size...")
-                    def sourceStream = image.imageFile.inputStream
-                    def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
-                            new java.util.zip.GZIPInputStream(sourceStream))
-                    def tarEntry = tarStream.getNextTarEntry()
+                    InputStream sourceStream = image.imageFile.inputStream
+					TarArchiveInputStream tarStream = new TarArchiveInputStream(new GZIPInputStream(sourceStream))
+                    TarArchiveEntry tarEntry = tarStream.getNextTarEntry()
                     insertOpts.diskSize = tarEntry.getSize()
-                    sourceStream.close()
-
                 }
                 if(opts.containerType == 'xva') {
                     def tgtUrl = getXenApiUrl(opts.zone, true) + '/import'
-                    insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
 
@@ -1182,7 +1177,6 @@ class XenComputeUtility {
                         rtn.vdi = createResults.vdi
                         rtn.srRecord = srRecord
                         insertOpts.vdi = rtn.vdi
-                        insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
                         //sleep(10l*60l*1000l)
                         log.debug "insertContainerImage image: ${image}"
                         def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
@@ -1276,7 +1270,7 @@ class XenComputeUtility {
         } catch (e) {
             log.error("create vdi error: ${e}", e)
         }
-        log.debug "createVdi rtn: ${rtn}"
+        log.debug("createVdi rtn: [success: ${rtn.success}, vdiId: ${rtn.vidId}")
         return rtn
     }
 
@@ -1307,7 +1301,7 @@ class XenComputeUtility {
                 def cacheFile = new File(cachePath, cloudFile.name)
                 sourceStream = cacheFile.newInputStream()
             }
-            rtn = uploadImage(sourceStream, totalCount, tgtUrl, opts)
+            rtn = uploadImage(cloudFile.getName(), sourceStream, totalCount, tgtUrl, opts)
         } catch (ex) {
             log.error("uploadImage cloudFile error: ${ex}", ex)
         } finally {
@@ -1319,93 +1313,58 @@ class XenComputeUtility {
         return rtn
     }
 
-    static uploadImage(InputStream sourceStream, Long contentLength, String tgtUrl, Map opts = [:]) {
+    static uploadImage(String fileName, InputStream sourceStream, Long contentLength, String tgtUrl, Map opts = [:]) {
         log.debug("uploadImage: stream: ${contentLength} :: ${tgtUrl} :: ${opts}")
-        def outboundClient
-        def progressStream
-        def rtn = [success: false]
+        HttpApiClient apiClient = new HttpApiClient()
+		ProgressInputStream uploadStream
+		def rtn = [success: false]
         try {
-            def outboundSslBuilder = new SSLContextBuilder()
-            outboundSslBuilder.loadTrustMaterial(null, new TrustStrategy() {
-                @Override
-                boolean isTrusted(X509Certificate[] chain, String authType) throws java.security.cert.CertificateException {
-                    return true
-                }
-            })
-            def outboundSocketFactory = new SSLConnectionSocketFactory(outboundSslBuilder.build(), SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER)
-            def clientBuilder = HttpClients.custom().setSSLSocketFactory(outboundSocketFactory)
-            clientBuilder.setHostnameVerifier(new X509HostnameVerifier() {
-                boolean verify(String host, SSLSession sess) { return true }
 
-                void verify(String host, SSLSocket ssl) {}
-
-                void verify(String host, String[] cns, String[] subjectAlts) {}
-
-                void verify(String host, X509Certificate cert) {}
-            })
-            clientBuilder.disableAutomaticRetries()
-            clientBuilder.disableRedirectHandling()
-            if (opts.authCreds) {
-                def targetUri = new URI(tgtUrl)
-                def authScope = new AuthScope(targetUri.getHost(), targetUri.getPort())
-                def credsProvider = new BasicCredentialsProvider()
-                credsProvider.setCredentials(authScope, opts.authCreds)
-                clientBuilder.addInterceptorFirst(new PreemptiveAuthInterceptor())
-                clientBuilder.setDefaultCredentialsProvider(credsProvider)
-            }
-            outboundClient = clientBuilder.build()
-            log.debug "uploadImage tgtUrl: ${tgtUrl}"
-            log.debug "uploadImage contentLength: ${contentLength}"
-            def outboundPut = new HttpPut(tgtUrl)
-            def inputEntity
-            log.info "Upload Data ${opts}"
-            log.info "uploadImage opts.isTarGz: ${opts.isTarGz}"
-            log.info "uploadImage opts.isXz: ${opts.isXz}"
-            if (opts.isTarGz == true) {
-                def tarStream = new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
-                        new java.util.zip.GZIPInputStream(sourceStream))
-                def tarEntry = tarStream.getNextTarEntry()
-                contentLength = tarEntry.getSize()
-                progressStream = new ProgressInputStream(new BufferedInputStream(tarStream, 8400), contentLength, 1, 1)
-                inputEntity = new InputStreamEntity(progressStream, contentLength)
-                inputEntity.setChunked(false)
-                // inputEntity = new InputStreamEntity(tarStream,contentLength)
+            log.debug("uploadImage tgtUrl: ${tgtUrl}, contentLength: ${contentLength}, opts.isTarGz: ${opts.isTarGz}, opts.isXz: ${opts.isXz}")
+			int streamBufferSize = 16384
+			BufferedInputStream bufferedStream
+			if (opts.isTarGz == true) {
+				// .tar.gz file, get the real size of the disk image from the tar metadata
+				TarArchiveInputStream tarStream = new TarArchiveInputStream(new GZIPInputStream(sourceStream))
+				TarArchiveEntry tarEntry = tarStream.getNextTarEntry()
+				contentLength = tarEntry.getSize()
+				bufferedStream = new BufferedInputStream(tarStream, streamBufferSize)
             } else if (opts.isXz) {
-                def xzStream = new XZCompressorInputStream(sourceStream)
-                inputEntity = new InputStreamEntity(new ProgressInputStream(new BufferedInputStream(xzStream, 8400), contentLength, 1, 1), contentLength)
-                inputEntity.setChunked(false)
+				bufferedStream = new BufferedInputStream(new XZCompressorInputStream(sourceStream), streamBufferSize)
             } else {
-                progressStream = new ProgressInputStream(new BufferedInputStream(sourceStream, 8400), contentLength, 1, 1, "uploadImage: progressStream:")
-                inputEntity = new InputStreamEntity(progressStream, contentLength)
-                inputEntity.setChunked(false)
+				bufferedStream = new BufferedInputStream(sourceStream, streamBufferSize)
             }
-            //outboundPut.addHeader('Content-Type', 'application/octet-stream')
-            log.debug "uploadImage opts.authHeader: ${opts.authHeader}"
+			uploadStream = new ProgressInputStream(bufferedStream, contentLength, 1, 0, "uploadImage ${fileName} progressStream")
 
-            if (opts.authHeader) {
-                outboundPut.addHeader('Authorization', opts.authHeader)
-                outboundPut.addHeader('Proxy-Authorization', opts.authHeader)
-            }
-            outboundPut.setEntity(inputEntity)
-            //resize disk if needed
-            log.debug "uploadImage opts.vdi: ${opts.vdi?.dump()}"
-            log.info("Resize attempt: contentLength: ${contentLength} -- diskSize: ${opts.diskSize} -- ${contentLength > opts.diskSize} ${contentLength?.toLong() > opts.diskSize?.toLong()}")
-            if (opts.vdi && contentLength > minDiskImageSize && contentLength?.toLong() > opts.diskSize?.toLong())
-                opts.vdi.resize(opts.connection, contentLength)
-            log.debug "uploadImage opts.vdi: ${opts.vdi?.dump()}"
-            def responseBody = outboundClient.execute(outboundPut)
-            log.info ("uploadImage: stream: responseBody.statusLine.statusCode: ${responseBody.statusLine.statusCode}")
-            if (responseBody.statusLine.statusCode < 400) {
+			// if the content length is adjusted, we'll need to resize the disk
+			log.info("Resize attempt: contentLength: ${contentLength} -- diskSize: ${opts.diskSize} -- ${contentLength > opts.diskSize} ${contentLength?.toLong() > opts.diskSize?.toLong()}")
+			if (opts.vdi && contentLength > minDiskImageSize && contentLength?.toLong() > opts.diskSize?.toLong()) {
+				opts.vdi.resize(opts.connection, contentLength)
+			}
+
+			HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(
+				body: uploadStream,
+				contentLength: contentLength,
+				connectionTimeout: -1,
+				headers: [
+				    'Content-Type': 'application/octet-stream'
+				]
+			)
+			ServiceResponse<CloseableHttpResponse> uploadResponse = apiClient.callStreamApi(tgtUrl, null, opts.authConfig?.username, opts.authConfig?.password, requestOptions, "PUT")
+
+            log.info ("uploadImage: stream api call success: ${uploadResponse.success}")
+            if (uploadResponse.success == true) {
                 rtn.success = true
             } else {
                 rtn.success = false
-                log.warn("Upload Image Error HTTP: ${responseBody.statusLine.statusCode}")
-                rtn.msg = "Upload Image Error HTTP: ${responseBody.statusLine.statusCode}"
+                log.warn("Upload Image Error HTTP: ${uploadResponse.errorCode}")
+                rtn.msg = "Upload Image Error HTTP: ${uploadResponse.errorCode}"
             }
         } catch (e) {
-            log.error("uploadImage From Stream error: ${e} - Offset ${progressStream?.getOffset()}", e)
+            log.error("uploadImage From Stream error: ${e} - Offset ${uploadStream?.getOffset()}", e)
         } finally {
-            outboundClient.close()
+			apiClient?.shutdownClient()
+			uploadStream?.close()
         }
         return rtn
     }
@@ -1584,7 +1543,7 @@ class XenComputeUtility {
     }
 
     static buildSyncLists(existingItems, masterItems, matchExistingToMasterFunc) {
-        log.debug "buildSyncLists: ${existingItems}, ${masterItems}"
+        // log.debug "buildSyncLists: ${existingItems}, ${masterItems}"
         def rtn = [addList: [], updateList: [], removeList: []]
         try {
             existingItems?.each { existing ->
