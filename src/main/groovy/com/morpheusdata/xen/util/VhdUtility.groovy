@@ -33,23 +33,26 @@ class VhdUtility {
 
 		BufferedInputStream bufferedStream
 		try {
-			bufferedStream = new BufferedInputStream(tarStream)
+			bufferedStream = new BufferedInputStream(tarStream, 512)
+			int totalOffset = 0
 			int currentOffset = 0
 
 			// get the offset relative to the current offset
-			currentOffset += (VHD_DISK_SIZE_OFFSET - currentOffset)
+			currentOffset = (VHD_DISK_SIZE_OFFSET - currentOffset)
+			totalOffset = currentOffset + VHD_DISK_SIZE_OFFSET
 			// Read disk size
 			Long diskSize = getHeaderValueLong(bufferedStream, currentOffset, VHD_DISK_SIZE_LENGTH)
 
 			// Get the disk type to determine if the proper headers are in the VHD (may not be needed)
 			// get the offset relative to the current offset
-			// currentOffset += (VHD_DISK_TYPE_OFFSET - currentOffset)
+			currentOffset = (VHD_DISK_TYPE_OFFSET - currentOffset)
+			totalOffset += currentOffset + VHD_DISK_TYPE_OFFSET
 			// // Read disk type
-			// int diskType = getHeaderValueInt(bufferedStream, currentOffset, VHD_DISK_TYPE_LENGTH)
-			// println("diskType: ${diskType}")
+			int diskType = getHeaderValueInt(bufferedStream, currentOffset, VHD_DISK_TYPE_LENGTH)
+			println("diskType: ${diskType}")
 
 			// the VHD file was formatted as expected and contained a disk type in the file header
-			if(diskSize && diskSize != 0) {
+			if(diskSize && diskSize != 0 && (diskType == VHD_DISK_TYPE_FIXED || diskType == VHD_DISK_TYPE_DYNAMIC)) {
 				rtn = diskSize
 			} else {
 				// unable to locate the disk size in the VHD header, default to the actual file size
