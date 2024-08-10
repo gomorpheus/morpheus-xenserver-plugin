@@ -462,7 +462,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 									containerType: virtualImage.virtualImageType?.code ?: virtualImage.imageType, //'vhd',
 									cloudFiles   : cloudFiles,
 									imageFile    : imageFile,
-									imageSize    : imageFile?.contentLength // TODO: is this compressed here, making this value inaccurate?
+									imageSize    : imageFile?.contentLength
 							]
 					def imageConfig =
 							[

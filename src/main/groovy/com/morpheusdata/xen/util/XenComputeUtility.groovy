@@ -1300,7 +1300,13 @@ class XenComputeUtility {
                 xzStream.close()
                 def cacheFile = new File(cachePath, cloudFile.name)
                 sourceStream = cacheFile.newInputStream()
-            }
+            } else if(opts.isTarGz) {
+				// .tar.gz file, get the real size of the disk image from the tar metadata. Requires a new input stream
+				// to read the headers of the VHD.
+				TarArchiveInputStream tarStream = new TarArchiveInputStream(new GZIPInputStream(cloudFile.inputStream))
+				totalCount = VhdUtility.extractVhdDiskSize(tarStream)
+				log.debug("uploadImage, TarGz contentLength: ${totalCount}")
+			}
             rtn = uploadImage(cloudFile.getName(), sourceStream, totalCount, tgtUrl, opts)
         } catch (ex) {
             log.error("uploadImage cloudFile error: ${ex}", ex)
@@ -1324,10 +1330,8 @@ class XenComputeUtility {
 			int streamBufferSize = 16384
 			BufferedInputStream bufferedStream
 			if (opts.isTarGz == true) {
-				// .tar.gz file, get the real size of the disk image from the tar metadata
 				TarArchiveInputStream tarStream = new TarArchiveInputStream(new GZIPInputStream(sourceStream))
-				TarArchiveEntry tarEntry = tarStream.getNextTarEntry()
-				contentLength = tarEntry.getSize()
+				tarStream.getNextTarEntry()
 				bufferedStream = new BufferedInputStream(tarStream, streamBufferSize)
             } else if (opts.isXz) {
 				bufferedStream = new BufferedInputStream(new XZCompressorInputStream(sourceStream), streamBufferSize)
