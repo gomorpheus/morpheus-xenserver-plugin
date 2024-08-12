@@ -981,8 +981,7 @@ class XenComputeUtility {
 			def config = getXenConnectionSession(opts.authConfig)
 			def vm = VM.getByUuid(config.connection, vmId)
 			def vmName = vm.getNameLabel(config.connection)
-			def creds = opts.authConfig.username + ':' + opts.authConfig.password
-			def srcUrl = getXenApiUrl(opts.zone, true, creds) + '/export?uuid=' + vmId
+			def srcUrl = getXenApiUrl(opts.zone, true) + '/export?uuid=' + vmId
 			def targetFileName = (opts.vmName ?: "${vmName}.${System.currentTimeMillis()}") + '.xva'
 			def targetFolder = opts.targetDir
 			targetZipStream = (ZipOutputStream) opts.targetZipStream
@@ -1020,8 +1019,7 @@ class XenComputeUtility {
 			opts.connection = config.connection
 			def vm = VM.getByUuid(config.connection, vmId)
 			def vmName = vm.getNameLabel(config.connection)
-			def creds = opts.authConfig.username + ':' + opts.authConfig.password
-			def srcUrl = getXenApiUrl(opts.zone, true, creds) + '/export?uuid=' + vmId
+			def srcUrl = getXenApiUrl(opts.zone, true) + '/export?uuid=' + vmId
 			def targetFileName = (opts.vmName ?: "${vmName}.${System.currentTimeMillis()}") + '.xva'
 			def targetFile = cloudBucket["${archiveFolder}/${targetFileName}"]
 			def vmDiskSize = geTotalVmDiskSize(opts, vm)
@@ -1426,12 +1424,10 @@ class XenComputeUtility {
 		return rtn
 	}
 
-	static getXenApiUrl(cloud, forceSecure = false, creds = null) {
-		def rtn
+	static getXenApiUrl(cloud, forceSecure = false) {
 		def apiHost = getXenApiHost(cloud)
 		def urlPrefix = (forceSecure == true || apiHost.isSecure == true) ? 'https://' : 'http://'
-		if(creds) rtn = urlPrefix + creds + '@' + apiHost.address else rtn = urlPrefix + apiHost.address
-		return rtn
+		return urlPrefix + apiHost.address
 	}
 
 	static getXenApiHost(Cloud cloud) {
