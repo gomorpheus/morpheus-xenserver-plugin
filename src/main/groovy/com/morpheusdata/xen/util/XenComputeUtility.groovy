@@ -1287,7 +1287,7 @@ class XenComputeUtility {
 	static uploadImage(String fileName, InputStream sourceStream, Long contentLength, String tgtUrl, Map opts = [:]) {
 		log.debug("uploadImage: stream: ${contentLength} :: ${tgtUrl} :: ${opts}")
 		HttpApiClient apiClient = new HttpApiClient()
-		ProgressInputStream uploadStream
+		InputStream uploadStream
 		def rtn = [success: false]
 		try {
 			log.debug("uploadImage tgtUrl: ${tgtUrl}, contentLength: ${contentLength}, opts.isTarGz: ${opts.isTarGz}, opts.isXz: ${opts.isXz}")
@@ -1302,7 +1302,12 @@ class XenComputeUtility {
 			} else {
 				bufferedStream = new BufferedInputStream(sourceStream, streamBufferSize)
 			}
-			uploadStream = new ProgressInputStream(bufferedStream, contentLength, 1, 0, "uploadImage ${fileName} progressStream")
+			try {
+				uploadStream = new ProgressInputStream(bufferedStream, contentLength, 1, 0, "uploadImage ${fileName} progressStream")
+			} catch (IllegalAccessError ignored) {
+				// ProgressInputStream is a private class in plugin core 1.1.6 and older
+				uploadStream = bufferedStream
+			}
 
 			// if the content length is adjusted, we'll need to resize the disk
 			log.info("Resize attempt: contentLength: ${contentLength} -- diskSize: ${opts.diskSize} -- ${contentLength > opts.diskSize} ${contentLength?.toLong() > opts.diskSize?.toLong()}")
