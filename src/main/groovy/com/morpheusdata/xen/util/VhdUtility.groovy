@@ -1,11 +1,13 @@
 package com.morpheusdata.xen.util
 
+import groovy.util.logging.Slf4j
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 
+@Slf4j
 class VhdUtility {
 
 	private static final int VHD_DISK_SIZE_OFFSET = 40
@@ -17,8 +19,8 @@ class VhdUtility {
 	private static final int VHD_DISK_TYPE_DYNAMIC = 3
 
 	/**
-	 * Extract the VHD virtual size or approximate the disk size from the size of the file. VHD structure
-	 * referenced from https://github.com/libyal/libvhdi/blob/main/documentation/Virtual%20Hard%20Disk%20%28VHD%29%20image%20format.asciidoc
+	 * Extract the VHD virtual size or approximate the disk size from the size of the file. VHD meta data referenced
+	 * from https://github.com/libyal/libvhdi/blob/main/documentation/Virtual%20Hard%20Disk%20%28VHD%29%20image%20format.asciidoc
 	 * @param tarStream containing the VHD file
 	 * @return the real or approximate size of the disk
 	 * @throws IOException
@@ -33,32 +35,36 @@ class VhdUtility {
 
 		BufferedInputStream bufferedStream
 		try {
+			// The metadata is in the first 512 bytes
 			bufferedStream = new BufferedInputStream(tarStream, 512)
 			int totalOffset = 0
 			int currentOffset = 0
 
 			// get the offset relative to the current offset
-			currentOffset = (VHD_DISK_SIZE_OFFSET - currentOffset)
-			totalOffset = currentOffset + VHD_DISK_SIZE_OFFSET
+			currentOffset = (VHD_DISK_SIZE_OFFSET - totalOffset)
+			totalOffset = currentOffset + VHD_DISK_SIZE_LENGTH
 			// Read disk size
 			Long diskSize = getHeaderValueLong(bufferedStream, currentOffset, VHD_DISK_SIZE_LENGTH)
+			log.debug("extractVhdDiskSize diskSize: ${diskSize}")
 
 			// Get the disk type to determine if the proper headers are in the VHD (may not be needed)
 			// get the offset relative to the current offset
-			currentOffset = (VHD_DISK_TYPE_OFFSET - currentOffset)
-			totalOffset += currentOffset + VHD_DISK_TYPE_OFFSET
+			currentOffset = (VHD_DISK_TYPE_OFFSET - totalOffset)
+			totalOffset += currentOffset + VHD_DISK_TYPE_LENGTH
 			// // Read disk type
 			int diskType = getHeaderValueInt(bufferedStream, currentOffset, VHD_DISK_TYPE_LENGTH)
-			println("diskType: ${diskType}")
+			log.debug("extractVhdDiskSize diskType: ${diskType}")
 
 			// the VHD file was formatted as expected and contained a disk type in the file header
 			if(diskSize && diskSize != 0 && (diskType == VHD_DISK_TYPE_FIXED || diskType == VHD_DISK_TYPE_DYNAMIC)) {
 				rtn = diskSize
 			} else {
+				log.debug("extractVhdDiskSize disk size not found, getting size from tar entry.")
 				// unable to locate the disk size in the VHD header, default to the actual file size
 				rtn = tarEntry.getSize()
-			}
+				log.debug("extractVhdDiskSize tar entry size: ${rtn}")
 
+			}
 		} finally {
 			bufferedStream?.close()
 		}
