@@ -1109,11 +1109,8 @@ class XenComputeUtility {
 					insertOpts.diskSize = tarEntry.getSize()
 				}
 				if(opts.containerType == 'xva') {
-					def tgtUrl = getXenApiUrl(opts.zone, true) + '/import'
-					//sleep(10l*60l*1000l)
 					log.debug "insertContainerImage image: ${image}"
-
-
+					def tgtUrl = getXenApiUrl(opts.zone, true) + '/import?restore=false&force=true'
 					CloudFile cloudFile = image.imageFile
 					def cloudFileName = cloudFile.name
 					if(cloudFileName.indexOf(".") > 0) {
@@ -1122,14 +1119,23 @@ class XenComputeUtility {
 					int index = cloudFileName.lastIndexOf('/')
 					cloudFileName = cloudFileName.substring(index + 1)
 
-					def fileVal = getNameFromFile(cloudFile.inputStream, cloudFileName)
-					if(fileVal) {
-						def templateList = listTemplates(opts.authConfig)?.templateList
-						def matchFile = templateList.find { it.nameLabel == fileVal }
-						rtn.imageId = matchFile?.uuid
-					}
+					// template name to match on after upload, extract from the disk name in the XVA file
+					def templateName = getNameFromFile(cloudFile.inputStream, cloudFileName)
+					// upload it
 					def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
-					rtn.success = uploadResults.success
+					sleep(3l * 60l * 1000l) // wait for the image to be created, can we do this with a wait loop instead of an arbitrary sleep?
+					// find the resulting template by name extracted from the XVA
+					if(uploadResults.success && templateName) {
+						def templateList = listTemplates(opts.authConfig)?.templateList
+						def matchFile = templateList.find { it.nameLabel == templateName }
+						log.debug("matching template: ${templateName} ${matchFile?.uuid} ${matchFile}")
+						rtn.imageId = matchFile?.uuid
+						rtn.found = true
+						rtn.success = true
+					} else {
+						rtn.success = false
+						rtn.found = templateName != null
+					}
 				} else {
 					def createResults = createVdi(insertOpts)
 					if(createResults.success == true) {
@@ -1313,10 +1319,12 @@ class XenComputeUtility {
 				opts.vdi.resize(opts.connection, contentLength)
 			}
 
-			HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(body: uploadStream,
+			HttpApiClient.RequestOptions requestOptions = new HttpApiClient.RequestOptions(
+				body: uploadStream,
 				contentLength: contentLength,
 				connectionTimeout: -1,
-				headers: ['Content-Type': 'application/octet-stream'])
+				headers: ['Content-Type': 'application/octet-stream']
+			)
 			ServiceResponse<CloseableHttpResponse> uploadResponse = apiClient.callStreamApi(tgtUrl, null, opts.authConfig?.username, opts.authConfig?.password, requestOptions, "PUT")
 
 			log.info("uploadImage: stream api call success: ${uploadResponse.success}")
@@ -1387,11 +1395,13 @@ class XenComputeUtility {
 			httpResponse = response.data
 			def responseBody = httpResponse.getEntity()
 			rtn.contentLength = responseBody.getContentLength()
+			// TODO: The content length is wrong here, often the original size of the disk instead of the image size.
+			log.debug("archiveImage contentLength: ${rtn.contentLength}, fileSize: ${fileSize}")
 			if(rtn.contentLength < 0 && fileSize > 0) rtn.contentLength = fileSize
 			log.info("download image contentLength: ${rtn.contentLength}")
-			def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getContent(), 1200), rtn.contentLength, 1, 0)
+			def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getContent(), 16384), rtn.contentLength, 1, 0)
 			vmInputStream.progressCallback = progressCallback
-			targetFile.setContentLength(rtn.contentLength)
+			// targetFile.setContentLength(rtn.contentLength)
 			targetFile.setInputStream(vmInputStream)
 			targetFile.save()
 			rtn.success = true
