@@ -1401,7 +1401,7 @@ class XenComputeUtility {
 			log.info("download image contentLength: ${rtn.contentLength}")
 			def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getContent(), 16384), rtn.contentLength, 1, 0)
 			vmInputStream.progressCallback = progressCallback
-			// targetFile.setContentLength(rtn.contentLength)
+			// targetFile.setContentLength(rtn.contentLength) // TODO: is this needed? Might be part of the problem with the image upload ending early if the content length is incorrect.
 			targetFile.setInputStream(vmInputStream)
 			targetFile.save()
 			rtn.success = true
