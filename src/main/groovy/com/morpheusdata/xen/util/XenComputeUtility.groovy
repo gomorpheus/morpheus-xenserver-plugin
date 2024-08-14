@@ -1036,9 +1036,12 @@ class XenComputeUtility {
             def insertOpts = [zone: opts.zone]
             insertOpts.authCreds = new org.apache.http.auth.UsernamePasswordCredentials(opts.authConfig.username, opts.authConfig.password)
             def srcUrl = getXenApiUrl(opts.zone, true, creds) + '/export?uuid=' + vmId
+            log.info("Ray :: archiveVm: srcUrl: ${srcUrl}")
             def targetFileName = (opts.vmName ?: "${vmName}.${System.currentTimeMillis()}") + '.xva'
             def targetFile = cloudBucket["${archiveFolder}/${targetFileName}"]
             def vmDiskSize = geTotalVmDiskSize(opts, vm)
+            log.info("Ray :: archiveVm: vmDiskSize: ${vmDiskSize}")
+            log.info("Ray :: archiveVm: targetFile: ${targetFile}")
             def downloadResults = archiveImage(opts, srcUrl, targetFile, vmDiskSize, progressCallback)
             if (downloadResults.success == true) {
                 rtn.success = true
@@ -1136,23 +1139,27 @@ class XenComputeUtility {
                     //sleep(10l*60l*1000l)
                     log.debug "insertContainerImage image: ${image}"
 
-
-                    CloudFile cloudFile = image.imageFile
-                    def cloudFileName = cloudFile.name
-                    if (cloudFileName.indexOf(".") > 0) {
-						cloudFileName = cloudFileName.substring(0, cloudFileName.lastIndexOf("."))
-                    }
-                    int index=cloudFileName.lastIndexOf('/')
-                    cloudFileName = cloudFileName.substring(index+1)
-
-                    def fileVal = getNameFromFile(cloudFile.inputStream, cloudFileName)
-                    if (fileVal) {
-                        def templateList = listTemplates(opts.authConfig)?.templateList
-                        def matchFile = templateList.find { it.nameLabel == fileVal }
-                        rtn.imageId = matchFile?.uuid
-                    }
                     def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
                     rtn.success = uploadResults.success
+                    log.info("Ray :: insertContainerImage: uploadResults.success: ${uploadResults.success}")
+                    if (uploadResults.success == true) {
+                        CloudFile cloudFile = image.imageFile
+                        def cloudFileName = cloudFile.name
+                        if (cloudFileName.indexOf(".") > 0) {
+                            cloudFileName = cloudFileName.substring(0, cloudFileName.lastIndexOf("."))
+                        }
+                        int index=cloudFileName.lastIndexOf('/')
+                        cloudFileName = cloudFileName.substring(index+1)
+
+                        def fileVal = getNameFromFile(cloudFile.inputStream, cloudFileName)
+                        log.info("Ray :: insertContainerImage: fileVal: ${fileVal}")
+                        if (fileVal) {
+                            def templateList = listTemplates(opts.authConfig)?.templateList
+                            def matchFile = templateList.find { it.nameLabel == fileVal }
+                            rtn.imageId = matchFile?.uuid
+                        }
+                    }
+                    log.info("Ray :: insertContainerImage: rtn.imageId: ${rtn.imageId}")
                 } else {
                     def createResults = createVdi(insertOpts)
                     if (createResults.success == true) {
@@ -1182,6 +1189,7 @@ class XenComputeUtility {
         } catch (e) {
             log.error("insertContainerImage error: ${e}", e)
         }
+        log.info("Ray :: insertContainerImage: rtn.imageId1: ${rtn.imageId}")
 
         return rtn
     }
@@ -1348,16 +1356,16 @@ class XenComputeUtility {
                         new java.util.zip.GZIPInputStream(sourceStream))
                 def tarEntry = tarStream.getNextTarEntry()
                 contentLength = tarEntry.getSize()
-                progressStream = new ProgressInputStream(new BufferedInputStream(tarStream, 8400), contentLength, 1, 1)
+                progressStream = new ProgressInputStream(new BufferedInputStream(tarStream, 8400), contentLength, 1, 0)
                 inputEntity = new InputStreamEntity(progressStream, contentLength)
                 inputEntity.setChunked(false)
                 // inputEntity = new InputStreamEntity(tarStream,contentLength)
             } else if (opts.isXz) {
                 def xzStream = new XZCompressorInputStream(sourceStream)
-                inputEntity = new InputStreamEntity(new ProgressInputStream(new BufferedInputStream(xzStream, 8400), contentLength, 1, 1), contentLength)
+                inputEntity = new InputStreamEntity(new ProgressInputStream(new BufferedInputStream(xzStream, 8400), contentLength, 1, 0), contentLength)
                 inputEntity.setChunked(false)
             } else {
-                progressStream = new ProgressInputStream(new BufferedInputStream(sourceStream, 8400), contentLength, 1, 1, "uploadImage: progressStream:")
+                progressStream = new ProgressInputStream(new BufferedInputStream(sourceStream, 8400), contentLength, 1, 0, "uploadImage: progressStream:")
                 inputEntity = new InputStreamEntity(progressStream, contentLength)
                 inputEntity.setChunked(false)
             }
