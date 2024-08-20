@@ -1929,11 +1929,23 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				def archiveFolder = "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
 				exportImage.remotePath = archiveFolder
 				context.async.virtualImage.save(exportImage).blockingGet()
-				def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud, snapshotName: snapshotResults.snapshotName]
-				log.debug("archiveOpts: ${archiveOpts}")
-				def archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder) { percent ->
-					exportImage.statusPercent = percent.toDouble()
-					context.services.virtualImage.save(exportImage)
+				//remove cloud init
+				if(server.sourceImage && server.sourceImage.isCloudInit && server.serverOs?.platform != 'windows') {
+					getPlugin().morpheus.executeCommandOnServer(server, 'sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; sudo cp /etc/machine-id /tmp/machine-id-old ; sync', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+				}
+				def archiveResults
+				try {
+					def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud, snapshotName: snapshotResults.snapshotName]
+					log.debug("archiveOpts: ${archiveOpts}")
+					archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder) { percent ->
+						exportImage.statusPercent = percent.toDouble()
+						context.services.virtualImage.save(exportImage)
+					}
+				} finally {
+					//restore cloud init
+					if(server.sourceImage && server.sourceImage.isCloudInit && server.serverOs?.platform != 'windows') {
+						getPlugin().morpheus.executeCommandOnServer(server, "sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\"; sudo cat /tmp/machine-id-old > /etc/machine-id ; sudo rm /tmp/machine-id-old ; sync", false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+					}
 				}
 				log.debug("archiveResults: ${archiveResults}")
 				if (archiveResults.success == true) {
