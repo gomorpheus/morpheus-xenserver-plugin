@@ -104,7 +104,8 @@ class VirtualImageDatasetProvider extends AbstractDatasetProvider<VirtualImage, 
 			new DataOrFilter(
 				new DataFilter("visibility", "public"),
 				new DataFilter("accounts.id", datasetQuery.get("accountId")?.toLong()),
-				new DataFilter("owner.id", datasetQuery.get("accountId")?.toLong())
+				new DataFilter("owner.id", datasetQuery.get("accountId")?.toLong()),
+				new DataFilter("systemImage", true)
 			),
 			new DataFilter("deleted", false),
 			new DataOrFilter(
