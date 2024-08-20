@@ -1123,7 +1123,7 @@ class XenComputeUtility {
 					def templateName = getNameFromFile(cloudFile.inputStream, cloudFileName)
 					// upload it
 					def uploadResults = uploadImage(image.imageFile, tgtUrl, insertOpts.cachePath, insertOpts)
-					sleep(3l * 60l * 1000l) // wait for the image to be created, can we do this with a wait loop instead of an arbitrary sleep?
+					sleep(5l * 1000l) // wait for the image to be created, can we do this with a wait loop instead of an arbitrary sleep?
 					// find the resulting template by name extracted from the XVA
 					if(uploadResults.success && templateName) {
 						def templateList = listTemplates(opts.authConfig)?.templateList
