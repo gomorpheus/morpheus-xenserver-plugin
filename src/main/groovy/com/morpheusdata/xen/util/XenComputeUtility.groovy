@@ -321,6 +321,7 @@ class XenComputeUtility {
 				vm.start(config.connection, false, true)
 				rtn.success = true
 			} else {
+				rtn.success = true // already powered on, our job here is done.
 				rtn.msg = 'VM is already powered on'
 			}
 		} catch(e) {
@@ -337,9 +338,28 @@ class XenComputeUtility {
 			def vm = VM.getByUuid(config.connection, vmId)
 			if(vm.getPowerState(config.connection) == com.xensource.xenapi.Types.VmPowerState.RUNNING) {
 				vm.shutdown(config.connection)
-				//vm.cleanShutdown(config.connection)
 				rtn.success = true
 			} else {
+				rtn.success = true // already powered off, our job here is done.
+				rtn.msg = 'VM is already powered off'
+			}
+		} catch(e) {
+			log.error("stopVm error: ${e}", e)
+			rtn.msg = 'error powering off vm'
+		}
+		return rtn
+	}
+
+	static stopVmClean(Map authConfig, String vmId) {
+		def rtn = [success: false]
+		try {
+			def config = getXenConnectionSession(authConfig)
+			def vm = VM.getByUuid(config.connection, vmId)
+			if(vm.getPowerState(config.connection) == com.xensource.xenapi.Types.VmPowerState.RUNNING) {
+				vm.cleanShutdown(config.connection)
+				rtn.success = true
+			} else {
+				rtn.success = true // already powered off, our job here is done.
 				rtn.msg = 'VM is already powered off'
 			}
 		} catch(e) {
@@ -1395,13 +1415,9 @@ class XenComputeUtility {
 			httpResponse = response.data
 			def responseBody = httpResponse.getEntity()
 			rtn.contentLength = responseBody.getContentLength()
-			// TODO: The content length is wrong here, often the original size of the disk instead of the image size.
-			log.debug("archiveImage contentLength: ${rtn.contentLength}, fileSize: ${fileSize}")
 			if(rtn.contentLength < 0 && fileSize > 0) rtn.contentLength = fileSize
-			log.info("download image contentLength: ${rtn.contentLength}")
 			def vmInputStream = new ProgressInputStream(new BufferedInputStream(responseBody.getContent(), 16384), rtn.contentLength, 1, 0)
 			vmInputStream.progressCallback = progressCallback
-			// targetFile.setContentLength(rtn.contentLength) // TODO: is this needed? Might be part of the problem with the image upload ending early if the content length is incorrect.
 			targetFile.setInputStream(vmInputStream)
 			targetFile.save()
 			rtn.success = true

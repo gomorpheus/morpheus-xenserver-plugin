@@ -1282,7 +1282,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			XenComputeUtility.setVmNetwork(opts, newVm, opts.networkConfig)
 			def rootVbd = XenComputeUtility.findRootDrive(opts, newVm)
 			def rootVbdSize = rootVbd.getVirtualSize(config.connection)
-			log.info("resizing root drive: ${rootVbd} with size: ${rootVbdSize} to: ${newStorage}")
+			log.debug("resizing root drive: ${rootVbd} with size: ${rootVbdSize} to: ${newStorage}")
 			if (rootVbd && newStorage > rootVbdSize)
 				rootVbd.resize(config.connection, newStorage)
 			rtn.success = true
@@ -1303,7 +1303,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	}
 
 	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
-		log.info("serverInterfaces: ${serverInterfaces}, externalNetworks: ${externalNetworks}")
+		log.debug("serverInterfaces: {}, externalNetworks: {}", serverInterfaces, externalNetworks)
 		try {
 			if(externalNetworks?.size() > 0) {
 				serverInterfaces?.eachWithIndex { networkInterface, index ->
@@ -1596,6 +1596,36 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		}
 	}
 
+	def checkServerShutdown(Map authConfig, ComputeServer server) {
+		def rtn = [success:false]
+		try {
+			def pending = true
+			def attempts = 0
+			while(pending) {
+				sleep(1000l * 5l)
+				def serverDetail
+				try {
+					serverDetail = getServerDetail([authConfig: authConfig, externalId: server.externalId])
+				} catch(ex) {
+					log.warn('An error occurred trying to get VM Details while waiting for server to be shutdown. This could be because the vm is not yet ready and can safely be ignored. ' +
+						'We will automatically retry. Any detailed exceptions will be logged at debug level.')
+					log.debug("Errors from get server detail: ${ex.message}", ex)
+				}
+				if(serverDetail?.success == true && serverDetail?.vmRecord && [com.xensource.xenapi.Types.VmPowerState.SUSPENDED, com.xensource.xenapi.Types.VmPowerState.HALTED, com.xensource.xenapi.Types.VmPowerState.PAUSED].contains(serverDetail?.vmRecord?.powerState)) {
+					rtn.success = true
+					pending = false
+				}
+				attempts ++
+				if(attempts > 300) {
+					pending = false
+				}
+			}
+		} catch(e) {
+			log.error("An Exception in checkServerShutdown: ${e.message}",e)
+		}
+		return rtn
+	}
+
 	def checkServerReady(opts) {
 		def rtn = [success:false]
 		try {
@@ -1642,9 +1672,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 				attempts ++
-				if(attempts > 300)
+				if(attempts > 300) {
 					pending = false
-
+				}
 			}
 		} catch(e) {
 			log.error("An Exception in checkServerReady: ${e.message}",e)
@@ -1688,13 +1718,11 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	@Override
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
 		log.debug("resizeWorkload workload?.id: ${workload?.id} - opts: ${opts} - workload.id: ${workload.id}")
-		log.info("resizeWorkload calling resizeWorkloadAndServer")
 		return resizeWorkloadAndServer(instance?.id, workload, workload.server, resizeRequest, opts, true)
 	}
 
 	@Override
 	ServiceResponse resizeServer(ComputeServer server, ResizeRequest resizeRequest, Map opts) {
-		log.info("resizeServer calling resizeWorkloadAndServer")
 		return resizeWorkloadAndServer(null, null, server, resizeRequest, opts, false)
 	}
 
@@ -1913,46 +1941,79 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			def authConfigMap = plugin.getAuthConfig(server.cloud)
 			def snapshotName = "${workload?.instance?.name}-${workload?.id}-${System.currentTimeMillis()}"
 			def vmName = workload?.instance?.containers?.size() > 0 ? "${workload?.instance?.name}-${workload?.id}" : workload?.instance?.name
+
+			def doRestoreCloudInitCache = false // do we need to enable cloud init after export is complete?
+			if(server.powerState.toString() != 'off') {
+				if(server.serverOs?.platform?.toString() != 'windows') {
+					if(server.sourceImage && server.sourceImage.isCloudInit()) {
+						// disable cloud init cache and flush to disk
+						log.debug("importWorkload: disable cloud-init cache")
+						context.executeCommandOnServer(server, 'sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; sudo cp /etc/machine-id /var/tmp/machine-id-old; sync; sync;', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+						doRestoreCloudInitCache = true
+					} else {
+						// just flush to disk
+						log.debug("importWorkload: flush to disk")
+						context.executeCommandOnServer(server, 'sync; sync;', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+					}
+				}
+			}
+
 			def snapshotOpts = [authConfig: authConfigMap, externalId: server.externalId, snapshotName: snapshotName, snapshotDescription: 'morpheus import']
-			log.debug("snapshotOpts: ${snapshotOpts}")
+			log.debug("importWorkload snapshotOpts: {}", snapshotOpts)
 			def snapshotResults = XenComputeUtility.snapshotVm(snapshotOpts, server.externalId)
-			log.debug("snapshotResults: ${snapshotResults}")
-			if (snapshotResults.success) {
+			log.debug("importWorkload snapshotResults: {}", snapshotResults)
+			if(snapshotResults.success) {
 				def storageProvider = importWorkloadRequest.storageBucket
-				def providerMap = context.async.storageBucket.getBucketStorageProvider(storageProvider.id).blockingGet()
-				def cloudBucket = providerMap[storageProvider.bucketName]
-				def exportImage = importWorkloadRequest.targetImage
-				exportImage.virtualImageType = new VirtualImageType(code: 'xva')
-				exportImage.imageType = ImageType.xva
-				exportImage.owner = server.account
-				exportImage = context.async.virtualImage.create(exportImage).blockingGet()
-				def archiveFolder = "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
-				exportImage.remotePath = archiveFolder
-				context.async.virtualImage.save(exportImage).blockingGet()
-				//remove cloud init
-				if(server.sourceImage && server.sourceImage.isCloudInit && server.serverOs?.platform != 'windows') {
-					getPlugin().morpheus.executeCommandOnServer(server, 'sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; sudo cp /etc/machine-id /tmp/machine-id-old ; sync', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
-				}
-				def archiveResults
-				try {
-					def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud, snapshotName: snapshotResults.snapshotName]
-					log.debug("archiveOpts: ${archiveOpts}")
-					archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder) { percent ->
-						exportImage.statusPercent = percent.toDouble()
-						context.services.virtualImage.save(exportImage)
+				def providerMap = storageProvider?.id ? context.async.storageBucket.getBucketStorageProvider(storageProvider.id).blockingGet() : null
+				if(providerMap) {
+
+					def cloudBucket = providerMap[storageProvider.bucketName]
+					def exportImage = importWorkloadRequest.targetImage
+					exportImage.virtualImageType = new VirtualImageType(code: 'xva')
+					exportImage.imageType = ImageType.xva
+					exportImage.owner = server.account
+					exportImage.cloudInit = server.sourceImage.cloudInit
+					exportImage.installAgent = server.sourceImage.installAgent
+					exportImage.osType = server.sourceImage.osType
+					exportImage.platform = server.sourceImage.platform
+					exportImage.vmToolsInstalled = server.sourceImage.vmToolsInstalled;
+					exportImage = context.async.virtualImage.create(exportImage).blockingGet()
+					def archiveFolder = "${importWorkloadRequest.imageBasePath}/${exportImage.id}".toString()
+					exportImage.remotePath = archiveFolder
+					context.async.virtualImage.save(exportImage).blockingGet()
+					def archiveResults
+					try {
+						def archiveOpts = [authConfig: authConfigMap, snapshotId: snapshotResults.snapshotId, vmName: vmName, zone: server.cloud, snapshotName: snapshotResults.snapshotName]
+						log.debug("importWorkload, archiveOpts: {}", archiveOpts)
+						archiveResults = XenComputeUtility.archiveVm(archiveOpts, snapshotResults.snapshotId, cloudBucket, archiveFolder) { percent ->
+							exportImage.statusPercent = percent.toDouble()
+							context.services.virtualImage.save(exportImage)
+						}
+					} finally {
+						if(doRestoreCloudInitCache) {
+							Map serverReadyResponse = checkServerReady([authConfig: authConfigMap, externalId: server.externalId])
+							if(serverReadyResponse.success) {
+								//restore cloud init cache
+								if(server.sourceImage && server.sourceImage.isCloudInit() && server.serverOs?.platform?.toString() != 'windows') {
+									context.executeCommandOnServer(server, "sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\"; sudo cat /var/tmp/machine-id-old > /etc/machine-id; sudo rm /var/tmp/machine-id-old; sync; sync;", false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+								}
+							} else {
+								log.warn("importWorkload: Timeout exceeded waiting for server to power on, cloud init settings will not be restored.")
+							}
+						}
 					}
-				} finally {
-					//restore cloud init
-					if(server.sourceImage && server.sourceImage.isCloudInit && server.serverOs?.platform != 'windows') {
-						getPlugin().morpheus.executeCommandOnServer(server, "sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\"; sudo cat /tmp/machine-id-old > /etc/machine-id ; sudo rm /tmp/machine-id-old ; sync", false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+					if(archiveResults?.success == true) {
+						response.virtualImage = exportImage
+						response.imagePath = archiveFolder
+						serviceResponse.data = response
+						serviceResponse.success = true
+					} else {
+						serviceResponse.success = false
+						serviceResponse.msg = "Failed to export image."
 					}
-				}
-				log.debug("archiveResults: ${archiveResults}")
-				if (archiveResults.success == true) {
-					response.virtualImage = exportImage
-					response.imagePath = archiveFolder
-					serviceResponse.data = response
-					serviceResponse.success = true
+				} else {
+					serviceResponse.success = false
+					serviceResponse.mgs = "Storage bucket not found."
 				}
 			}
 		} catch (e) {
