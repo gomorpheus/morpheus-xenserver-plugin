@@ -1367,6 +1367,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		try {
 			Map authConfig = plugin.getAuthConfig(server.cloud)
 			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
+			server = morpheus.services.computeServer.get(server.id)
 
 			if (serverDetail.success == true){
 				serverDetail.ipAddresses.each { interfaceName, data ->
@@ -1948,7 +1949,13 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					if(server.sourceImage && server.sourceImage.isCloudInit()) {
 						// disable cloud init cache and flush to disk
 						log.debug("importWorkload: disable cloud-init cache")
-						context.executeCommandOnServer(server, 'sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; sudo cp /etc/machine-id /var/tmp/machine-id-old; sync; sync;', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+						context.executeCommandOnServer(server, '''
+							sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; 
+							sudo cp /etc/machine-id /var/tmp/machine-id-old; 
+							sudo > /etc/machine-id; 
+							sudo mv /var/lib/cloud/instance /var/tmp/cloud-init-instance;
+							sync; sync;
+						''', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
 						doRestoreCloudInitCache = true
 					} else {
 						// just flush to disk
@@ -1995,7 +2002,14 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							if(serverReadyResponse.success) {
 								//restore cloud init cache
 								if(server.sourceImage && server.sourceImage.isCloudInit() && server.serverOs?.platform?.toString() != 'windows') {
-									context.executeCommandOnServer(server, "sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\"; sudo cat /var/tmp/machine-id-old > /etc/machine-id; sudo rm /var/tmp/machine-id-old; sync; sync;", false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
+									log.debug("importWorkload: restore cloud-init cache")
+									context.executeCommandOnServer(server, '''
+										sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\"; 
+										sudo cat /var/tmp/machine-id-old > /etc/machine-id; 
+										sudo rm /var/tmp/machine-id-old; 
+										sudo mv /var/tmp/cloud-init-instance /var/lib/cloud/instance;
+										sync;
+									''', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
 								}
 							} else {
 								log.warn("importWorkload: Timeout exceeded waiting for server to power on, cloud init settings will not be restored.")
