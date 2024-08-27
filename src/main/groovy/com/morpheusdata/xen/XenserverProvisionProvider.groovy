@@ -593,6 +593,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 							def serverDetail = checkServerReady([authConfig: authConfigMap, externalId: server.externalId])
 							// log.debug("serverDetail: ${serverDetail}")
 							if (serverDetail.success == true) {
+								Boolean doServerReload = false
 								serverDetail.ipAddresses.each { interfaceName, data ->
 									Long netInterfaceId = server.interfaces.find { it.name == interfaceName }?.id
 									if(netInterfaceId) {
@@ -609,11 +610,16 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 												netInterface.publicIpv6Address = data.ipv6Address
 											}
 											context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
-											// reload the server to pickup interface changes
-											server = getMorpheusServer(server.id)
+											doServerReload = true
 										}
 									}
 								}
+
+								if(doServerReload) {
+									// reload the server to pickup interface changes
+									server = getMorpheusServer(server.id)
+								}
+
 								def privateIp = serverDetail.ipAddress
 								def publicIp = serverDetail.ipAddress
 								if (privateIp) {
@@ -1368,26 +1374,32 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 			Map authConfig = plugin.getAuthConfig(server.cloud)
 			def serverDetail = checkServerReady([authConfig: authConfig, externalId: server.externalId])
 			server = morpheus.services.computeServer.get(server.id)
-
 			if (serverDetail.success == true){
+				Boolean doServerReload = false
 				serverDetail.ipAddresses.each { interfaceName, data ->
-					ComputeServerInterface netInterface = server.interfaces?.find{it.name == interfaceName}
-					if(netInterface) {
-						if(data.ipAddress) {
-							def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
-							if(!NetworkUtility.validateIpAddr(address.address)){
-								log.debug("NetAddress Errors: ${address}")
+					Long netInterfaceId = server.interfaces?.find{it.name == interfaceName}?.id
+					if(netInterfaceId) {
+						ComputeServerInterface netInterface = context.async.computeServer.computeServerInterface.get(netInterfaceId).blockingGet()
+						if(netInterfaceId) {
+							if(data.ipAddress) {
+								def address = new NetAddress(address: data.ipAddress, type: NetAddress.AddressType.IPV4)
+								netInterface.addresses << address
+								netInterface.publicIpAddress = data.ipAddress
 							}
-							netInterface.addresses << address
-							netInterface.publicIpAddress = data.ipAddress
+							if(data.ipv6Address) {
+								def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
+								netInterface.addresses << address
+								netInterface.publicIpv6Address = data.ipv6Address
+							}
+							context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
+							doServerReload = true
 						}
-						if(data.ipv6Address && XenComputeUtility.isValidIpv6Address(data.ipv6Address)) {
-							def address = new NetAddress(address: data.ipv6Address, type: NetAddress.AddressType.IPV6)
-							netInterface.addresses << address
-							netInterface.publicIpv6Address = data.ipv6Address
-						}
-						context.async.computeServer.computeServerInterface.save([netInterface]).blockingGet()
 					}
+				}
+
+				if(doServerReload) {
+					// reload the server to pickup interface changes
+					server = getMorpheusServer(server.id)
 				}
 				setNetworkInfo(server.interfaces, serverDetail.networks)
 				context.async.computeServer.save(server).blockingGet()
