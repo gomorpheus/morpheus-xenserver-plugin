@@ -260,7 +260,7 @@ class VirtualMachineSync {
                 log.debug("Interface List {}", nicList)
                 // return rtn
                 def matchFunc = { ComputeServerInterface morpheusInterface, nicInfo ->
-                    morpheusInterface?.internalId == nicInfo.uuid
+                    return morpheusInterface?.internalId == nicInfo.uuid
                 }
                 def existingItems = server.interfaces
                 def syncLists = XenComputeUtility.buildSyncLists(existingItems, nicList, matchFunc)
@@ -272,7 +272,7 @@ class VirtualMachineSync {
                             macAddress   : nicInfo.macAddress,
                             displayOrder : nicInfo.deviceIndex?.toInteger()
                     )
-                    if (nicInfo.deviceIndex == 0) {
+                    if (nicInfo.deviceIndex.toString() == '0') {
                         newInterface.primaryInterface = true
                     } else {
                         newInterface.primaryInterface = false
@@ -330,11 +330,12 @@ class VirtualMachineSync {
                         save = true
                     }
                     Boolean primaryInterface = nicInfo.deviceIndex.toString() == '0'
-                    if (existingNic.primaryInterface != primaryInterface) {
+					if (existingNic.primaryInterface != primaryInterface) {
                         existingNic.primaryInterface = primaryInterface
                         save = true
                     }
-                    def network = morpheusContext.services.network.find(
+
+					def network = morpheusContext.services.network.find(
                             new DataQuery().withFilter('refType', 'ComputeZone').withFilter('refId', cloud.id)
                                     .withFilter('externalId', "${nicInfo.networkUuid}"))
                     if (existingNic.network?.id != network?.id) {

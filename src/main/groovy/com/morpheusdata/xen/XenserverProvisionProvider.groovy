@@ -821,7 +821,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 	 */
 	@Override
 	ServiceResponse<ProvisionResponse> getServerDetails(ComputeServer server) {
-		log.debug("getServerDetails: ${server}")
+		log.debug("getServerDetails: ${server.id}")
 		def provisionResponse = new ProvisionResponse()
 		ServiceResponse<ProvisionResponse> rtn = ServiceResponse.prepare(provisionResponse)
 		try {
@@ -1151,6 +1151,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					def startResults = XenComputeUtility.startVm(authConfig, createResults.vmId)
 					provisionResponse.externalId = createResults.vmId
 					setVolumeInfo(server.volumes, createResults.volumes)
+					setNetworkInfo(server.interfaces, createResults.networks)
 					log.debug("start: ${startResults.success}")
 					if(startResults.success == true) {
 						if(startResults.error == true) {
@@ -1308,7 +1309,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 		return getServerDetail
 	}
 
-	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
+	def setNetworkInfo(serverInterfaces, externalNetworks) {
 		log.debug("serverInterfaces: {}, externalNetworks: {}", serverInterfaces, externalNetworks)
 		try {
 			if(externalNetworks?.size() > 0) {
@@ -1318,8 +1319,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					} else {
 						def matchNetwork = externalNetworks.find{networkInterface.internalId == it.uuid}
 						if(!matchNetwork) {
-							def displayOrder = "${networkInterface.displayOrder}"
-							matchNetwork = externalNetworks.find{displayOrder == it.deviceIndex}
+							String displayOrder = "${networkInterface.displayOrder}"
+							matchNetwork = externalNetworks.find{ displayOrder == it.deviceIndex.toString() }
 						}
 						if(matchNetwork) {
 							def tmpInterface = context.async.computeServer.computeServerInterface.get(networkInterface.id).blockingGet()
@@ -1341,7 +1342,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 	@Override
 	ServiceResponse<ProvisionResponse> waitForHost(ComputeServer server){
-		log.debug("waitForHost: ${server}")
+		log.debug("waitForHost: ${server.id}")
 		def provisionResponse = new ProvisionResponse()
 		ServiceResponse<ProvisionResponse> rtn = ServiceResponse.prepare(provisionResponse)
 		try {
@@ -1401,8 +1402,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					// reload the server to pickup interface changes
 					server = getMorpheusServer(server.id)
 				}
-				setNetworkInfo(server.interfaces, serverDetail.networks)
-				context.async.computeServer.save(server).blockingGet()
 				rtn.success = true
 			}
 		} catch (e){
