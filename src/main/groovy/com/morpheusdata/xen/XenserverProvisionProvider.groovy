@@ -479,6 +479,15 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					log.debug("insertTemplate: imageResults: ${imageResults}")
 					if (imageResults.success == true) {
 						imageId = imageResults.imageId
+						// create a location for the newly created image
+						def imageLocation = new VirtualImageLocation(
+							virtualImage: virtualImage,
+							code        : "xenserver.image.${cloud.id}.${imageId}",
+							internalId  : imageId,
+							externalId  : imageId,
+							imageName   : virtualImage.name
+						)
+						morpheus.services.virtualImage.location.create(imageLocation, cloud)
 					} else {
 						def errorMessage = imageResults.msg ?: 'An error occurred while uploading the image. See logs for more details.'
 						provisionResponse.setError(errorMessage)
@@ -487,7 +496,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 			}
-			if (opts.backupSetId) { //TODO: first create backup then only we can test it...test it later...
+			if (opts.backupSetId) {
 				//if this is a clone or restore, use the snapshot id as the image
 				def snapshots = context.services.backup.backupResult.list(
 						new DataQuery().withFilter("backupSetId", opts.backupSetId)
