@@ -106,7 +106,7 @@ jar {
 				'Morpheus-Logo-Dark': 'assets/xcpng-dark.svg',
 				'Morpheus-Labels': 'Plugin, Cloud',
 				'Morpheus-Repo': 'https://github.com/gomorpheus/morpheus-xenserver-plugin',
-				'Morpheus-Min-Appliance-Version': "7.0.4"
+				'Morpheus-Min-Appliance-Version': minVersion
 		)
 	}
 }
