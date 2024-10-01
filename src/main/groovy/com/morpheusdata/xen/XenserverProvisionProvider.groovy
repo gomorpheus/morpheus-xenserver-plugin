@@ -143,6 +143,23 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				optionSource: 'xcpVirtualImages'
 		)
 		nodeOptions << new OptionType(
+				name: 'osType',
+				category:'provisionType.xen.custom',
+				code: 'provisionType.xen.custom.containerType.osTypeId',
+				fieldContext: 'domain',
+				fieldName: 'osType.id',
+				fieldCode: 'gomorpheus.label.osType',
+				fieldLabel: 'OsType',
+				fieldGroup: null,
+				inputType: OptionType.InputType.SELECT,
+				displayOrder:15,
+				fieldClass:null,
+				required: false,
+				editable: true,
+				noSelection: 'Select',
+				optionSource: 'osTypes'
+		)
+		nodeOptions << new OptionType(
 				name: 'mount logs',
 				category: "provisionType.xen.custom",
 				code: 'provisionType.xen.custom.containerType.mountLogs',
@@ -1014,6 +1031,10 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 
 		def prepareResponse = new PrepareHostResponse(computeServer: server, disableCloudInit: false, options: [sendIp: true])
 		ServiceResponse<PrepareHostResponse> rtn = ServiceResponse.prepare(prepareResponse)
+		if(server.sourceImage){
+			rtn.success = true
+			return rtn
+		}
 
 		try {
 			VirtualImage virtualImage
