@@ -11,7 +11,21 @@ resource "virtual-image" "xenserver-image-morpheus-nginx-1_9" {
   systemImage  = true
   installAgent = true
   imageName    = "morpheus-nginx-1_9-ubuntu-14_04_3-v1.vhd"
-  osType       = "ubuntu.14.04.64"
+  osType = {
+     code = "ubuntu.14.04.64"
+     owner = null
+  }
+}
+
+resource "os-type-image" "xenserver-image-morpheus-nginx-1_9" {
+  code               = "xen.image.morpheus.nginx.1.9"
+  provisionType      = "xen"
+  virtualImage       = virtual-image.xenserver-image-morpheus-nginx-1_9
+  account            = null
+  osType = {
+     code = "ubuntu.14.04.64"
+     owner = null
+  }
 }
 
 resource "workload-type" "nginx-xen-1_9" {

@@ -12,10 +12,24 @@ resource "virtual-image" "xenserver-image-morpheus-ubuntu-20_04" {
   computeServerImage = false
   isCloudInit        = true
   externalId         = null
-  osType             = "ubuntu.20.04.64"
+  osType = {
+     code = "ubuntu.20.04.64"
+     owner = null
+  }
   active             = true
   delete             = false
   zoneType           = "xen"
+}
+
+resource "os-type-image" "xenserver-image-morpheus-ubuntu-20_04" {
+  code               = "xen.image.morpheus.ubuntu.20.04-v1.amd64"
+  provisionType      = "xen"
+  virtualImage       = virtual-image.xenserver-image-morpheus-ubuntu-20_04
+  account            = null
+  osType = {
+     code = "ubuntu.20.04.64"
+     owner = null
+  }
 }
 
 resource "virtual-image" "xenserver-image-morpheus-ubuntu-16_04" {
