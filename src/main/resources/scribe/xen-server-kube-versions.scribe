@@ -1,6 +1,6 @@
 resource "compute-type-layout" "kubernetes-1_28-ubuntu-20_04-xen-amd64-single" {
   code              = "kubernetes-1_28-ubuntu-20_04-xen-amd64-single"
-  enabled           = true
+  enabled           = false
   name              = "MKS Kubernetes 1.28 Cluster on Ubuntu 20.04"
   sortOrder         = 20
   computeVersion    = "20.04"
@@ -37,7 +37,7 @@ resource "compute-type-layout" "kubernetes-1_29-ubuntu-20_04-xen-amd64-single" {
   code              = "kubernetes-1_29-ubuntu-20_04-xen-amd64-single"
   enabled           = true
   name              = "MKS Kubernetes 1.29 Cluster on Ubuntu 20.04"
-  sortOrder         = 10
+  sortOrder         = 20
   computeVersion    = "20.04"
   clusterVersion    = "1.29.x"
   description       = "provision a kubernetes 1.29 cluster on ubuntu 20.04"
@@ -72,7 +72,7 @@ resource "compute-type-layout" "kubernetes-1_30-ubuntu-20_04-xen-amd64-single" {
   code              = "kubernetes-1_30-ubuntu-20_04-xen-amd64-single"
   enabled           = true
   name              = "MKS Kubernetes 1.30 Cluster on Ubuntu 20.04"
-  sortOrder         = 0
+  sortOrder         = 10
   computeVersion    = "20.04"
   clusterVersion    = "1.30.x"
   description       = "provision a kubernetes 1.30 cluster on ubuntu 20.04"
@@ -99,5 +99,39 @@ resource "compute-type-layout" "kubernetes-1_30-ubuntu-20_04-xen-amd64-single" {
     "kubernetes-fluentbit-3-0-7-package",
     "kubernetes-prometheus-0-12-package",
     "kubernetes-nginx-ingress-operator-1-10-1-package"
+  ]
+}
+
+resource "compute-type-layout" "kubernetes-1_31-ubuntu-20_04-xen-amd64-single" {
+  code              = "kubernetes-1_31-ubuntu-20_04-xen-amd64-single"
+  enabled           = true
+  name              = "MKS Kubernetes 1.31 Cluster on Ubuntu 20.04"
+  sortOrder         = 0
+  computeVersion    = "20.04"
+  clusterVersion    = "1.31.x"
+  description       = "provision a kubernetes 1.31 cluster on ubuntu 20.04"
+  type              = "xenKubeMaster"
+  serverCount       = 4
+  memoryRequirement = 1073741824
+  hasAutoScale      = true
+  containerRuntime  = "containerd"
+  networkRuntime    = "calico"
+  computeServers = [
+    compute-type-set.kubernetes-ubuntu-20_04-xen-amd64-set,
+    compute-type-set.kubernetes-ubuntu-20_04-worker-xen-amd64-set
+  ]
+  groupType     = "kubernetes-cluster"
+  provisionType = "xen"
+  optionTypes = [
+    "kubernetes.master.podCidr",
+    "kubernetes.master.serviceCidr"
+  ]
+  specTemplates = []
+  packages = [
+    "kubernetes-calico-3-25-0-package",
+    "kubernetes-rook-1-15-0-package",
+    "kubernetes-fluentbit-3-0-7-package",
+    "kubernetes-prometheus-0-12-package",
+    "kubernetes-nginx-ingress-operator-1-11-2-package"
   ]
 }
