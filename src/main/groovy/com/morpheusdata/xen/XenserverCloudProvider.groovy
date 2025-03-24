@@ -262,14 +262,14 @@ class XenserverCloudProvider implements CloudProvider {
 		)
 
 		//kubernetes
-		serverTypes << new ComputeServerType(code:'xenKubeMaster', name:'XCP-ng Kubernetes Master', description:'', platform:PlatformType.linux,
+		serverTypes << new ComputeServerType(code:'xenKubeMaster', name:'XCP-ng Kubernetes Master', description:'', platform:PlatformType.linux, hasMaintenanceMode: true,
 				nodeType:'kube-master', reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true,
 				controlPower:true, controlSuspend:true, creatable:true, supportsConsoleKeymap: true, computeService:'xenserverComputeService',
 				displayOrder:10, hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false,
 				agentType: ComputeServerType.AgentType.guest, containerEngine:'docker', provisionTypeCode: 'xen', computeTypeCode:'kube-master',
 				optionTypes:[]
 		)
-		serverTypes << new ComputeServerType(code:'xenKubeWorker', name:'XCP-ng Kubernetes Worker', description:'', platform:PlatformType.linux,
+		serverTypes << new ComputeServerType(code:'xenKubeWorker', name:'XCP-ng Kubernetes Worker', description:'', platform:PlatformType.linux,  hasMaintenanceMode: true,
 				nodeType:'kube-worker', reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true,
 				controlSuspend:true, creatable:true, supportsConsoleKeymap: true, computeService:'xenserverComputeService', displayOrder:10,
 				hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType: ComputeServerType.AgentType.guest,
