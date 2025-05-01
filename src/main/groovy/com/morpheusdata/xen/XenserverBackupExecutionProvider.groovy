@@ -1,5 +1,7 @@
 package com.morpheusdata.xen
 
+import com.bertramlabs.plugins.karman.CloudFile
+import com.bertramlabs.plugins.karman.StorageProvider
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupExecutionProvider
@@ -9,7 +11,9 @@ import com.morpheusdata.model.Backup
 import com.morpheusdata.model.BackupResult
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeServer
+import com.morpheusdata.model.Instance
 import com.morpheusdata.model.Snapshot
+import com.morpheusdata.model.StorageBucket
 import com.morpheusdata.model.Workload
 import com.morpheusdata.model.projection.SnapshotIdentityProjection
 import com.morpheusdata.response.ServiceResponse
@@ -108,6 +112,7 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 
 		ServiceResponse rtn = ServiceResponse.prepare()
 		try{
+			Backup backup = morpheusContext.services.backup.get(backupResult.backup.id)
 			String snapshotId = backupResult.snapshotId
 			Workload sourceWorkload = morpheusContext.services.workload.get(opts?.containerId ?: backupResult.containerId)
 			Cloud cloud = null
@@ -145,6 +150,29 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 						}
 					}
 					rtn.success = true
+				}
+
+				// this could eventually be backupResult.snapshotExported, but for now we need to check if
+				// previous plugin versions exported the file without setting snapshotExported
+				if(backup.copyToStore == true) {
+					// remove the backup result
+					StorageBucket bucket = morpheusContext.services.backup.getBackupStorageBucket(backup.account, backup.id)
+					if(bucket) {
+						StorageProvider provider = morpheusContext.services.backup.getBackupStorageProvider(bucket.id)
+
+						if(!backupResult.resultPath) {
+							backupResult.resultPath = "${bucket.bucketName}/backup.${backup.id}"
+						}
+						if(!backupResult.resultArchive) {
+							backupResult.resultArchive = "backup.${backupResult.id}.zip"
+						}
+						CloudFile backupArchiveFile = provider[backupResult.resultPath][backupResult.resultArchive]
+						if(backupArchiveFile.exists()) {
+							backupArchiveFile.delete()
+						}
+					} else {
+						log.debug("No storage bucket found for backup result {} - unable to delete backup result archive", backupResult.id)
+					}
 				}
 			}
 		} catch(e) {
@@ -203,12 +231,12 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 			def snapshotOpts = [zone:cloud, server:server, externalId:server.externalId, snapshotName:snapshotName, snapshotDescription:'']
 			snapshotOpts.authConfig = authConfig
 
-			def outputPath = executionConfig.backupConfig.workingPath
-			def outputFile = new File(outputPath)
-			outputFile.mkdirs()
+			def tmpOutputPath = executionConfig.backupConfig.workingPath
+			def tmpOutputFile = new File(tmpOutputPath)
+			tmpOutputFile.mkdirs()
 			//update status
 			backupResult.status = BackupResult.Status.IN_PROGRESS
-			morpheusContext.async.backup.backupResult.save(backupResult).subscribe().dispose()
+			morpheusContext.async.backup.backupResult.save(backupResult).subscribe()
 			//remove cloud init
 			if(server.sourceImage && server.sourceImage.isCloudInit && server.serverOs?.platform != 'windows') {
 				getPlugin().morpheus.executeCommandOnServer(server, 'sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; sudo cp /etc/machine-id /tmp/machine-id-old ; sync', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
@@ -235,8 +263,10 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 					//create zipFile
 					def bucket = morpheusContext.services.backup.getBackupStorageBucket(backup.account, backup.id)
 					def provider = morpheusContext.services.backup.getBackupStorageProvider(bucket.id)
-					def archiveName = "backup.${backupResult.id}.zip"
-					def zipFile = provider[bucket.bucketName]["backup.${backup.id}/${archiveName}"]
+
+					String archiveName = "backup.${backupResult.id}.zip"
+					String outputPath = "${bucket.bucketName}/backup.${backup.id}"
+					CloudFile zipFile = provider[outputPath][archiveName]
 					//we have to do some piping magic for this one
 					PipedOutputStream outStream = new PipedOutputStream()
 					InputStream istream  = new PipedInputStream(outStream)
@@ -260,7 +290,7 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 					}
 					//download it to output path
 					def instance = morpheusContext.async.instance.get(backup.instanceId).blockingGet()
-					def exportOpts = [zone:cloud, targetDir:outputPath, targetZipStream:zipStream, snapshotId:snapshotResults.snapshotId,
+					def exportOpts = [zone:cloud, targetDir:tmpOutputPath, targetZipStream:zipStream, snapshotId:snapshotResults.snapshotId,
 									  vmName:"${instance.name}.${backup.containerId}"]
 					exportOpts.authConfig = authConfig
 					log.debug("exportOpts: {}", exportOpts)
@@ -275,6 +305,9 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 						rtn.data.backupResult.setConfigProperty("vmId", snapshotResults.externalId)
 						rtn.data.backupResult.sizeInMb = (saveResults.archiveSize ?: 1) / ComputeUtility.ONE_MEGABYTE
 						rtn.data.backupResult.status = BackupResult.Status.SUCCEEDED
+						rtn.data.backupResult.resultPath = outputPath
+						rtn.data.backupResult.resultArchive = archiveName
+						rtn.data.backupResult.snapshotExtracted = true
 						rtn.data.updates = true
 						if(!backupResult.endDate) {
 							rtn.data.backupResult.endDate = new Date()
@@ -302,7 +335,7 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 		} catch(e) {
 			log.error("error in executeBackup: ${e}", e)
 			rtn.data.backupResult.status = BackupResult.Status.FAILED
-			rtn.data.updates = false
+			rtn.data.updates = true
 		}
 
 		return rtn
@@ -335,58 +368,97 @@ class XenserverBackupExecutionProvider implements BackupExecutionProvider {
 	/**
 	 * Extract the results of a backup. This is generally used for packaging up a full backup for the purposes of
 	 * a download or full archive of the backup.
-	 * @param backupResultModel the details associated with the results of the backup execution.
+	 * @param backupResult the details associated with the results of the backup execution.
 	 * @param opts additional options.
 	 * @return a ServiceResponse indicating the success or failure of the backup extraction.
 	 */
 	@Override
-	ServiceResponse extractBackup(BackupResult backupResultModel, Map opts) {
-		//TODO: This method doesn't work in the embedded integration, so its likely to implement using
-		// legacy code.
-		/*def rtn = [success:false]
+	ServiceResponse extractBackup(BackupResult backupResult, Map opts) {
+		def ServiceResponse rtn = ServiceResponse.prepare()
 		try {
-			rtn.backupResultId = backupResult.id
-			def backup = Backup.get(backupResult.backup.id)
-			def container = Container.read(backup.containerId)
-			def instance = Instance.read(container.instanceId)
-			def server = getBackupComputeServer(backup)
-			def zone = zoneService.loadFullZone(server.zoneId)
-			def zoneType = ComputeZoneType.read(zone.zoneTypeId)
-			String outputPath = backupStorageService.getWorkingBackupPath(backup.id, backupResult.id)
-			def outputFile = new File(outputPath)
-			outputFile.mkdirs()
-			//prep export
-			def exportOpts = [zone:zone, targetDir:outputPath, snapshotId:backupResult.snapshotId, vmName:"${instance.name}.${container.id}"]
+			def backup = morpheusContext.services.backup.get(backupResult.backup.id)
+
+			StorageBucket bucket = morpheusContext.services.backup.getBackupStorageBucket(backup.account, backup.id)
+			StorageProvider provider = morpheusContext.services.backup.getBackupStorageProvider(bucket.id)
+
+			// has the result already been extracted?
+			if(backupResult.snapshotExtracted == true && backupResult.resultPath && backupResult.resultArchive) {
+				// check if the file exists
+				if(provider[backupResult.resultPath][backupResult.resultArchive]?.exists()) {
+					// the backup has been extracted, just return the result
+					rtn.data = backupResult
+					rtn.success = true
+					return rtn
+				}
+			}
+
+			// the file hasn't been extracted, start the extraction process
+			Workload workload = morpheusContext.services.workload.get(backup.containerId)
+			Instance instance = morpheusContext.async.instance.get(backup.instanceId).blockingGet()
+			ComputeServer server = morpheusContext.services.computeServer.get(workload.server.id)
+			Cloud cloud = server?.cloud
+			Map authConfig = plugin.getAuthConfig(cloud)
+
+			// get a temp file to work with
+			String tmpOutputPath = morpheusContext.services.backup.getBackupWorkingPath(backup.id, backupResult.id)
+			File tmpOutputFile = new File(tmpOutputPath)
+			tmpOutputFile.mkdirs()
+
+			// create the target cloud file
+			String archiveName = "backup.${backupResult.id}.zip"
+			String outputPath = "${bucket.bucketName}/backup.${backup.id}"
+			CloudFile zipFile = provider[outputPath][archiveName]
+
+			PipedOutputStream outStream = new PipedOutputStream()
+			InputStream istream  = new PipedInputStream(outStream)
+			BufferedOutputStream buffOut = new BufferedOutputStream(outStream,1048576)
+			ZipOutputStream zipStream = new ZipOutputStream(buffOut)
+			def saveResults = [success:false]
+			def saveThread = Thread.start {
+				try {
+					zipFile.setInputStream(istream)
+					zipFile.save()
+					saveResults.archiveSize = zipFile.getContentLength()
+					saveResults.success = true
+				} catch(ex) {
+					log.error("Error Saving Backup File! ${ex.message}",ex)
+					try {
+						zipStream.close()
+					} catch(ex2) {
+						//dont care about exception on this but we need to close it on save failure thread in the event we need to cutoff the stream
+					}
+				}
+			}
+
+			//download it to output path
+			def exportOpts = [zone:cloud, targetDir:tmpOutputPath, targetZipStream:zipStream, snapshotId:backupResult.snapshotId,
+							  vmName:"${instance.name}.${backup.containerId}"]
+			exportOpts.authConfig = authConfig
 			log.debug("exportOpts: {}", exportOpts)
+
 			def exportResults = XenComputeUtility.exportVm(exportOpts, backupResult.snapshotId)
 			log.debug("exportResults: {}", exportResults)
-			def saveResults = backupStorageService.saveBackupResults(backup.account, outputFile.getPath(), backup.id)
-			if(saveResults.success == true) {
-				def statusMap = [backupResultId:rtn.backupResultId, destinationPath:outputPath, providerType:saveResults.providerType,
-								 providerBasePath:saveResults.basePath, targetBucket:saveResults.targetBucket,
-								 targetDirectory:saveResults.targetDirectory, snapshotExtracted:true, targetArchive:saveResults.targetArchive,
-								 backupSizeInMb:(saveResults.archiveSize ?: 1).div(ComputeUtility.ONE_MEGABYTE), success:true]
-				statusMap.config = [snapshotId:snapshotResults.snapshotId, snapshotName:snapshotName, vmId:snapshotResults.externalId]
-				updateBackupStatus(backupResult.id, null, statusMap)
+			saveThread.join()
+
+			if(saveResults.success == true && exportResults.success == true) {
+
+				backupResult.sizeInMb = (saveResults.archiveSize ?: 1) / ComputeUtility.ONE_MEGABYTE
+				backupResult.snapshotExtracted = true
+				backupResult.resultPath = outputPath
+				backupResult.resultArchive = archiveName
+
+				morpheusContext.services.backup.backupResult.save(backupResult)
+				rtn.data = backupResult
 				rtn.success = true
-				rtn.destinationPath = outputPath
-				rtn.snapshotId = statusMap.snapshotId
-				rtn.targetBucket = statusMap.targetBucket
-				rtn.targetProvider = statusMap.providerType
-				rtn.targetBase = statusMap.providerBasePath
-				rtn.targetDirectory = statusMap.targetDirectory
-				rtn.targetArchive = statusMap.targetArchive
 			} else {
-				def error = saveResults.error ?: "Failed to save backup result"
-				rtn.message = error
+				rtn.msg = "Failed to save backup archive to storage"
 			}
+
 		} catch(e) {
 			log.error("extractBackup: ${e}", e)
-			def error = "Failed to extract backup"
-			rtn.message = "Failed to extract backup: ${e.getMessage()}"
+			rtn.msg = "Failed to extract backup: ${e.getMessage()}"
 		}
-		return rtn*/
-		return ServiceResponse.error()
+		return rtn
 	}
 
 }		
