@@ -38,6 +38,42 @@ resource "compute-type-layout" "kubernetes-1_32-ubuntu-20_04-xen-amd64-single" {
 }
 
 
+resource "compute-type-layout" "kubernetes-1_32-ubuntu-20_04-xen-amd64" {
+  code              = "kubernetes-1_32-ubuntu-20_04-xen-amd64"
+  enabled           = true
+  name              = "MKS Kubernetes 1.32 HA Cluster on Ubuntu 20.04"
+  sortOrder         = 300
+  computeVersion    = "20.04"
+  clusterVersion    = "1.32.x"
+  description       = "provision a kubernetes HA 1.32 cluster on ubuntu 20.04"
+  type              = "xenKubeMaster"
+  serverCount       = 4
+  memoryRequirement = 1073741824
+  hasAutoScale      = true
+  containerRuntime  = "containerd"
+  networkRuntime    = "calico"
+  computeServers = [
+    compute-type-set.kubernetes-ha-master-ubuntu-20_04-xen-amd64-set,
+    compute-type-set.kubernetes-ha-add-master-ubuntu-20_04-xen-amd64-set,
+    compute-type-set.kubernetes-ha-final-master-ubuntu-20_04-xen-amd64-set
+    compute-type-set.kubernetes-ubuntu-20_04-ha-worker-xen-amd64-set
+  ]
+  groupType     = "kubernetes-cluster"
+  provisionType = "xen"
+  optionTypes = [
+    "kubernetes.master.podCidr",
+    "kubernetes.master.serviceCidr"
+  ]
+  specTemplates = []
+  packages = [
+    "kubernetes-calico-3-25-0-package",
+    "kubernetes-rook-1-15-0-package",
+    "kubernetes-fluentbit-3-0-7-package",
+    "kubernetes-prometheus-0-12-package",
+    "kubernetes-nginx-ingress-operator-1-12-1-package"
+  ]
+}
+
 
 
 /*

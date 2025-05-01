@@ -85,3 +85,129 @@ resource "compute-type-set" "kubernetes-ubuntu-20_04-worker-xen-amd64-set" {
   installContainerRuntime = false
   installStorageRuntime = false
 }
+
+
+/*
+    ---- High Availability ----
+*/
+
+resource "workload-type" "kubernetes-ha-master-ubuntu-20_04-xen-amd64" {
+  code             = "kubernetes-ha-master-ubuntu-20_04-xen-amd64"
+  shortName        = "kubernetes-ubuntu"
+  name             = "Xen High Availability Master Kubernetes Cluster on Ubuntu 20.04"
+  containerVersion = "20.04"
+  repositoryImage  = ""
+  imageCode        = "xen morpheus kubernetes on ubuntu 20.04"
+  entryPoint       = ""
+  mountLogs        = "/var/log"
+  statTypeCode     = "server"
+  logTypeCode      = "ubuntu"
+  showServerLogs   = true
+  category         = "kubernetes"
+  cloneType        = "ubuntu"
+  priorityOrder    = 0
+  serverType       = "vm"
+  providerType     = "xen"
+  checkTypeCode    = "vmCheck"
+  virtualImage     = virtual-image.xenserver-image-morpheus-ubuntu-20_04
+  containerPorts   = ["ubuntu.22", "kubernetes.ha.6443"]
+  provisionType    = "xen"
+  scripts          = [
+    "kube-ubuntu-22-setup-script-v2", "kube-adm-master-setup-script-v1", "kubernetes-ectd-encrypt-install-master-script-v1", "kube-kubeadm-cluster-shared-key", "k8-config-save"
+  ]
+  templates = ["k8-cypher","kubernetes-etcd-encrypt-install-master","kubeadm-cluster-master-init"]
+}
+
+resource "workload-type" "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64" {
+  code             = "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64"
+  shortName        = "kubernetes-ubuntu"
+  name             = "Xen High Availability Secondary Master Kubernetes Cluster on Ubuntu 20.04"
+  containerVersion = "20.04"
+  repositoryImage  = ""
+  imageCode        = "xen morpheus kubernetes on ubuntu 20.04"
+  entryPoint       = ""
+  mountLogs        = "/var/log"
+  statTypeCode     = "server"
+  logTypeCode      = "ubuntu"
+  showServerLogs   = true
+  category         = "kubernetes"
+  cloneType        = "ubuntu"
+  priorityOrder    = 0
+  serverType       = "vm"
+  providerType     = "xen"
+  checkTypeCode    = "vmCheck"
+  virtualImage     = virtual-image.xenserver-image-morpheus-ubuntu-20_04
+  containerPorts   = ["ubuntu.22", "kubernetes.ha.6443"]
+  provisionType    = "xen"
+  scripts          = [
+    "kube-kubeadm-cluster-shared-key", "kube-ubuntu-22-setup-script-v2", "k8-config-fetch", "kubernetes-kubeadm-cluster-add-master-init-v1", "kube-ectd-encrypt-install-add-master-script-v1", "kubeadm-ha-master-ip-script"
+  ]
+  templates = ["k8-cypher", "kubeadm-cluster-add-master-init", "kubernetes-etcd-encrypt-install-master-secondary", "kubeadm-ha-master-ip"]
+}
+
+# master set
+resource "compute-type-set" "kubernetes-ha-master-ubuntu-20_04-xen-amd64-set" {
+  code             = "kubernetes-ha-master-ubuntu-20_04-xen-amd64-set"
+  name             = "kubernetes master"
+  workloadType      = workload-type.kubernetes-ha-master-ubuntu-20_04-xen-amd64
+  computeServerType = compute-server-type.xenKubeMaster
+  category         = "ubuntu"
+  priorityOrder    = 0
+  dynamicCount     = false
+  nodeCount        = 1
+  nameSuffix       = "-master"
+  nodeType         = "master"
+  installContainerRuntime = false
+  installStorageRuntime = false
+}
+
+# master set
+resource "compute-type-set" "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64-set" {
+  code             = "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64-set"
+  name             = "kubernetes master"
+  workloadType      = workload-type.kubernetes-ha-add-master-ubuntu-20_04-xen-amd64
+  computeServerType = compute-server-type.xenKubeMaster
+  category         = "ubuntu"
+  priorityOrder    = 1
+  dynamicCount     = false
+  nodeCount        = 1
+  nameSuffix       = "-master"
+  nodeType         = "master"
+  installContainerRuntime = false
+  installStorageRuntime = false
+}
+
+
+# master set
+resource "compute-type-set" "kubernetes-ha-final-master-ubuntu-20_04-xen-amd64-set" {
+  code             = "kubernetes-ha-final-master-ubuntu-20_04-xen-amd64-set"
+  name             = "kubernetes master"
+  workloadType      = workload-type.kubernetes-ha-add-master-ubuntu-20_04-xen-amd64
+  computeServerType = compute-server-type.xenKubeMaster
+  category         = "ubuntu"
+  priorityOrder    = 2
+  dynamicCount     = false
+  nodeCount        = 1
+  nameSuffix       = "-master"
+  nodeType         = "master"
+  installContainerRuntime = false
+  installStorageRuntime = false
+}
+
+
+# worker set
+resource "compute-type-set" "kubernetes-ubuntu-20_04-ha-worker-xen-amd64-set" {
+  code             = "kubernetes-ubuntu-20_04-ha-worker-xen-amd64-set"
+  name             = "kubernetes worker"
+  containerType    = workload-type.kubernetes-ubuntu-20_04-worker-xen-amd64
+  computeServerType= "xenKubeWorker"
+  category         = "ubuntu"
+  priorityOrder    = 2
+  dynamicCount     = true
+  nodeCount        = 3
+  nameSuffix       = "-worker"
+  nodeType         = "worker"
+  canAddNodes      = true
+  installContainerRuntime = false
+  installStorageRuntime = false
+}
