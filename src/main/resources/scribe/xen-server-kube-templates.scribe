@@ -1,5 +1,5 @@
-resource "workload-type" "kubernetes-ubuntu-20_04-xen-amd64" {
-  code             = "kubernetes-ubuntu-20_04-xen-amd64"
+resource "workload-type" "kubernetes-ubuntu-20-04-xen-amd64" {
+  code             = "kubernetes-ubuntu-20-04-xen-amd64"
   shortName        = "kubernetes-ubuntu"
   name             = "Xen Kubernetes Cluster on Ubuntu 20.04"
   containerVersion = "20.04"
@@ -26,8 +26,8 @@ resource "workload-type" "kubernetes-ubuntu-20_04-xen-amd64" {
 }
 
 # worker vm
-resource "workload-type" "kubernetes-ubuntu-20_04-worker-xen-amd64" {
-  code             = "kubernetes-ubuntu-20_04-worker-xen-amd64"
+resource "workload-type" "kubernetes-ubuntu-20-04-worker-xen-amd64" {
+  code             = "kubernetes-ubuntu-20-04-worker-xen-amd64"
   shortName        = "kubernetes-worker-ubuntu"
   name             = "Xen Kubernetes Worker on Ubuntu 20.04"
   containerVersion = "20.04"
@@ -54,10 +54,10 @@ resource "workload-type" "kubernetes-ubuntu-20_04-worker-xen-amd64" {
 }
 
 # master set
-resource "compute-type-set" "kubernetes-ubuntu-20_04-xen-amd64-set" {
-  code             = "kubernetes-ubuntu-20_04-xen-amd64-set"
+resource "compute-type-set" "kubernetes-ubuntu-20-04-xen-amd64-set" {
+  code             = "kubernetes-ubuntu-20-04-xen-amd64-set"
   name             = "kubernetes master"
-  workloadType      = workload-type.kubernetes-ubuntu-20_04-xen-amd64
+  workloadType      = workload-type.kubernetes-ubuntu-20-04-xen-amd64
   computeServerType = compute-server-type.xenKubeMaster
   category         = "ubuntu"
   priorityOrder    = 0
@@ -70,10 +70,10 @@ resource "compute-type-set" "kubernetes-ubuntu-20_04-xen-amd64-set" {
 }
 
 # worker set
-resource "compute-type-set" "kubernetes-ubuntu-20_04-worker-xen-amd64-set" {
-  code             = "kubernetes-ubuntu-20_04-worker-xen-amd64-set"
+resource "compute-type-set" "kubernetes-ubuntu-20-04-worker-xen-amd64-set" {
+  code             = "kubernetes-ubuntu-20-04-worker-xen-amd64-set"
   name             = "kubernetes worker"
-  containerType    = workload-type.kubernetes-ubuntu-20_04-worker-xen-amd64
+  containerType    = workload-type.kubernetes-ubuntu-20-04-worker-xen-amd64
   computeServerType= "xenKubeWorker"
   category         = "ubuntu"
   priorityOrder    = 1
@@ -91,8 +91,8 @@ resource "compute-type-set" "kubernetes-ubuntu-20_04-worker-xen-amd64-set" {
     ---- High Availability ----
 */
 
-resource "workload-type" "kubernetes-ha-master-ubuntu-20_04-xen-amd64" {
-  code             = "kubernetes-ha-master-ubuntu-20_04-xen-amd64"
+resource "workload-type" "kubernetes-ha-master-ubuntu-20-04-xen-amd64" {
+  code             = "kubernetes-ha-master-ubuntu-20-04-xen-amd64"
   shortName        = "kubernetes-ubuntu"
   name             = "Xen High Availability Master Kubernetes Cluster on Ubuntu 20.04"
   containerVersion = "20.04"
@@ -118,8 +118,8 @@ resource "workload-type" "kubernetes-ha-master-ubuntu-20_04-xen-amd64" {
   templates = ["k8-cypher","kubernetes-etcd-encrypt-install-master","kubeadm-cluster-master-init"]
 }
 
-resource "workload-type" "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64" {
-  code             = "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64"
+resource "workload-type" "kubernetes-ha-add-master-ubuntu-20-04-xen-amd64" {
+  code             = "kubernetes-ha-add-master-ubuntu-20-04-xen-amd64"
   shortName        = "kubernetes-ubuntu"
   name             = "Xen High Availability Secondary Master Kubernetes Cluster on Ubuntu 20.04"
   containerVersion = "20.04"
@@ -146,10 +146,10 @@ resource "workload-type" "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64" {
 }
 
 # master set
-resource "compute-type-set" "kubernetes-ha-master-ubuntu-20_04-xen-amd64-set" {
-  code             = "kubernetes-ha-master-ubuntu-20_04-xen-amd64-set"
+resource "compute-type-set" "kubernetes-ha-master-ubuntu-20-04-xen-amd64-set" {
+  code             = "kubernetes-ha-master-ubuntu-20-04-xen-amd64-set"
   name             = "kubernetes master"
-  workloadType      = workload-type.kubernetes-ha-master-ubuntu-20_04-xen-amd64
+  workloadType      = workload-type.kubernetes-ha-master-ubuntu-20-04-xen-amd64
   computeServerType = compute-server-type.xenKubeMaster
   category         = "ubuntu"
   priorityOrder    = 0
@@ -162,10 +162,10 @@ resource "compute-type-set" "kubernetes-ha-master-ubuntu-20_04-xen-amd64-set" {
 }
 
 # master set
-resource "compute-type-set" "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64-set" {
-  code             = "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64-set"
+resource "compute-type-set" "kubernetes-ha-add-master-ubuntu-20-04-xen-amd64-set" {
+  code             = "kubernetes-ha-add-master-ubuntu-20-04-xen-amd64-set"
   name             = "kubernetes master"
-  workloadType      = workload-type.kubernetes-ha-add-master-ubuntu-20_04-xen-amd64
+  workloadType      = workload-type.kubernetes-ha-add-master-ubuntu-20-04-xen-amd64
   computeServerType = compute-server-type.xenKubeMaster
   category         = "ubuntu"
   priorityOrder    = 1
@@ -179,10 +179,10 @@ resource "compute-type-set" "kubernetes-ha-add-master-ubuntu-20_04-xen-amd64-set
 
 
 # master set
-resource "compute-type-set" "kubernetes-ha-final-master-ubuntu-20_04-xen-amd64-set" {
-  code             = "kubernetes-ha-final-master-ubuntu-20_04-xen-amd64-set"
+resource "compute-type-set" "kubernetes-ha-final-master-ubuntu-20-04-xen-amd64-set" {
+  code             = "kubernetes-ha-final-master-ubuntu-20-04-xen-amd64-set"
   name             = "kubernetes master"
-  workloadType      = workload-type.kubernetes-ha-add-master-ubuntu-20_04-xen-amd64
+  workloadType      = workload-type.kubernetes-ha-add-master-ubuntu-20-04-xen-amd64
   computeServerType = compute-server-type.xenKubeMaster
   category         = "ubuntu"
   priorityOrder    = 2
@@ -196,10 +196,10 @@ resource "compute-type-set" "kubernetes-ha-final-master-ubuntu-20_04-xen-amd64-s
 
 
 # worker set
-resource "compute-type-set" "kubernetes-ubuntu-20_04-ha-worker-xen-amd64-set" {
-  code             = "kubernetes-ubuntu-20_04-ha-worker-xen-amd64-set"
+resource "compute-type-set" "kubernetes-ubuntu-20-04-ha-worker-xen-amd64-set" {
+  code             = "kubernetes-ubuntu-20-04-ha-worker-xen-amd64-set"
   name             = "kubernetes worker"
-  containerType    = workload-type.kubernetes-ubuntu-20_04-worker-xen-amd64
+  containerType    = workload-type.kubernetes-ubuntu-20-04-worker-xen-amd64
   computeServerType= "xenKubeWorker"
   category         = "ubuntu"
   priorityOrder    = 2

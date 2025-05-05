@@ -3,8 +3,8 @@
 */ 
 
 
-resource "compute-type-layout" "kubernetes-1_32-ubuntu-20_04-xen-amd64-single" {
-  code              = "kubernetes-1_32-ubuntu-20_04-xen-amd64-single"
+resource "compute-type-layout" "kubernetes-1_32-ubuntu-20-04-xen-amd64-single" {
+  code              = "kubernetes-1_32-ubuntu-20-04-xen-amd64-single"
   enabled           = true
   name              = "MKS Kubernetes 1.32 Cluster on Ubuntu 20.04"
   sortOrder         = 0
@@ -18,8 +18,8 @@ resource "compute-type-layout" "kubernetes-1_32-ubuntu-20_04-xen-amd64-single" {
   containerRuntime  = "containerd"
   networkRuntime    = "calico"
   computeServers = [
-    compute-type-set.kubernetes-ubuntu-20_04-xen-amd64-set,
-    compute-type-set.kubernetes-ubuntu-20_04-worker-xen-amd64-set
+    compute-type-set.kubernetes-ubuntu-20-04-xen-amd64-set,
+    compute-type-set.kubernetes-ubuntu-20-04-worker-xen-amd64-set
   ]
   groupType     = "kubernetes-cluster"
   provisionType = "xen"
@@ -38,8 +38,8 @@ resource "compute-type-layout" "kubernetes-1_32-ubuntu-20_04-xen-amd64-single" {
 }
 
 
-resource "compute-type-layout" "kubernetes-1_32-ubuntu-20_04-xen-amd64" {
-  code              = "kubernetes-1_32-ubuntu-20_04-xen-amd64"
+resource "compute-type-layout" "kubernetes-1_32-ubuntu-20-04-xen-amd64" {
+  code              = "kubernetes-1_32-ubuntu-20-04-xen-amd64"
   enabled           = true
   name              = "MKS Kubernetes 1.32 HA Cluster on Ubuntu 20.04"
   sortOrder         = 300
@@ -53,10 +53,10 @@ resource "compute-type-layout" "kubernetes-1_32-ubuntu-20_04-xen-amd64" {
   containerRuntime  = "containerd"
   networkRuntime    = "calico"
   computeServers = [
-    compute-type-set.kubernetes-ha-master-ubuntu-20_04-xen-amd64-set,
-    compute-type-set.kubernetes-ha-add-master-ubuntu-20_04-xen-amd64-set,
-    compute-type-set.kubernetes-ha-final-master-ubuntu-20_04-xen-amd64-set
-    compute-type-set.kubernetes-ubuntu-20_04-ha-worker-xen-amd64-set
+    compute-type-set.kubernetes-ha-master-ubuntu-20-04-xen-amd64-set,
+    compute-type-set.kubernetes-ha-add-master-ubuntu-20-04-xen-amd64-set,
+    compute-type-set.kubernetes-ha-final-master-ubuntu-20-04-xen-amd64-set
+    compute-type-set.kubernetes-ubuntu-20-04-ha-worker-xen-amd64-set
   ]
   groupType     = "kubernetes-cluster"
   provisionType = "xen"
@@ -81,8 +81,8 @@ resource "compute-type-layout" "kubernetes-1_32-ubuntu-20_04-xen-amd64" {
 */ 
 
 
-resource "compute-type-layout" "kubernetes-1_31-ubuntu-20_04-xen-amd64-single" {
-  code              = "kubernetes-1_31-ubuntu-20_04-xen-amd64-single"
+resource "compute-type-layout" "kubernetes-1_31-ubuntu-20-04-xen-amd64-single" {
+  code              = "kubernetes-1_31-ubuntu-20-04-xen-amd64-single"
   enabled           = true
   name              = "MKS Kubernetes 1.31 Cluster on Ubuntu 20.04"
   sortOrder         = 100
@@ -96,8 +96,8 @@ resource "compute-type-layout" "kubernetes-1_31-ubuntu-20_04-xen-amd64-single" {
   containerRuntime  = "containerd"
   networkRuntime    = "calico"
   computeServers = [
-    compute-type-set.kubernetes-ubuntu-20_04-xen-amd64-set,
-    compute-type-set.kubernetes-ubuntu-20_04-worker-xen-amd64-set
+    compute-type-set.kubernetes-ubuntu-20-04-xen-amd64-set,
+    compute-type-set.kubernetes-ubuntu-20-04-worker-xen-amd64-set
   ]
   groupType     = "kubernetes-cluster"
   provisionType = "xen"
@@ -122,8 +122,8 @@ resource "compute-type-layout" "kubernetes-1_31-ubuntu-20_04-xen-amd64-single" {
 */ 
 
 
-resource "compute-type-layout" "kubernetes-1_30-ubuntu-20_04-xen-amd64-single" {
-  code              = "kubernetes-1_30-ubuntu-20_04-xen-amd64-single"
+resource "compute-type-layout" "kubernetes-1_30-ubuntu-20-04-xen-amd64-single" {
+  code              = "kubernetes-1_30-ubuntu-20-04-xen-amd64-single"
   enabled           = true
   name              = "MKS Kubernetes 1.30 Cluster on Ubuntu 20.04"
   sortOrder         = 200
@@ -137,8 +137,8 @@ resource "compute-type-layout" "kubernetes-1_30-ubuntu-20_04-xen-amd64-single" {
   containerRuntime  = "containerd"
   networkRuntime    = "calico"
   computeServers = [
-    compute-type-set.kubernetes-ubuntu-20_04-xen-amd64-set,
-    compute-type-set.kubernetes-ubuntu-20_04-worker-xen-amd64-set
+    compute-type-set.kubernetes-ubuntu-20-04-xen-amd64-set,
+    compute-type-set.kubernetes-ubuntu-20-04-worker-xen-amd64-set
   ]
   groupType     = "kubernetes-cluster"
   provisionType = "xen"
@@ -161,8 +161,8 @@ resource "compute-type-layout" "kubernetes-1_30-ubuntu-20_04-xen-amd64-single" {
 */ 
 
 
-resource "compute-type-layout" "kubernetes-1_29-ubuntu-20_04-xen-amd64-single" {
-  code              = "kubernetes-1_29-ubuntu-20_04-xen-amd64-single"
+resource "compute-type-layout" "kubernetes-1_29-ubuntu-20-04-xen-amd64-single" {
+  code              = "kubernetes-1_29-ubuntu-20-04-xen-amd64-single"
   enabled           = false
   name              = "MKS Kubernetes 1.29 Cluster on Ubuntu 20.04"
   sortOrder         = 200
@@ -176,8 +176,8 @@ resource "compute-type-layout" "kubernetes-1_29-ubuntu-20_04-xen-amd64-single" {
   containerRuntime  = "containerd"
   networkRuntime    = "calico"
   computeServers = [
-    compute-type-set.kubernetes-ubuntu-20_04-xen-amd64-set,
-    compute-type-set.kubernetes-ubuntu-20_04-worker-xen-amd64-set
+    compute-type-set.kubernetes-ubuntu-20-04-xen-amd64-set,
+    compute-type-set.kubernetes-ubuntu-20-04-worker-xen-amd64-set
   ]
   groupType     = "kubernetes-cluster"
   provisionType = "xen"
@@ -201,8 +201,8 @@ resource "compute-type-layout" "kubernetes-1_29-ubuntu-20_04-xen-amd64-single" {
 */ 
 
 
-resource "compute-type-layout" "kubernetes-1_28-ubuntu-20_04-xen-amd64-single" {
-  code              = "kubernetes-1_28-ubuntu-20_04-xen-amd64-single"
+resource "compute-type-layout" "kubernetes-1_28-ubuntu-20-04-xen-amd64-single" {
+  code              = "kubernetes-1_28-ubuntu-20-04-xen-amd64-single"
   enabled           = false
   name              = "MKS Kubernetes 1.28 Cluster on Ubuntu 20.04"
   sortOrder         = 20
@@ -216,8 +216,8 @@ resource "compute-type-layout" "kubernetes-1_28-ubuntu-20_04-xen-amd64-single" {
   containerRuntime  = "containerd"
   networkRuntime    = "calico"
   computeServers = [
-    compute-type-set.kubernetes-ubuntu-20_04-xen-amd64-set,
-    compute-type-set.kubernetes-ubuntu-20_04-worker-xen-amd64-set
+    compute-type-set.kubernetes-ubuntu-20-04-xen-amd64-set,
+    compute-type-set.kubernetes-ubuntu-20-04-worker-xen-amd64-set
   ]
   groupType     = "kubernetes-cluster"
   provisionType = "xen"
