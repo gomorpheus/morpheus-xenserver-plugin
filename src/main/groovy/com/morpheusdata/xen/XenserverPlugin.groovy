@@ -20,6 +20,7 @@ import com.morpheusdata.core.Plugin
 import com.morpheusdata.model.AccountCredential
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.xen.datasets.VirtualImageDatasetProvider
+import com.morpheusdata.xen.util.UpdateDataUtil
 import com.morpheusdata.xen.util.XenComputeUtility
 import groovy.util.logging.Slf4j
 
@@ -40,6 +41,10 @@ class XenserverPlugin extends Plugin {
         	new XenserverBackupProvider(this,this.morpheus),
 			new VirtualImageDatasetProvider(this, this.morpheus)
 		)
+
+
+		// need to correct the statTypeCode for custom container types
+		UpdateDataUtil.updateContainerTypeStatTypeCode(this.morpheus)
     }
 
     /**
