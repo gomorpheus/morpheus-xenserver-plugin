@@ -257,7 +257,7 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				global:false,
 				placeHolder:null,
 				helpBlock:'',
-				defaultValue:'xen',
+				defaultValue:'vm',
 				custom:false,
 				displayOrder:101,
 				fieldClass:null
