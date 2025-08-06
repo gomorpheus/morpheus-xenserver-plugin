@@ -1891,14 +1891,24 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 					}
 				}
 				resizeRequest?.interfacesDelete?.eachWithIndex { networkDelete, index ->
-					authConfigMap.stopped = opts.stopped
-					def deleteResults = XenComputeUtility.deleteVmNetwork(authConfigMap, computeServer.externalId, networkDelete.internalId)
-					log.debug("netdeleteResults: ${deleteResults}")
-					if (deleteResults.success == true) {
-						computeServer.interfaces = computeServer.interfaces.findAll { it.id != networkDelete.id }
-						context.async.computeServer.save(computeServer).blockingGet()
-						context.async.computeServer.computeServerInterface.remove(networkDelete).blockingGet()
-						computeServer = getMorpheusServer(computeServer.id)
+					def interfaceId = networkDelete?.id
+
+					if (interfaceId) {
+					    try {
+					    	computeServer = getMorpheusServer(computeServer.id)
+					    	context.async.computeServer.computeServerInterface.remove([networkDelete], computeServer).blockingGet()
+					        authConfigMap.stopped = opts.stopped
+							def deleteResults = XenComputeUtility.deleteVmNetwork(authConfigMap, computeServer.externalId, networkDelete.internalId)
+							log.debug("netdeleteResults: ${deleteResults}")
+							if (deleteResults.success == true) {
+								computeServer.interfaces = computeServer.interfaces.findAll { it.id != networkDelete.id }
+								context.async.computeServer.save(computeServer).blockingGet()
+								computeServer = getMorpheusServer(computeServer.id)
+							}
+					       
+					    } catch (Exception e) {
+					        log.error("Failed to delete NIC ${interfaceId}: ${e.message}", e)
+					    }
 					}
 				}
 			}
