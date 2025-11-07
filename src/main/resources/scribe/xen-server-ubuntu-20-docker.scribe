@@ -1,12 +1,12 @@
-resource "workload-type" "docker-xen-ubuntu-16_04" {
-  code             = "docker-xen-ubuntu-16.04"
-  name             = "Docker Ubuntu 16.04"
+resource "workload-type" "docker-xen-ubuntu-20_04" {
+  code             = "docker-xen-ubuntu-20.04"
+  name             = "Docker Ubuntu 20.04"
   shortName        = "ubuntu"
   ports = ["22"]
-  containerVersion = "16.04"
+  containerVersion = "20.04"
   containerType    = "docker"
   repositoryImage  = null
-  imageCode        = "morpheus ubuntu 16.04"
+  imageCode        = "morpheus ubuntu 20.04"
   entryPoint       = null
   mountLogs        = "/var/log"
   statTypeCode     = "server"
@@ -23,10 +23,10 @@ resource "workload-type" "docker-xen-ubuntu-16_04" {
   provisionType    = "xen"
 }
 
-resource "compute-type-set" "docker-xen-ubuntu-16_04-set" {
-  code                    = "docker-xen-ubuntu-16.04-set"
+resource "compute-type-set" "docker-xen-ubuntu-20_04-set" {
+  code                    = "docker-xen-ubuntu-20.04-set"
   name                    = "docker host"
-  containerType           = workload-type.docker-xen-ubuntu-16_04
+  containerType           = workload-type.docker-xen-ubuntu-20_04
   computeServerType       = "xenserverLinux"
   category                = "ubuntu"
   priorityOrder           = 0
@@ -38,19 +38,17 @@ resource "compute-type-set" "docker-xen-ubuntu-16_04-set" {
   installStorageRuntime   = true
 }
 
-resource "compute-type-layout" "docker-xen-ubuntu-16_04-single" {
-  code           = "docker-xen-ubuntu-16.04-single"
+resource "compute-type-layout" "docker-xen-ubuntu-20_04-single" {
+  code           = "docker-xen-ubuntu-20.04-single"
   name           = "Xen Docker Host"
   sortOrder      = 5
-  computeVersion = "16.04"
+  computeVersion = "20.04"
   description    = "This will provision a single docker host vm in xen"
   type           = "xenserverLinux"
   serverCount    = 1
   memoryRequirement = (1024 * 1024 * 1024) //1 gig
   hasAutoScale   = true
   groupType      = "docker-cluster"
-  computeServers = [compute-type-set.docker-xen-ubuntu-16_04-set]
+  computeServers = [compute-type-set.docker-xen-ubuntu-20_04-set]
   provisionType  = "xen"
-  enabled        = false
-  creatable      = false
 }
