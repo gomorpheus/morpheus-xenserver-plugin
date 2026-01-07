@@ -408,6 +408,7 @@ class VirtualMachineSync {
                     if (volume.deviceDisplayName == 'xvda') {
                         volume.rootVolume = true
                     }
+                    volume.removable = volume.rootVolume != true
                     if (dataStoreExId) {
                         def datastore = morpheusContext.services.cloud.datastore.find(
                                 new DataQuery().withFilter("code", "xenserver.sr.${server.cloud.id}.${dataStoreExId}"))
@@ -441,6 +442,11 @@ class VirtualMachineSync {
                     def rootVolume = diskInfo.deviceName == 'xvda'
                     if (rootVolume != existingVolume.rootVolume) {
                         existingVolume.rootVolume = rootVolume
+                        save = true
+                    }
+                    def removable = !rootVolume
+                    if (removable != existingVolume.removable) {
+                        existingVolume.removable = removable
                         save = true
                     }
                     if (save) {
