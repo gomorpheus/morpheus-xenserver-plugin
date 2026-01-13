@@ -1905,7 +1905,6 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								context.async.computeServer.save(computeServer).blockingGet()
 								computeServer = getMorpheusServer(computeServer.id)
 							}
-					       
 					    } catch (Exception e) {
 					        log.error("Failed to delete NIC ${interfaceId}: ${e.message}", e)
 					    }
@@ -1955,7 +1954,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				displayOrder: newCounter,
 				status		: 'provisioned',
 				unitNumber	: addDiskResults.volume?.deviceIndex?.toString(),
-				deviceDisplayName : getDiskDisplayName(newCounter)
+				deviceDisplayName : getDiskDisplayName(newCounter),
+				removable   : true
 		)
 		return newVolume
 	}
@@ -2001,9 +2001,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 						// disable cloud init cache and flush to disk
 						log.debug("importWorkload: disable cloud-init cache")
 						context.executeCommandOnServer(server, '''
-							sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; 
-							sudo cp /etc/machine-id /var/tmp/machine-id-old; 
-							sudo > /etc/machine-id; 
+							sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg;
+							sudo cp /etc/machine-id /var/tmp/machine-id-old;
+							sudo > /etc/machine-id;
 							sudo mv /var/lib/cloud/instance /var/tmp/cloud-init-instance;
 							sync; sync;
 						''', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
@@ -2055,9 +2055,9 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 								if(server.sourceImage && server.sourceImage.isCloudInit() && server.serverOs?.platform?.toString() != 'windows') {
 									log.debug("importWorkload: restore cloud-init cache")
 									context.executeCommandOnServer(server, '''
-										sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\"; 
-										sudo cat /var/tmp/machine-id-old > /etc/machine-id; 
-										sudo rm /var/tmp/machine-id-old; 
+										sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\";
+										sudo cat /var/tmp/machine-id-old > /etc/machine-id;
+										sudo rm /var/tmp/machine-id-old;
 										sudo mv /var/tmp/cloud-init-instance /var/lib/cloud/instance;
 										sync;
 									''', false, server.sshUsername, server.sshPassword, null, null, null, null, true, true).blockingGet()
