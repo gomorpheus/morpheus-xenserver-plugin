@@ -425,7 +425,7 @@ class VirtualMachineSync {
                 }
                 // Process updates
                 syncLists.updateList?.each { updateMap ->
-                    log.info("processing update item: ${updateMap}")
+                    log.debug("processing update item: ${updateMap}")
                     StorageVolume existingVolume = updateMap.existingItem
                     def diskInfo = updateMap.masterItem
 

@@ -389,23 +389,23 @@ class XenserverCloudProvider implements CloudProvider {
 
 				now = new Date().time
 				new ImagesSync(cloudInfo, plugin).execute()
-				log.info("${cloudInfo.name}: ImagesSync in ${new Date().time - now}ms")
+				log.debug("${cloudInfo.name}: ImagesSync in ${new Date().time - now}ms")
 
 				now = new Date().time
 				new NetworkSync(cloudInfo, plugin).execute()
-				log.info("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
+				log.debug("${cloudInfo.name}: NetworkSync in ${new Date().time - now}ms")
 
 				now = new Date().time
 				new DatastoresSync(cloudInfo, plugin).execute()
-				log.info("${cloudInfo.name}: DatastoresSync in ${new Date().time - now}ms")
+				log.debug("${cloudInfo.name}: DatastoresSync in ${new Date().time - now}ms")
 
 				now = new Date().time
 				new PoolSync(cloudInfo, plugin).execute()
-				log.info("${cloudInfo.name}: PoolSync in ${new Date().time - now}ms")
+				log.debug("${cloudInfo.name}: PoolSync in ${new Date().time - now}ms")
 
 				now = new Date().time
 				new VirtualMachineSync(cloudInfo, plugin, this).execute()
-				log.info("${cloudInfo.name}: VirtualMachineSync in ${new Date().time - now}ms")
+				log.debug("${cloudInfo.name}: VirtualMachineSync in ${new Date().time - now}ms")
 
 				rtn = ServiceResponse.success()
 			} else {
