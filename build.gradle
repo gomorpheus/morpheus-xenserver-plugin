@@ -81,7 +81,7 @@ dependencies {
 	}
 
 	implementation 'org.apache.commons:commons-compress:1.21'
-	implementation files('lib/xcpng-8.2.jar')
+	implementation files('lib/xen-api-26.1.8.jar')
 
 }
 
@@ -118,7 +118,7 @@ assets {
 task copyRuntimeLibs(type: Copy) {
 	into "lib"
 	from project.configurations.runtimeClasspath - project.configurations.provided
-	exclude "xcpng-8.2.jar"
+	exclude "xen-api-26.1.8.jar"
 }
 
 task(console, dependsOn: 'classes', type: JavaExec) {
