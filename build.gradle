@@ -81,7 +81,10 @@ dependencies {
 	}
 
 	implementation 'org.apache.commons:commons-compress:1.21'
-	implementation files('lib/xcpng-8.2.jar')
+	implementation files('lib/xen-api-26.1.8.jar')
+	// Required transitive dependencies for xen-api-26.1.8 (switched from XML-RPC to Jackson+httpclient5)
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.3'
+	implementation 'org.apache.httpcomponents.client5:httpclient5:5.3'
 
 }
 
@@ -118,7 +121,7 @@ assets {
 task copyRuntimeLibs(type: Copy) {
 	into "lib"
 	from project.configurations.runtimeClasspath - project.configurations.provided
-	exclude "xcpng-8.2.jar"
+	exclude "xen-api-26.1.8.jar"
 }
 
 task(console, dependsOn: 'classes', type: JavaExec) {
