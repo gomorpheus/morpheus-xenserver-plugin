@@ -39,7 +39,7 @@ class VirtualMachineSync {
 
             Collection<ServicePlan> availablePlans =  morpheusContext.services.servicePlan.list(new DataQuery().withFilters(
                     new DataFilter("active", true),
-                    new DataFilter("deleted", "ne", true),
+                    new DataFilter("deleted", "!=", true),
                     new DataFilter("provisionType.code", "xen")
             ))
 
