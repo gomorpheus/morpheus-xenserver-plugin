@@ -1452,7 +1452,7 @@ class XenComputeUtility {
 
 	static getXenApiUrl(cloud, forceSecure = false) {
 		def apiHost = getXenApiHost(cloud)
-		def urlPrefix = (forceSecure == true || apiHost.isSecure == true) ? 'https://' : 'http://'
+		def urlPrefix = 'https://'
 		return urlPrefix + apiHost.address
 	}
 
