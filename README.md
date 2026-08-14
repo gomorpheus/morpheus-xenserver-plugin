@@ -1,80 +1,156 @@
 # Morpheus XCP-ng Plugin
 
-This plugin provides a full integration between [XCP-ng / Citrix XenServer](https://xcp-ng.org) and [Morpheus](https://morpheusdata.com). It enables cloud inventory sync, VM provisioning, VM import, hypervisor console access, and snapshot-based backups from within the Morpheus platform.
+The Morpheus XCP-ng Plugin integrates Morpheus with XCP-ng (and XenServer) hypervisors to provide virtual machine provisioning, snapshot-based backup, and cloud synchronisation. The plugin communicates with the host using the XenAPI SDK over XML-RPC.
 
-## Requirements
+## Table of Contents
 
-| Component | Minimum Version |
-|-----------|----------------|
-| Morpheus | 9.0.0 |
+- [Features](#features)
+- [Requirements](#requirements)
+- [Repository structure](#repository-structure)
+- [Building the plugin](#building-the-plugin)
+- [License](#license)
+- [Installing](#installing)
+- [Detailed Usage Steps](#detailed-usage-steps)
+- [API Endpoints](#api-endpoints)
 
-## Installation
-
-1. Download the latest `.jar` from the [Releases](https://github.com/gomorpheus/morpheus-xenserver-plugin/releases) page, or [build it yourself](#building).
-2. In Morpheus, navigate to **Administration → Integrations → Plugins**.
-3. Click **Browse** and upload the `.jar` file.
-4. The **XCP-ng** cloud type will appear after the plugin loads.
-
-## Configuration
-
-When adding an XCP-ng cloud in Morpheus (**Infrastructure → Clouds → Add Cloud**), provide the following:
-
-| Field | Description |
-|-------|-------------|
-| **API URL** | XCP-ng or XenServer pool master endpoint |
-| **Custom Port** | Optional API port override |
-| **Credentials** | Select local credentials or a stored username/password credential |
-| **Username** | XCP-ng or XenServer username |
-| **Password** | XCP-ng or XenServer password |
-| **Inventory Existing Instances** | Inventory existing virtual machines |
-| **Enable Hypervisor Console** | Enable VNC console access through the hypervisor |
-
-Credentials can also be stored as a Morpheus [Credential](https://docs.morpheusdata.com/en/latest/administration/credentials/credentials.html) and selected at cloud setup time.
+---
 
 ## Features
 
+### Virtual Machine Provisioning
+
+Provision and decommission virtual machines on XCP-ng hosts and pools from Morpheus. Supports template selection, network and storage configuration, CPU/memory sizing, and hypervisor console access.
+
+### Backup via Snapshots
+
+Back up and restore VMs using XCP-ng/XenServer snapshots managed through the Morpheus backup framework.
+
 ### Cloud Sync
 
-The following resources are discovered and kept in sync from XCP-ng or XenServer:
+Morpheus synchronises the following XCP-ng resources for inventory:
 
-- **Hosts** — XCP-ng hypervisor hosts
-- **Images** — VM templates and virtual images available for provisioning
-- **Networks** — XCP-ng networks exposed to Morpheus
-- **Datastores** — storage repositories available to the pool
-- **Pools** — XCP-ng resource pools
-- **Virtual Machines** — managed and unmanaged VMs, including power state and metadata
+- Virtual machines
+- Hosts
+- Networks
+- Storage repositories (datastores)
+- VM templates and disk images
+- Snapshots
 
-Any additions, updates, and removals in XCP-ng or XenServer are automatically reflected in Morpheus on the next sync cycle.
+---
 
-### Provisioning
+## Requirements
 
-Virtual machines can be provisioned into XCP-ng or XenServer directly from Morpheus using standard instance types and layouts. Supported operations include:
+| Requirement | Version |
+|-------------|---------|
+| Morpheus | 9.0.0 or later |
+| Java | 11 or later |
+| Gradle | Use the included Gradle wrapper (`./gradlew`) |
 
-- Create, start, stop, and delete VMs
-- Resize CPU, memory, disks, and network interfaces
-- Clone from selected VM images and snapshots
-- Import existing workloads into Morpheus-managed images
-- Provision Linux, Windows, Docker host, and Kubernetes node server types
-- Use cloud-init customization and optional hypervisor console access
+Additional prerequisites:
 
-### Backups
+- A running XCP-ng host or pool master accessible over HTTPS (port 443) from the Morpheus appliance
+- A XenServer/XCP-ng user account with pool operator or admin permissions
+- Network access from the Morpheus appliance to the XCP-ng pool master on port 443
 
-XCP-ng VM snapshots are supported via the Morpheus backup framework. Supported operations include:
+---
 
-- Create VM snapshot backups
-- Copy snapshot backups to Morpheus backup storage
-- Download exported backup archives
-- Delete backup snapshots and exported archives
-- Restore snapshots to existing or new workloads
+## Repository structure
 
-## Building
-
-```bash
-./gradlew shadowJar
+```
+src/main/groovy/com/morpheusdata/xen/
+├── XenserverPlugin.groovy                  - Plugin entry point; registers all providers
+├── XenserverCloudProvider.groovy           - CloudProvider implementation; sync and cloud lifecycle
+├── XenserverProvisionProvider.groovy       - ProvisionProvider implementation; VM lifecycle
+├── XenserverBackupProvider.groovy          - BackupProvider implementation
+├── XenserverBackupTypeProvider.groovy      - Snapshot-based backup type
+├── XenserverBackupExecutionProvider.groovy - Backup execution
+├── XenserverBackupRestoreProvider.groovy   - Restore from snapshot
+├── datasets/
+│   └── VirtualImageDatasetProvider.groovy  - Dataset provider for image/template selection
+├── sync/
+│   ├── DatastoresSync.groovy               - Syncs storage repositories
+│   ├── HostSync.groovy                     - Syncs hosts
+│   ├── ImagesSync.groovy                   - Syncs VM templates and disk images
+│   ├── NetworkSync.groovy                  - Syncs networks
+│   ├── PoolSync.groovy                     - Syncs resource pools
+│   └── VirtualMachineSync.groovy           - Syncs VMs
+└── util/
+    └── XenComputeUtility.groovy            - XenAPI session management and shared operations
+src/main/groovy/com/xensource/xenapi/
+    CustomDateDeserializer.groovy           - Date deserialiser for XenAPI responses
+src/main/resources/i18n/                   - Internationalisation message bundles
+src/main/resources/scribe/                 - Seed/migration scripts
+src/test/groovy/                            - Tests
+build.gradle, gradle.properties             - Build configuration and plugin metadata
 ```
 
-The plugin JAR will be written to `build/libs/`.
+---
+
+## Building the plugin
+
+Run the following command to compile and package the plugin jar:
+
+```bash
+./gradlew clean build
+```
+
+The packaged jar will be written to `build/libs/`.
+
+To execute tests, use the following command:
+
+```bash
+./gradlew test
+```
+
+---
 
 ## License
 
-Copyright 2022 Morpheus Data, LLC. Licensed under the [Apache License, Version 2.0](LICENSE).
+This project is licensed under the Apache License 2.0.
+
+See the [LICENSE](LICENSE) file for details.
+
+---
+
+## Installing
+
+1. Build the plugin (see [Building the plugin](#building-the-plugin)) or download a released jar.
+2. In Morpheus, navigate to **Administration > Integrations > Plugins**.
+3. Click **Add** and upload the `morpheus-xenserver-plugin-<version>.jar` from `build/libs/`.
+4. Navigate to **Infrastructure > Clouds > Add** and select **XCP-ng** to configure the integration.
+
+---
+
+## Detailed Usage Steps
+
+### Adding an XCP-ng Cloud
+
+1. Go to **Infrastructure > Clouds > Add**.
+2. Select **XCP-ng** as the cloud type.
+3. Enter a **Name**, the **API URL** (the XCP-ng pool master hostname or IP), and optionally a **Custom Port**.
+4. Provide credentials (Username and Password) or select a stored credential.
+5. Optionally enable **Inventory Existing Instances** and **Enable Hypervisor Console**.
+6. Save. Morpheus connects to the XCP-ng host and begins syncing resources.
+
+### Provisioning a Virtual Machine
+
+1. Go to **Provisioning > Instances > Add**.
+2. Select an XCP-ng-backed instance type.
+3. Choose the target **Group**, **Cloud**, network, storage repository, and template.
+4. Configure CPU, memory, and disk sizing, then provision.
+
+### Taking a Backup
+
+1. From an instance detail page, navigate to the **Backups** tab.
+2. Click **Backup Now** to create an XCP-ng snapshot.
+
+### Restoring from a Snapshot
+
+1. From the instance **Backups** tab, select a completed snapshot entry.
+2. Click **Restore** and confirm.
+
+---
+
+## API Endpoints
+
+This plugin communicates with XCP-ng/XenServer using the **XenAPI SDK** (`com.xensource.xenapi`), which uses **XML-RPC over HTTPS** (port 443) to the pool master. No REST endpoints are used. All operations (VM create/update/delete, snapshot, restore, sync) are performed via the XenAPI XML-RPC interface.
