@@ -326,7 +326,7 @@ class XenComputeUtility {
 			}
 		} catch(e) {
 			log.error("startVm error: ${e}", e)
-			rtn.msg = 'error powering on vm'
+			rtn.msg = e.message ?: 'error powering on vm'
 		}
 		return rtn
 	}

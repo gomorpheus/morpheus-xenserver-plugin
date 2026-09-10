@@ -924,6 +924,8 @@ class XenserverProvisionProvider extends AbstractProvisionProvider implements Wo
 				log.debug("startServer: startResults: ${startResults}")
 				if (startResults.success == true) {
 					rtn.success = true
+				} else {
+					rtn.msg = startResults.msg ?: morpheus.services.localization.get("gomorpheus.provision.xenServer.error.startServer")
 				}
 			} else {
 				def error = morpheus.services.localization.get("gomorpheus.provision.xenServer.vmNotFound")
